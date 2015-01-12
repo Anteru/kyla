@@ -82,6 +82,11 @@ public:
 	std::string		sourceDirectory;
 };
 
+void SetupTables (sqlite3* db)
+{
+
+}
+
 void CreateSourcePackages (GeneratorContext& gc)
 {
 	std::unordered_map<std::string, Hash> sourceFileToHash;
