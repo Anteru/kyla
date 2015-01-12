@@ -1,0 +1,7 @@
+PROJECT(sqlite)
+
+ADD_LIBRARY(sqlite STATIC sqlite3.c sqlite3.h sqlite3ext.h)
+TARGET_INCLUDE_DIRECTORIES(sqlite PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+FIND_PACKAGE(Threads)
+TARGET_LINK_LIBRARIES(sqlite Threads::Threads ${CMAKE_DL_LIBS})

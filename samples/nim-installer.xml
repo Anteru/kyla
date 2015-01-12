@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding='utf-8'?>
+<Nim>
+    <Product Id="" Name="nim SDK" Version="1.0">
+        <!-- All features that can be installed. Features can be nested -->
+        <Features>
+            <Feature Name="Source code" Id="Feature_SC" />
+            <Feature Name="Headers" Id="Feature_H" />
+        </Features>
+
+        <!-- Files is a list of files associated with a feature
+
+        Attributes:
+            - Feature, must be present, the related feature
+            - SourcePackage: If not present, a package will be automatically
+                generated, otherwise, this file will be put into the specified
+                package.
+        -->
+        <Files Feature="Feature_SC" SourcePackage="SourcePackage_M">
+            <!-- A single file.
+            Attributes:
+                - Source: Must be present, relative to $SRC_DIR
+                - Target: May be present, relative to installation directory,
+                          if not set, will be same as source.
+            -->
+            <File Source="src/CMakeLists.txt" Target="src/CMakeLists.txt"/>
+        </Files>
+
+        <Files Feature="Feature_H" SourcePackage="SourcePackage_H">
+            <File Source="src/common/inc/SourcePackage.h" Target="include/SourcePackage.h"/>
+        </Files>
+
+        <!-- Source packages may be present to enforce bundling -->
+        <SourcePackages>
+            <!-- The Id is only used during build, the generated package will
+            have a unique hash -->
+            <SourcePackage Id="SourcePackage_M" />
+            <SourcePackage Id="SourcePackage_H" />
+        </SourcePackages>
+    </Product>
+</Nim>

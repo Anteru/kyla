@@ -1,0 +1,2 @@
+ADD_SUBDIRECTORY(pugixml)
+ADD_SUBDIRECTORY(sqlite)
