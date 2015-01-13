@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <boost/functional/hash.hpp>
+#include <string>
 
 template <int size>
 struct THash
@@ -32,5 +33,23 @@ struct HashHash
 typedef THash<64> Hash;
 
 Hash ComputeHash (const int64_t size, const void* data);
+
+template <int size>
+std::string ToString (const THash<size>& hash)
+{
+	char result [size*2] = { 0 };
+	char* p = result;
+
+	static const char* byteToChar = "0123456789abcdef";
+
+	for (auto b : hash.hash) {
+		p [0] = byteToChar [b >> 4];
+		p [1] = byteToChar [b & 0xF];
+
+		p += 2;
+	}
+
+	return std::string (result, result + size*2);
+}
 
 #endif

@@ -43,12 +43,12 @@ struct PackageDataChunk
 class SourcePackageWriter final
 {
 public:
-    void AddEntry (const int64_t size, const void* data);
+	Hash AddEntry (const int64_t size, const void* data);
 
     /**
     Add a (partial) entry.
     */
-    void AddEntry (const int64_t size, const void* data,
+	Hash AddEntry (const int64_t size, const void* data,
         const Hash& hash, const int64_t offset);
 };
 

@@ -3,23 +3,160 @@
 
 #include <boost/program_options.hpp>
 #include <boost/filesystem.hpp>
+#include <boost/filesystem/fstream.hpp>
 #include <iostream>
+#include <fstream>
 #include <string>
 
 #include <pugixml.hpp>
 #include <sqlite3.h>
 
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 
-struct FileEntry
-{
-	int packageId = -1;
-	std::string	sourcePath;
-	std::string targetPath;
-};
+#include <boost/log/trivial.hpp>
+#include <openssl/evp.h>
+#include <zlib.h>
 
-std::vector<FileEntry>	GatherFiles (const pugi::xml_node& product)
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/random_generator.hpp>
+#include <boost/lexical_cast.hpp>
+#include <boost/uuid/uuid_io.hpp>
+
+#include "build-db-structure.h"
+#include "install-db-structure.h"
+
+std::unordered_set<std::string> GetUniqueSourcePaths (const pugi::xml_node& product)
+{
+	std::unordered_set<std::string> result;
+
+	int inputFileCount = 0;
+	for (auto files : product.children ("Files")) {
+		for (auto file : files.children ("File")) {
+			result.insert (file.attribute ("Source").value ());
+
+			++inputFileCount;
+		}
+	}
+
+	BOOST_LOG_TRIVIAL(info) << "Processed " << inputFileCount
+		<< " source paths, " << result.size () << " unique paths found.";
+
+	return result;
+}
+
+void PrepareFiles (
+	const std::unordered_set<std::string>& sourcePaths,
+	const boost::filesystem::path& sourceDirectory,
+	const boost::filesystem::path& temporaryDirectory,
+	sqlite3* buildDatabase,
+	const std::int64_t fileChunkSize = 1 << 24 /* 16 MiB */)
+{
+	// Read every unique source path in chunks, update hash, compress, compute
+	// hash, write to temporary directory
+	std::vector<unsigned char> buffer (fileChunkSize);
+	std::vector<unsigned char> compressed (compressBound(fileChunkSize));
+
+	// Prepare hash
+	EVP_MD_CTX* fileCtx = EVP_MD_CTX_create ();
+	EVP_MD_CTX* chunkCtx = EVP_MD_CTX_create ();
+
+	boost::uuids::random_generator uuidGen;
+
+	sqlite3_stmt* insertContentObjectStatement;
+	sqlite3_prepare (buildDatabase,
+		"INSERT INTO content_objects (Size, Hash) VALUES (?, ?)",
+		-1, &insertContentObjectStatement, nullptr);
+
+	sqlite3_stmt* insertChunkStatement;
+	sqlite3_prepare (buildDatabase,
+		"INSERT INTO chunks (ContentObjectId, Name) VALUES (?, ?)",
+		-1, &insertChunkStatement, nullptr);
+
+	for (const auto sourcePath : sourcePaths) {
+		const auto fullSourcePath = sourceDirectory / sourcePath;
+
+		boost::filesystem::ifstream input (fullSourcePath, std::ios::binary);
+
+		std::vector<std::string> chunks;
+
+		EVP_DigestInit_ex (fileCtx, EVP_sha512 (), nullptr);
+		int chunkNumber = 0;
+		std::int64_t contentObjectSize = 0;
+
+		for (;;) {
+			input.read (reinterpret_cast<char*> (buffer.data ()), fileChunkSize);
+			const std::int64_t chunkSize = input.gcount ();
+			contentObjectSize += chunkSize;
+
+			EVP_DigestUpdate(fileCtx, buffer.data (), chunkSize);
+
+			uLongf compressedSize = compressed.size ();
+			compress2 (reinterpret_cast<Bytef*> (compressed.data ()),
+				&compressedSize,
+				buffer.data (), chunkSize, Z_BEST_COMPRESSION);
+
+			const auto chunkName = boost::lexical_cast<std::string> (
+				uuidGen ());
+			chunks.push_back (chunkName);
+
+			PackageDataChunk pdc;
+			::memset (&pdc, 0, sizeof (pdc));
+
+			pdc.compressedSize = compressedSize;
+			pdc.size = chunkSize;
+			pdc.offset = fileChunkSize * chunkNumber;
+			pdc.compressionMode = CompressionMode_Zip;
+
+			EVP_DigestInit_ex (chunkCtx, EVP_sha512 (), nullptr);
+			EVP_DigestUpdate(chunkCtx, compressed.data (), compressedSize);
+			EVP_DigestFinal_ex (chunkCtx, pdc.hash, nullptr);
+
+			boost::filesystem::ofstream chunkOutput (
+				temporaryDirectory / chunkName, std::ios::binary);
+			chunkOutput.write (reinterpret_cast<const char*> (&pdc), sizeof (pdc));
+			chunkOutput.write (reinterpret_cast<char*> (compressed.data ()),
+				compressed.size ());
+
+			BOOST_LOG_TRIVIAL(debug) << "Wrote chunk '" << chunkName
+				<< "' for file '" << sourcePath << "' (uncompressed: "
+				<< chunkSize << ", compressed: " << compressedSize << ")";
+
+			++chunkNumber;
+
+			// Compress data
+			if (input.gcount () < fileChunkSize) {
+				break;
+			}
+		}
+
+		Hash fileHash;
+		EVP_DigestFinal_ex (fileCtx, fileHash.hash, nullptr);
+
+		sqlite3_bind_int64 (insertContentObjectStatement, 1, contentObjectSize);
+		sqlite3_bind_text (insertContentObjectStatement, 2,
+			ToString (fileHash).c_str (), -1, nullptr);
+		sqlite3_step (insertContentObjectStatement);
+		sqlite3_reset (insertContentObjectStatement);
+
+		const auto contentObjectId = sqlite3_last_insert_rowid (buildDatabase);
+
+		for (const auto chunk : chunks) {
+			sqlite3_bind_int64 (insertChunkStatement, 1, contentObjectId);
+			sqlite3_bind_text (insertChunkStatement, 2, chunk.c_str (), -1, nullptr);
+			sqlite3_step (insertChunkStatement);
+			sqlite3_reset (insertChunkStatement);
+		}
+	}
+
+	EVP_MD_CTX_destroy (fileCtx);
+	EVP_MD_CTX_destroy (chunkCtx);
+}
+
+#if 0
+std::vector<FileEntry>	GatherFiles (const pugi::xml_node& product,
+	const boost::filesystem::path& sourceDirectory)
 {
 	std::vector<FileEntry> result;
 
@@ -43,7 +180,7 @@ std::vector<FileEntry>	GatherFiles (const pugi::xml_node& product)
 		for (auto file : files.children ("File")) {
 			FileEntry fe;
 			fe.packageId = packageId;
-			fe.sourcePath = file.attribute ("Source").value ();
+			fe.sourcePath = sourceDirectory / file.attribute ("Source").value ();
 
 			auto targetAttr = file.attribute ("Target");
 			if (targetAttr) {
@@ -58,18 +195,28 @@ std::vector<FileEntry>	GatherFiles (const pugi::xml_node& product)
 
 	return result;
 }
+#endif
 
 struct GeneratorContext
 {
 public:
 	GeneratorContext ()
 	{
-		sqlite3_open (":memory:", &database);
+		sqlite3_open (":memory:", &installationDatabase);
+
+		// private, temporary, but disk-based
+		sqlite3_open ("", &buildDatabase);
+
+		sqlite3_exec (installationDatabase, install_db_structure,
+			nullptr, nullptr, nullptr);
+		sqlite3_exec (buildDatabase, build_db_structure,
+			nullptr, nullptr, nullptr);
 	}
 
 	~GeneratorContext ()
 	{
-		sqlite3_close (database);
+		sqlite3_close (buildDatabase);
+		sqlite3_close (installationDatabase);
 	}
 
 	bool WritePackage (const std::string& filename) const
@@ -78,40 +225,53 @@ public:
 	}
 
 	pugi::xml_node	productNode;
-	sqlite3*		database;
-	std::string		sourceDirectory;
+	sqlite3*		installationDatabase;
+	sqlite3*		buildDatabase;
+	boost::filesystem::path sourceDirectory;
+	boost::filesystem::path	temporaryDirectory;
 };
 
-void SetupTables (sqlite3* db)
+/*
+Returns a mapping of feature id string to the feature id in the database.
+*/
+std::unordered_map<std::string, std::int64_t> CreateFeatures (GeneratorContext& gc)
 {
+	BOOST_LOG_TRIVIAL(info) << "Populating feature table";
 
+	std::unordered_map<std::string, std::int64_t> result;
+
+	sqlite3_stmt* insertFeatureStatement;
+	sqlite3_prepare_v2 (gc.installationDatabase,
+		"INSERT INTO features (Name) VALUES (?)", -1, &insertFeatureStatement,
+		nullptr);
+
+	int featureCount = 0;
+	for (const auto feature : gc.productNode.child ("Features").children ()) {
+		const auto featureId = feature.attribute ("Id").value ();
+		sqlite3_bind_text (insertFeatureStatement, 1, featureId, -1, nullptr);
+		sqlite3_step (insertFeatureStatement);
+		sqlite3_reset (insertFeatureStatement);
+
+		const auto lastRowId = sqlite3_last_insert_rowid (gc.installationDatabase);
+		result [featureId] = lastRowId;
+
+		BOOST_LOG_TRIVIAL(debug) << "Feature '" << featureId
+			<< "' assigned to Id " << lastRowId;
+		++featureCount;
+	}
+
+	sqlite3_finalize (insertFeatureStatement);
+
+	BOOST_LOG_TRIVIAL(info) << "Created " << featureCount << " feature(s)";
+
+	return result;
 }
 
 void CreateSourcePackages (GeneratorContext& gc)
 {
-	std::unordered_map<std::string, Hash> sourceFileToHash;
-
-	std::unordered_map<std::string, Hash> outputFileToHash;
-	std::unordered_map<Hash, SourcePackageWriter*, HashHash, HashEqual> hashToPackage;
-
-	std::unordered_map<int, std::unique_ptr<SourcePackageWriter>> packages;
-
-	/*
-	We read each file, compute the SHA1, assign it to a source package (or the
-	default package.)
-
-	The output is a map of (file, hash) pairs (multiple files may point at the
-	same hash, and file is output-relative) as well a list of (hash, package)
-	pairs, which indicate which hash is stored in which package.
-	*/
-
-	// Create the file and entry tables
-
 	// First, we iterate over all files, and put them right into their packages
-	const auto fileEntries = GatherFiles (gc.productNode);
-	for (const auto& fe : fileEntries) {
 
-	}
+	// We can only populate the database once we know all packages
 }
 
 int main (int argc, char* argv[])
@@ -124,6 +284,8 @@ int main (int argc, char* argv[])
     po::options_description desc ("Configuration");
     desc.add_options ()
 		("source-directory", po::value<std::string> ()->default_value ("."))
+		("temp-directory", po::value<std::string> ()->default_value (
+			 boost::filesystem::unique_path ().string ()))
 		("output,o", "Output file name");
 
     po::options_description hidden ("Hidden options");
@@ -158,7 +320,22 @@ int main (int argc, char* argv[])
 	const auto outputFile = sourcePath.stem ();
 
 	GeneratorContext gc;
+	gc.productNode = doc.document_element ().child ("Product");
+	gc.sourceDirectory = boost::filesystem::path (
+		vm ["source-directory"].as<std::string> ());
+	gc.temporaryDirectory = boost::filesystem::path (
+		vm ["temp-directory"].as<std::string> ());
+
+	boost::filesystem::create_directories (gc.temporaryDirectory);
+	BOOST_LOG_TRIVIAL(debug) << "Temporary directory: " << gc.temporaryDirectory;
+
+	CreateFeatures (gc);
+	const auto uniqueFiles = GetUniqueSourcePaths (gc.productNode);
+	PrepareFiles (uniqueFiles, gc.sourceDirectory, gc.temporaryDirectory,
+		gc.buildDatabase);
 
 	CreateSourcePackages (gc);
 	gc.WritePackage (outputFile.string () + ".nimdb");
+
+	boost::filesystem::remove_all (gc.temporaryDirectory);
 }

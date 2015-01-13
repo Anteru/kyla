@@ -1,0 +1,5 @@
+# Select source packages that need to be fetched based on selected features
+SELECT SourcePackageId FROM storage_mapping WHERE ContentObjectId IN (SELECT ContentObjectId FROM files WHERE FeatureId IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)) GROUP BY SourcePackageId
+
+# Estimate total installation size for progress reporting
+SELECT SUM(Size) AS TotalSize FROM content_objects WHERE Id IN (SELECT ContentObjectId FROM files WHERE FeatureId IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
