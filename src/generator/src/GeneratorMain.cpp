@@ -21,7 +21,6 @@
 
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/random_generator.hpp>
-#include <boost/lexical_cast.hpp>
 #include <boost/uuid/uuid_io.hpp>
 
 #include "build-db-structure.h"
@@ -34,6 +33,11 @@ std::unordered_set<std::string> GetUniqueSourcePaths (const pugi::xml_node& prod
 	int inputFileCount = 0;
 	for (auto files : product.children ("Files")) {
 		for (auto file : files.children ("File")) {
+			// TODO Also validate that these are actually file paths
+			// TODO Validate that a source path is not empty
+			// TODO Validate that the target path is not empty if present
+			// TODO Validate that target paths don't collide
+
 			result.insert (file.attribute ("Source").value ());
 
 			++inputFileCount;
@@ -46,6 +50,15 @@ std::unordered_set<std::string> GetUniqueSourcePaths (const pugi::xml_node& prod
 	return result;
 }
 
+/**
+For every unique source file, create the file chunks and update the build
+database accordingly.
+
+After this function has run:
+  - Every file in the input set has been hash'ed, compressed and chunked
+  - All chunks are stored in the temporary directory
+  - The buildDatabase has been populated (content_objects and chunks)
+*/
 void PrepareFiles (
 	const std::unordered_set<std::string>& sourcePaths,
 	const boost::filesystem::path& sourceDirectory,
@@ -71,12 +84,14 @@ void PrepareFiles (
 
 	sqlite3_stmt* insertChunkStatement;
 	sqlite3_prepare (buildDatabase,
-		"INSERT INTO chunks (ContentObjectId, Name) VALUES (?, ?)",
+		"INSERT INTO chunks (ContentObjectId, Path) VALUES (?, ?)",
 		-1, &insertChunkStatement, nullptr);
 
 	for (const auto sourcePath : sourcePaths) {
 		const auto fullSourcePath = sourceDirectory / sourcePath;
 
+		// TODO handle read errors
+		// TODO handle empty files
 		boost::filesystem::ifstream input (fullSourcePath, std::ios::binary);
 
 		std::vector<std::string> chunks;
@@ -93,12 +108,12 @@ void PrepareFiles (
 			EVP_DigestUpdate(fileCtx, buffer.data (), chunkSize);
 
 			uLongf compressedSize = compressed.size ();
+			// TODO handle compression failure
 			compress2 (reinterpret_cast<Bytef*> (compressed.data ()),
 				&compressedSize,
 				buffer.data (), chunkSize, Z_BEST_COMPRESSION);
 
-			const auto chunkName = boost::lexical_cast<std::string> (
-				uuidGen ());
+			const auto chunkName = ToString (uuidGen ().data);
 			chunks.push_back (chunkName);
 
 			PackageDataChunk pdc;
@@ -144,7 +159,8 @@ void PrepareFiles (
 
 		for (const auto chunk : chunks) {
 			sqlite3_bind_int64 (insertChunkStatement, 1, contentObjectId);
-			sqlite3_bind_text (insertChunkStatement, 2, chunk.c_str (), -1, nullptr);
+			sqlite3_bind_text (insertChunkStatement, 2,
+				absolute (temporaryDirectory / chunk).c_str (), -1, nullptr);
 			sqlite3_step (insertChunkStatement);
 			sqlite3_reset (insertChunkStatement);
 		}
@@ -154,48 +170,16 @@ void PrepareFiles (
 	EVP_MD_CTX_destroy (chunkCtx);
 }
 
-#if 0
-std::vector<FileEntry>	GatherFiles (const pugi::xml_node& product,
-	const boost::filesystem::path& sourceDirectory)
+////////////////////////////////////////////////////////////////////////////////
+void PackPackages (sqlite3* installationDatabase, sqlite3* buildDatabase,
+	const boost::filesystem::path& targetDirectory,
+	const pugi::xml_node& productNode,
+	const std::int64_t targetPackageSize = 1ll << 30 /* 1 GiB */)
 {
-	std::vector<FileEntry> result;
-
-	std::unordered_map<std::string, std::size_t> packageIds;
-
-	for (auto files : product.children ("Files")) {
-		const auto packageIdAttr = files.attribute ("SourcePackage");
-
-		int packageId = -1;
-		if (packageIdAttr) {
-			const char* packageIdName = packageIdAttr.value ();
-
-			if (packageIds.find (packageIdName) == packageIds.end ()) {
-				const auto nextId = packageIds.size ();
-				packageIds [packageIdName] = nextId;
-			}
-
-			packageId = static_cast<int> (packageIds [packageIdName]);
-		}
-
-		for (auto file : files.children ("File")) {
-			FileEntry fe;
-			fe.packageId = packageId;
-			fe.sourcePath = sourceDirectory / file.attribute ("Source").value ();
-
-			auto targetAttr = file.attribute ("Target");
-			if (targetAttr) {
-				fe.targetPath = targetAttr.value ();
-			} else {
-				fe.targetPath = fe.sourcePath;
-			}
-
-			result.push_back (fe);
-		}
-	}
-
-	return result;
+	// Each <Files> group goes into either one package or the default package
+	// for the default packages, we start a new one once the targetPackageSize
+	// has been reached
 }
-#endif
 
 struct GeneratorContext
 {
@@ -236,6 +220,10 @@ Returns a mapping of feature id string to the feature id in the database.
 */
 std::unordered_map<std::string, std::int64_t> CreateFeatures (GeneratorContext& gc)
 {
+	// TODO Validate that there is a feature element
+	// TODO Validate that at least one feature is present
+	// TODO Validate the feature ID is not empty
+	// TODO Validate all feature IDs are unique
 	BOOST_LOG_TRIVIAL(info) << "Populating feature table";
 
 	std::unordered_map<std::string, std::int64_t> result;

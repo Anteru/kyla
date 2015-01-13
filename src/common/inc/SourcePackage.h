@@ -5,6 +5,7 @@
 #include "Hash.h"
 
 #include <vector>
+#include <boost/filesystem.hpp>
 
 struct PackageHeader
 {
@@ -40,16 +41,16 @@ struct PackageDataChunk
     uint8_t reserved [7];
 };
 
+/*
+The source package writer writes the package during Finalize () and returns
+the absolute path to the generated package.
+*/
 class SourcePackageWriter final
 {
 public:
-	Hash AddEntry (const int64_t size, const void* data);
-
-    /**
-    Add a (partial) entry.
-    */
-	Hash AddEntry (const int64_t size, const void* data,
-        const Hash& hash, const int64_t offset);
+	void Open (const boost::filesystem::path& outputDirectory);
+	void Add (const Hash& hash, const boost::filesystem::path& chunkPath);
+	boost::filesystem::path Finalize ();
 };
 
 class ISourcePackageReader
