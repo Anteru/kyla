@@ -132,7 +132,7 @@ void PrepareFiles (
 				temporaryDirectory / chunkName, std::ios::binary);
 			chunkOutput.write (reinterpret_cast<const char*> (&pdc), sizeof (pdc));
 			chunkOutput.write (reinterpret_cast<char*> (compressed.data ()),
-				compressed.size ());
+				compressedSize);
 
 			BOOST_LOG_TRIVIAL(debug) << "Wrote chunk '" << chunkName
 				<< "' for file '" << sourcePath << "' (uncompressed: "
