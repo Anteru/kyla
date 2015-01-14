@@ -26,6 +26,10 @@
 #include "build-db-structure.h"
 #include "install-db-structure.h"
 
+#define SAFE_SQLITE_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_OK) { BOOST_LOG_TRIVIAL(error) << file << ":" << line << " " <<sqlite3_errstr(r_); } } while (0)
+
+#define SAFE_SQLITE(expr) SAFE_SQLITE_INTERNAL(expr, __FILE__, __LINE__)
+
 std::unordered_set<std::string> GetUniqueSourcePaths (const pugi::xml_node& product)
 {
 	std::unordered_set<std::string> result;
@@ -50,6 +54,89 @@ std::unordered_set<std::string> GetUniqueSourcePaths (const pugi::xml_node& prod
 	return result;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+void AssignFilesToFeaturesPackages (const pugi::xml_node& product,
+	const std::unordered_map<std::string, std::int64_t>& sourcePackageIds,
+	const std::unordered_map<std::string, std::int64_t>& featureIds,
+	sqlite3* buildDatabase)
+{
+	sqlite3_exec (buildDatabase, "BEGIN TRANSACTION;",
+		nullptr, nullptr, nullptr);
+	sqlite3_stmt* insertFilesStatement;
+	SAFE_SQLITE (sqlite3_prepare_v2 (buildDatabase,
+		"INSERT INTO files (SourcePath, TargetPath, FeatureId, SourcePackageId) VALUES (?, ?, ?, ?);",
+		-1, &insertFilesStatement, nullptr));
+
+	int inputFileCount = 0;
+	for (auto files : product.children ("Files")) {
+		std::int64_t featureId = -1;
+		std::int64_t sourcePackageId = -1;
+
+		if (files.attribute ("SourcePackage")) {
+			// TODO Validate it's present
+			sourcePackageId = sourcePackageIds.find (
+				files.attribute ("SourcePackage").value ())->second;
+		}
+
+		if (files.attribute ("Feature")) {
+			featureId = featureIds.find (
+				files.attribute ("Feature").value ())->second;
+		}
+
+		for (auto file : files.children ("File")) {
+			// TODO Validate Source= is present
+
+			std::int64_t fileFeatureId = featureId;
+			std::int64_t fileSourcePackageId = sourcePackageId;
+
+			if (file.attribute ("SourcePackage")) {
+				// TODO Validate it's present
+				fileSourcePackageId = sourcePackageIds.find (
+					file.attribute ("SourcePackage").value ())->second;
+			}
+
+			if (file.attribute ("Feature")) {
+				fileFeatureId = featureIds.find (
+					file.attribute ("Feature").value ())->second;
+			}
+
+			SAFE_SQLITE (sqlite3_bind_text (insertFilesStatement, 1,
+				file.attribute ("Source").value (), -1, SQLITE_TRANSIENT));
+
+			if (file.attribute ("Target")) {
+				SAFE_SQLITE (sqlite3_bind_text (insertFilesStatement, 2,
+					file.attribute ("Target").value (), -1, SQLITE_TRANSIENT));
+			} else {
+				SAFE_SQLITE (sqlite3_bind_text (insertFilesStatement, 2,
+					file.attribute ("Source").value (), -1, SQLITE_TRANSIENT));
+			}
+
+			SAFE_SQLITE (sqlite3_bind_int64 (insertFilesStatement, 3, fileFeatureId));
+
+			if (fileSourcePackageId != -1) {
+				SAFE_SQLITE (sqlite3_bind_int64 (insertFilesStatement, 4, fileSourcePackageId));
+			} else {
+				SAFE_SQLITE (sqlite3_bind_null (insertFilesStatement, 4));
+			}
+
+			if (sqlite3_step (insertFilesStatement) != SQLITE_DONE) {
+				BOOST_LOG_TRIVIAL(error) << sqlite3_errmsg (buildDatabase);
+			}
+			SAFE_SQLITE (sqlite3_reset (insertFilesStatement));
+
+			++inputFileCount;
+		}
+	}
+
+	SAFE_SQLITE (sqlite3_finalize (insertFilesStatement));
+
+	BOOST_LOG_TRIVIAL(info) << "Processed " << inputFileCount
+		<< " files";
+
+	sqlite3_exec (buildDatabase, "COMMIT TRANSACTION;",
+		nullptr, nullptr, nullptr);
+}
+
 /**
 For every unique source file, create the file chunks and update the build
 database accordingly.
@@ -57,15 +144,26 @@ database accordingly.
 After this function has run:
   - Every file in the input set has been hash'ed, compressed and chunked
   - All chunks are stored in the temporary directory
-  - The buildDatabase has been populated (content_objects and chunks)
+  - The buildDatabase has been populated (chunks)
+  - The installationDatabase has been populated (content_objects)
+
+Returns a list of file-path to content object ids, as stored in the database
 */
-void PrepareFiles (
+std::unordered_map<std::string, std::int64_t> PrepareFiles (
 	const std::unordered_set<std::string>& sourcePaths,
 	const boost::filesystem::path& sourceDirectory,
 	const boost::filesystem::path& temporaryDirectory,
 	sqlite3* buildDatabase,
+	sqlite3* installationDatabase,
 	const std::int64_t fileChunkSize = 1 << 24 /* 16 MiB */)
 {
+	sqlite3_exec (buildDatabase, "BEGIN TRANSACTION;",
+		nullptr, nullptr, nullptr);
+	sqlite3_exec (installationDatabase, "BEGIN TRANSACTION;",
+		nullptr, nullptr, nullptr);
+
+	std::unordered_map<std::string, std::int64_t> pathToContentObject;
+
 	// Read every unique source path in chunks, update hash, compress, compute
 	// hash, write to temporary directory
 	std::vector<unsigned char> buffer (fileChunkSize);
@@ -78,15 +176,16 @@ void PrepareFiles (
 	boost::uuids::random_generator uuidGen;
 
 	sqlite3_stmt* insertContentObjectStatement;
-	sqlite3_prepare (buildDatabase,
-		"INSERT INTO content_objects (Size, Hash) VALUES (?, ?)",
+	sqlite3_prepare_v2 (installationDatabase,
+		"INSERT INTO content_objects (Size, Hash, ChunkCount) VALUES (?, ?, ?)",
 		-1, &insertContentObjectStatement, nullptr);
 
 	sqlite3_stmt* insertChunkStatement;
-	sqlite3_prepare (buildDatabase,
+	sqlite3_prepare_v2 (buildDatabase,
 		"INSERT INTO chunks (ContentObjectId, Path) VALUES (?, ?)",
 		-1, &insertChunkStatement, nullptr);
 
+	// TODO This can be parallelized
 	for (const auto sourcePath : sourcePaths) {
 		const auto fullSourcePath = sourceDirectory / sourcePath;
 
@@ -149,18 +248,23 @@ void PrepareFiles (
 		Hash fileHash;
 		EVP_DigestFinal_ex (fileCtx, fileHash.hash, nullptr);
 
+		BOOST_LOG_TRIVIAL(debug) << sourcePath << " -> " << ToString (fileHash.hash);
+
 		sqlite3_bind_int64 (insertContentObjectStatement, 1, contentObjectSize);
 		sqlite3_bind_text (insertContentObjectStatement, 2,
-			ToString (fileHash).c_str (), -1, nullptr);
+			ToString (fileHash).c_str (), -1, SQLITE_TRANSIENT);
+		sqlite3_bind_int64 (insertContentObjectStatement, 3, chunkNumber);
 		sqlite3_step (insertContentObjectStatement);
 		sqlite3_reset (insertContentObjectStatement);
 
-		const auto contentObjectId = sqlite3_last_insert_rowid (buildDatabase);
+		const auto contentObjectId = sqlite3_last_insert_rowid (installationDatabase);
+
+		pathToContentObject [sourcePath] = contentObjectId;
 
 		for (const auto chunk : chunks) {
 			sqlite3_bind_int64 (insertChunkStatement, 1, contentObjectId);
 			sqlite3_bind_text (insertChunkStatement, 2,
-				absolute (temporaryDirectory / chunk).c_str (), -1, nullptr);
+				absolute (temporaryDirectory / chunk).c_str (), -1, SQLITE_TRANSIENT);
 			sqlite3_step (insertChunkStatement);
 			sqlite3_reset (insertChunkStatement);
 		}
@@ -168,17 +272,134 @@ void PrepareFiles (
 
 	EVP_MD_CTX_destroy (fileCtx);
 	EVP_MD_CTX_destroy (chunkCtx);
+
+	sqlite3_exec (buildDatabase, "COMMIT TRANSACTION;",
+		nullptr, nullptr, nullptr);
+	sqlite3_exec (installationDatabase, "COMMIT TRANSACTION;",
+		nullptr, nullptr, nullptr);
+
+	return pathToContentObject;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void PackPackages (sqlite3* installationDatabase, sqlite3* buildDatabase,
+void WritePackages (
+	sqlite3* buildDatabase,
+	sqlite3* installationDatabase,
 	const boost::filesystem::path& targetDirectory,
 	const pugi::xml_node& productNode,
+	const std::unordered_map<std::string, std::int64_t> pathToContentObject,
 	const std::int64_t targetPackageSize = 1ll << 30 /* 1 GiB */)
 {
-	// Each <Files> group goes into either one package or the default package
-	// for the default packages, we start a new one once the targetPackageSize
-	// has been reached
+	sqlite3_exec (installationDatabase, "BEGIN TRANSACTION;",
+		nullptr, nullptr, nullptr);
+
+	BOOST_LOG_TRIVIAL(debug) << "Writing packages";
+	// First, we assemble all user-requested source packages
+	sqlite3_stmt* selectSourcePackageIdsStatement;
+	sqlite3_prepare_v2 (installationDatabase,
+		"SELECT Id FROM source_packages;", -1,
+		&selectSourcePackageIdsStatement, nullptr);
+
+	sqlite3_stmt* insertIntoFilesStatement;
+	sqlite3_prepare_v2 (installationDatabase,
+		"INSERT INTO files (Path, ContentObjectId, FeatureId) VALUES (?, ?, ?)",
+		-1, &insertIntoFilesStatement, nullptr);
+
+	while (sqlite3_step (selectSourcePackageIdsStatement) == SQLITE_ROW) {
+		const std::int64_t sourcePackageId = sqlite3_column_int64 (
+			selectSourcePackageIdsStatement, 0);
+
+		BOOST_LOG_TRIVIAL(trace) << "Processing source package " << sourcePackageId;
+
+		// Find all files in this package, and then all chunks
+		sqlite3_stmt* selectFilesForPackageStatement;
+		sqlite3_prepare_v2 (buildDatabase,
+			"SELECT SourcePath, TargetPath, FeatureId FROM files WHERE SourcePackageId=?;",
+			-1, &selectFilesForPackageStatement, nullptr);
+		sqlite3_bind_int64 (selectFilesForPackageStatement, 1, sourcePackageId);
+
+		std::vector<std::string> chunksInPackage;
+		std::vector<std::int64_t> contentObjectsInPackage;
+
+		while (sqlite3_step (selectFilesForPackageStatement) == SQLITE_ROW) {
+			const std::string sourcePath =
+				reinterpret_cast<const char*> (sqlite3_column_text (selectFilesForPackageStatement, 0));
+			BOOST_LOG_TRIVIAL(trace) << "Processing file '" << sourcePath << "' in package " << sourcePackageId;
+
+			std::int64_t contentObjectId = -1;
+			// May be NULL in case it's an empty file
+			if (pathToContentObject.find (sourcePath) != pathToContentObject.end ()) {
+				contentObjectId = pathToContentObject.find (sourcePath)->second;
+				BOOST_LOG_TRIVIAL(trace) << "'" << sourcePath << "' has content object " << contentObjectId;
+
+				// Write the chunks into this package
+				sqlite3_stmt* selectChunksForContentObject;
+				// Order by rowid, so we get a sequential write into the output
+				// file
+				sqlite3_prepare_v2 (buildDatabase,
+					"SELECT Path FROM chunks WHERE ContentObjectId=? ORDER BY rowid ASC",
+					-1, &selectChunksForContentObject, nullptr);
+				sqlite3_bind_int64 (selectChunksForContentObject, 1, contentObjectId);
+
+				while (sqlite3_step (selectChunksForContentObject) == SQLITE_ROW) {
+					chunksInPackage.emplace_back (
+						reinterpret_cast<const char*> (
+							sqlite3_column_text (selectChunksForContentObject, 0)));
+				}
+
+				sqlite3_reset (selectChunksForContentObject);
+				sqlite3_finalize (selectChunksForContentObject);
+
+				contentObjectsInPackage.push_back (contentObjectId);
+			}
+
+			// We can now write the file entry
+			sqlite3_bind_text (insertIntoFilesStatement, 1,
+				reinterpret_cast<const char*> (
+					sqlite3_column_text (selectFilesForPackageStatement, 1)),
+				-1, SQLITE_TRANSIENT);
+
+			if (contentObjectId != -1) {
+				sqlite3_bind_int64 (insertIntoFilesStatement, 2,
+					contentObjectId);
+			} else {
+				sqlite3_bind_null (insertIntoFilesStatement, 2);
+			}
+
+			sqlite3_bind_int64 (insertIntoFilesStatement, 3,
+				sqlite3_column_int64 (selectFilesForPackageStatement, 2));
+			sqlite3_step (insertIntoFilesStatement);
+			sqlite3_reset (insertIntoFilesStatement);
+		}
+
+		sqlite3_reset (selectFilesForPackageStatement);
+		sqlite3_finalize (selectFilesForPackageStatement);
+
+
+		sqlite3_stmt* insertIntoStorageMappingStatement;
+		sqlite3_prepare_v2 (installationDatabase,
+			"INSERT INTO storage_mapping (ContentObjectId, SourcePackageId) VALUES (?, ?)",
+			-1, &insertIntoStorageMappingStatement, nullptr);
+
+		for (const auto contentObjectId : contentObjectsInPackage) {
+			sqlite3_bind_int64 (insertIntoStorageMappingStatement, 1,
+				contentObjectId);
+			sqlite3_bind_int64 (insertIntoStorageMappingStatement, 2,
+				sourcePackageId);
+			sqlite3_step (insertIntoStorageMappingStatement);
+			sqlite3_reset (insertIntoStorageMappingStatement);
+		}
+
+		sqlite3_finalize (insertIntoStorageMappingStatement);
+
+		// Write the package
+	}
+
+	sqlite3_finalize (insertIntoFilesStatement);
+	sqlite3_finalize (selectSourcePackageIdsStatement);
+
+	sqlite3_exec (installationDatabase, "COMMIT TRANSACTION;",
+		nullptr, nullptr, nullptr);
 }
 
 struct GeneratorContext
@@ -188,13 +409,17 @@ public:
 	{
 		sqlite3_open (":memory:", &installationDatabase);
 
-		// private, temporary, but disk-based
-		sqlite3_open ("", &buildDatabase);
-
 		sqlite3_exec (installationDatabase, install_db_structure,
 			nullptr, nullptr, nullptr);
-		sqlite3_exec (buildDatabase, build_db_structure,
-			nullptr, nullptr, nullptr);
+	}
+
+	void SetupBuildDatabase (const boost::filesystem::path& temporaryDirectory)
+	{
+		BOOST_LOG_TRIVIAL(debug) << "Build database: '" << (temporaryDirectory / "build.sqlite").c_str () << "'";
+		SAFE_SQLITE (sqlite3_open ((temporaryDirectory / "build.sqlite").c_str (),
+			&buildDatabase));
+		SAFE_SQLITE (sqlite3_exec (buildDatabase, build_db_structure,
+			nullptr, nullptr, nullptr));
 	}
 
 	~GeneratorContext ()
@@ -205,7 +430,12 @@ public:
 
 	bool WritePackage (const std::string& filename) const
 	{
-
+		sqlite3* targetDb;
+		sqlite3_open (filename.c_str (), &targetDb);
+		auto backup = sqlite3_backup_init(targetDb, "main",
+			installationDatabase, "main");
+		sqlite3_backup_step (backup, -1);
+		sqlite3_backup_finish (backup);
 	}
 
 	pugi::xml_node	productNode;
@@ -220,6 +450,9 @@ Returns a mapping of feature id string to the feature id in the database.
 */
 std::unordered_map<std::string, std::int64_t> CreateFeatures (GeneratorContext& gc)
 {
+	sqlite3_exec (gc.installationDatabase, "BEGIN TRANSACTION;",
+		nullptr, nullptr, nullptr);
+
 	// TODO Validate that there is a feature element
 	// TODO Validate that at least one feature is present
 	// TODO Validate the feature ID is not empty
@@ -252,14 +485,54 @@ std::unordered_map<std::string, std::int64_t> CreateFeatures (GeneratorContext& 
 
 	BOOST_LOG_TRIVIAL(info) << "Created " << featureCount << " feature(s)";
 
+	sqlite3_exec (gc.installationDatabase, "COMMIT TRANSACTION;",
+		nullptr, nullptr, nullptr);
+
 	return result;
 }
 
-void CreateSourcePackages (GeneratorContext& gc)
+/*
+Returns a mapping of source package id string to the source package id in the database.
+*/
+std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorContext& gc)
 {
-	// First, we iterate over all files, and put them right into their packages
+	sqlite3_exec (gc.installationDatabase, "BEGIN TRANSACTION;",
+		nullptr, nullptr, nullptr);
 
-	// We can only populate the database once we know all packages
+	// TODO Validate the source package ID is not empty
+	// TODO Validate all source package IDs are unique
+	BOOST_LOG_TRIVIAL(info) << "Populating source package table";
+
+	std::unordered_map<std::string, std::int64_t> result;
+
+	sqlite3_stmt* insertSourcePackageStatement;
+	sqlite3_prepare_v2 (gc.installationDatabase,
+		"INSERT INTO source_packages (Name) VALUES (?)", -1, &insertSourcePackageStatement,
+		nullptr);
+
+	int sourcePackageCount = 0;
+	for (const auto sourcePackage : gc.productNode.child ("SourcePackages").children ()) {
+		const auto sourcePackageId = sourcePackage.attribute ("Id").value ();
+		sqlite3_bind_text (insertSourcePackageStatement, 1,
+			sourcePackageId, -1, nullptr);
+		sqlite3_step (insertSourcePackageStatement);
+		sqlite3_reset (insertSourcePackageStatement);
+
+		const auto lastRowId = sqlite3_last_insert_rowid (gc.installationDatabase);
+		result [sourcePackageId] = lastRowId;
+
+		BOOST_LOG_TRIVIAL(debug) << "Source package '" << sourcePackageId
+			<< "' assigned to Id " << lastRowId;
+		++sourcePackageCount;
+	}
+
+	sqlite3_finalize (insertSourcePackageStatement);
+
+	BOOST_LOG_TRIVIAL(info) << "Created " << sourcePackageCount << " source package(s)";
+
+	sqlite3_exec (gc.installationDatabase, "COMMIT TRANSACTION;",
+		nullptr, nullptr, nullptr);
+	return result;
 }
 
 int main (int argc, char* argv[])
@@ -273,8 +546,9 @@ int main (int argc, char* argv[])
     desc.add_options ()
 		("source-directory", po::value<std::string> ()->default_value ("."))
 		("temp-directory", po::value<std::string> ()->default_value (
-			 boost::filesystem::unique_path ().string ()))
-		("output,o", "Output file name");
+			 std::string ("nimtmp-") + boost::filesystem::unique_path ().string ()))
+		("output,o", po::value<std::string> ()->default_value ("installer"),
+			"Output file name");
 
     po::options_description hidden ("Hidden options");
     hidden.add_options ()
@@ -309,21 +583,31 @@ int main (int argc, char* argv[])
 
 	GeneratorContext gc;
 	gc.productNode = doc.document_element ().child ("Product");
-	gc.sourceDirectory = boost::filesystem::path (
-		vm ["source-directory"].as<std::string> ());
-	gc.temporaryDirectory = boost::filesystem::path (
-		vm ["temp-directory"].as<std::string> ());
+	gc.sourceDirectory = absolute (boost::filesystem::path (
+		vm ["source-directory"].as<std::string> ()));
+	gc.temporaryDirectory = absolute (boost::filesystem::path (
+		vm ["temp-directory"].as<std::string> ()));
 
 	boost::filesystem::create_directories (gc.temporaryDirectory);
 	BOOST_LOG_TRIVIAL(debug) << "Temporary directory: " << gc.temporaryDirectory;
 
-	CreateFeatures (gc);
-	const auto uniqueFiles = GetUniqueSourcePaths (gc.productNode);
-	PrepareFiles (uniqueFiles, gc.sourceDirectory, gc.temporaryDirectory,
-		gc.buildDatabase);
+	gc.SetupBuildDatabase (gc.temporaryDirectory);
 
-	CreateSourcePackages (gc);
+	const auto featureIds = CreateFeatures (gc);
+	const auto sourcePackageIds = CreateSourcePackages (gc);
+
+	AssignFilesToFeaturesPackages (gc.productNode, sourcePackageIds,
+		featureIds, gc.buildDatabase);
+
+	const auto uniqueFiles = GetUniqueSourcePaths (gc.productNode);
+	auto pathToContentObject = PrepareFiles (uniqueFiles,
+		gc.sourceDirectory, gc.temporaryDirectory,
+		gc.buildDatabase, gc.installationDatabase);
+
+	WritePackages (gc.buildDatabase, gc.installationDatabase,
+		gc.temporaryDirectory, gc.productNode, pathToContentObject);
+
 	gc.WritePackage (outputFile.string () + ".nimdb");
 
-	boost::filesystem::remove_all (gc.temporaryDirectory);
+	// boost::filesystem::remove_all (gc.temporaryDirectory);
 }

@@ -8,7 +8,9 @@ ADD_CUSTOM_COMMAND(
 	OUTPUT
 		${CMAKE_CURRENT_BINARY_DIR}/build-db-structure.h
 	COMMAND
-		txttoheader build_db_structure ${niven_installation_manager_SOURCE_DIR}/sql/install-db-structure.sql > ${CMAKE_CURRENT_BINARY_DIR}/build-db-structure.h
+		txttoheader build_db_structure ${niven_installation_manager_SOURCE_DIR}/sql/build-db-structure.sql > ${CMAKE_CURRENT_BINARY_DIR}/build-db-structure.h
+	DEPENDS
+		${niven_installation_manager_SOURCE_DIR}/sql/build-db-structure.sql
 	)
 
 ADD_CUSTOM_COMMAND(
@@ -16,6 +18,8 @@ ADD_CUSTOM_COMMAND(
 		${CMAKE_CURRENT_BINARY_DIR}/install-db-structure.h
 	COMMAND
 		txttoheader install_db_structure ${niven_installation_manager_SOURCE_DIR}/sql/install-db-structure.sql > ${CMAKE_CURRENT_BINARY_DIR}/install-db-structure.h
+	DEPENDS
+		${niven_installation_manager_SOURCE_DIR}/sql/install-db-structure.sql
 	)
 
 
