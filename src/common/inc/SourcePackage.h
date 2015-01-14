@@ -42,15 +42,14 @@ struct PackageDataChunk
 };
 
 /*
-The source package writer writes the package during Finalize () and returns
-the absolute path to the generated package.
+The source package writer writes the package during Finalize ().
 */
 class SourcePackageWriter final
 {
 public:
-	void Open (const boost::filesystem::path& outputDirectory);
+	void Open (const boost::filesystem::path& outputFile);
 	void Add (const Hash& hash, const boost::filesystem::path& chunkPath);
-	boost::filesystem::path Finalize ();
+	void Finalize ();
 };
 
 class ISourcePackageReader
