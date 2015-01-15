@@ -6,6 +6,7 @@
 
 #include <vector>
 #include <boost/filesystem.hpp>
+#include <memory>
 
 struct PackageHeader
 {
@@ -47,9 +48,21 @@ The source package writer writes the package during Finalize ().
 class SourcePackageWriter final
 {
 public:
+	SourcePackageWriter ();
+	~SourcePackageWriter ();
+
+	SourcePackageWriter (const SourcePackageWriter&) = delete;
+	SourcePackageWriter& operator=(const SourcePackageWriter&) = delete;
+
 	void Open (const boost::filesystem::path& outputFile);
 	void Add (const Hash& hash, const boost::filesystem::path& chunkPath);
 	void Finalize ();
+
+	bool IsOpen () const;
+
+private:
+	struct Impl;
+	std::unique_ptr<Impl> impl_;
 };
 
 class ISourcePackageReader

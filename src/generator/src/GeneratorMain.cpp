@@ -188,7 +188,7 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 
 	sqlite3_stmt* insertChunkStatement;
 	sqlite3_prepare_v2 (buildDatabase,
-		"INSERT INTO chunks (ContentObjectId, Path) VALUES (?, ?)",
+		"INSERT INTO chunks (ContentObjectId, Path, Size) VALUES (?, ?, ?)",
 		-1, &insertChunkStatement, nullptr);
 
 	// TODO This can be parallelized
@@ -199,7 +199,13 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 		// TODO handle empty files
 		boost::filesystem::ifstream input (fullSourcePath, std::ios::binary);
 
-		std::vector<std::string> chunks;
+		struct ChunkInfo
+		{
+			std::string name;
+			std::int64_t size;
+		};
+
+		std::vector<ChunkInfo> chunks;
 
 		EVP_DigestInit_ex (fileCtx, EVP_sha512 (), nullptr);
 		int chunkNumber = 0;
@@ -219,7 +225,10 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 				buffer.data (), chunkSize, Z_BEST_COMPRESSION);
 
 			const auto chunkName = ToString (uuidGen ().data);
-			chunks.push_back (chunkName);
+
+			const ChunkInfo chunkInfo {chunkName,
+				static_cast<std::int64_t> (compressedSize)};
+			chunks.push_back (chunkInfo);
 
 			PackageDataChunk pdc;
 			::memset (&pdc, 0, sizeof (pdc));
@@ -270,7 +279,8 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 		for (const auto chunk : chunks) {
 			sqlite3_bind_int64 (insertChunkStatement, 1, contentObjectId);
 			sqlite3_bind_text (insertChunkStatement, 2,
-				absolute (temporaryDirectory / chunk).c_str (), -1, SQLITE_TRANSIENT);
+				absolute (temporaryDirectory / chunk.name).c_str (), -1, SQLITE_TRANSIENT);
+			sqlite3_bind_int64 (insertChunkStatement, 3, chunk.size);
 			sqlite3_step (insertChunkStatement);
 			sqlite3_reset (insertChunkStatement);
 		}
@@ -288,6 +298,28 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+void InsertStorageMappingEntries (sqlite3* installationDatabase,
+	const std::int64_t sourcePackageId,
+	const std::vector<std::int64_t>& contentObjectIds)
+{
+	sqlite3_stmt* insertIntoStorageMappingStatement;
+	sqlite3_prepare_v2 (installationDatabase,
+		"INSERT INTO storage_mapping (ContentObjectId, SourcePackageId) VALUES (?, ?)",
+		-1, &insertIntoStorageMappingStatement, nullptr);
+
+	for (const auto contentObjectId : contentObjectIds) {
+		sqlite3_bind_int64 (insertIntoStorageMappingStatement, 1,
+			contentObjectId);
+		sqlite3_bind_int64 (insertIntoStorageMappingStatement, 2,
+			sourcePackageId);
+		sqlite3_step (insertIntoStorageMappingStatement);
+		sqlite3_reset (insertIntoStorageMappingStatement);
+	}
+
+	sqlite3_finalize (insertIntoStorageMappingStatement);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 void WritePackages (
 	sqlite3* buildDatabase,
 	sqlite3* installationDatabase,
@@ -300,16 +332,17 @@ void WritePackages (
 		nullptr, nullptr, nullptr);
 
 	BOOST_LOG_TRIVIAL(debug) << "Writing packages";
-	// First, we assemble all user-requested source packages
-	sqlite3_stmt* selectSourcePackageIdsStatement;
-	sqlite3_prepare_v2 (installationDatabase,
-		"SELECT Id FROM source_packages;", -1,
-		&selectSourcePackageIdsStatement, nullptr);
 
 	sqlite3_stmt* insertIntoFilesStatement;
 	sqlite3_prepare_v2 (installationDatabase,
 		"INSERT INTO files (Path, ContentObjectId, FeatureId) VALUES (?, ?, ?)",
 		-1, &insertIntoFilesStatement, nullptr);
+
+	// First, we assemble all user-requested source packages
+	sqlite3_stmt* selectSourcePackageIdsStatement;
+	sqlite3_prepare_v2 (installationDatabase,
+		"SELECT Id FROM source_packages;", -1,
+		&selectSourcePackageIdsStatement, nullptr);
 
 	while (sqlite3_step (selectSourcePackageIdsStatement) == SQLITE_ROW) {
 		const std::int64_t sourcePackageId = sqlite3_column_int64 (
@@ -339,7 +372,7 @@ void WritePackages (
 			if (pathToContentObject.find (sourcePath) != pathToContentObject.end ()) {
 				const auto contentObjectIdHash = pathToContentObject.find (sourcePath)->second;
 				contentObjectId = contentObjectIdHash.id;
-				BOOST_LOG_TRIVIAL(trace) << "'" << sourcePath << "' has content object " << contentObjectId;
+				BOOST_LOG_TRIVIAL(trace) << "'" << sourcePath << "' linked to content object " << contentObjectId;
 
 				// Write the chunks into this package
 				sqlite3_stmt* selectChunksForContentObject;
@@ -388,22 +421,8 @@ void WritePackages (
 		sqlite3_reset (selectFilesForPackageStatement);
 		sqlite3_finalize (selectFilesForPackageStatement);
 
-
-		sqlite3_stmt* insertIntoStorageMappingStatement;
-		sqlite3_prepare_v2 (installationDatabase,
-			"INSERT INTO storage_mapping (ContentObjectId, SourcePackageId) VALUES (?, ?)",
-			-1, &insertIntoStorageMappingStatement, nullptr);
-
-		for (const auto contentObjectId : contentObjectsInPackage) {
-			sqlite3_bind_int64 (insertIntoStorageMappingStatement, 1,
-				contentObjectId);
-			sqlite3_bind_int64 (insertIntoStorageMappingStatement, 2,
-				sourcePackageId);
-			sqlite3_step (insertIntoStorageMappingStatement);
-			sqlite3_reset (insertIntoStorageMappingStatement);
-		}
-
-		sqlite3_finalize (insertIntoStorageMappingStatement);
+		InsertStorageMappingEntries(installationDatabase,
+			sourcePackageId, contentObjectsInPackage);
 
 		// Write the package
 		SourcePackageWriter spw;
@@ -420,8 +439,120 @@ void WritePackages (
 
 	sqlite3_finalize (selectSourcePackageIdsStatement);
 
-	// Here we handle all files sent to the "default" package
 
+	// Here we handle all files sent to the "default" package
+	// This is very similar to the loop above, but we will create packages on
+	// demand once the package size becomes too large
+	sqlite3_stmt* selectFilesForDefaultPackageStatement;
+	sqlite3_prepare_v2 (buildDatabase,
+		"SELECT SourcePath, TargetPath, FeatureId FROM files WHERE SourcePackageId IS NULL;",
+		-1, &selectFilesForDefaultPackageStatement, nullptr);
+
+	boost::uuids::random_generator uuidGen;
+
+	SourcePackageWriter spw;
+	std::int64_t dataInCurrentPackage = 0;
+	std::int64_t currentPackageId = -1;
+	std::vector<std::int64_t> contentObjectsInCurrentPackage;
+	while (sqlite3_step (selectFilesForDefaultPackageStatement) == SQLITE_ROW) {
+		const std::string sourcePath =
+			reinterpret_cast<const char*> (sqlite3_column_text (selectFilesForDefaultPackageStatement, 0));
+		BOOST_LOG_TRIVIAL(trace) << "Processing file '" << sourcePath << "', assigned to default packages";
+
+		std::int64_t contentObjectId = -1;
+		// May be NULL in case it's an empty file
+		if (pathToContentObject.find (sourcePath) != pathToContentObject.end ()) {
+			const auto contentObjectIdHash = pathToContentObject.find (sourcePath)->second;
+			contentObjectId = contentObjectIdHash.id;
+			BOOST_LOG_TRIVIAL(trace) << "'" << sourcePath << "' linked to content object " << contentObjectId;
+
+			// Write the chunks into this package
+			sqlite3_stmt* selectChunksForContentObject;
+			// Order by rowid, so we get a sequential write into the output
+			// file
+			sqlite3_prepare_v2 (buildDatabase,
+				"SELECT Path, Size FROM chunks WHERE ContentObjectId=? ORDER BY rowid ASC",
+				-1, &selectChunksForContentObject, nullptr);
+			sqlite3_bind_int64 (selectChunksForContentObject, 1, contentObjectId);
+
+			while (sqlite3_step (selectChunksForContentObject) == SQLITE_ROW) {
+				// Open current package if needed, start inserting
+				if (! spw.IsOpen ()) {
+					// Add a new source package
+					sqlite3_stmt* insertSourcePackageStatement;
+					sqlite3_prepare_v2 (installationDatabase,
+						"INSERT INTO source_packages (Name) VALUES (?);", -1,
+						&insertSourcePackageStatement, nullptr);
+
+					const std::string packageName = std::string ("Generated_")
+						+ ToString (uuidGen ().data);
+
+					sqlite3_bind_text (insertSourcePackageStatement, 1,
+						packageName.c_str (), -1, nullptr);
+					sqlite3_step (insertSourcePackageStatement);
+
+					currentPackageId = sqlite3_last_insert_rowid (installationDatabase);
+
+					sqlite3_reset (insertSourcePackageStatement);
+					sqlite3_finalize (insertSourcePackageStatement);
+
+					spw.Open (targetDirectory / ("package" + std::to_string (currentPackageId) + ".nimpkg"));
+				}
+
+				// Insert the chunk right away, increment current size, if
+				// package is full, finalize, and reset size
+				const std::string chunkPath = reinterpret_cast<const char*> (
+					sqlite3_column_text (selectChunksForContentObject, 0));
+				spw.Add (contentObjectIdHash.hash, chunkPath);
+
+				dataInCurrentPackage += sqlite3_column_int64 (
+					selectChunksForContentObject, 1);
+				contentObjectsInCurrentPackage.push_back (contentObjectIdHash.id);
+
+				if (dataInCurrentPackage >= targetPackageSize) {
+					dataInCurrentPackage = 0;
+					// Update storage mapping
+
+					InsertStorageMappingEntries(installationDatabase,
+						currentPackageId, contentObjectsInCurrentPackage);
+					contentObjectsInCurrentPackage.clear ();
+
+					spw.Finalize ();
+				}
+			}
+
+			sqlite3_reset (selectChunksForContentObject);
+			sqlite3_finalize (selectChunksForContentObject);
+		}
+
+		// We can now write the file entry
+		sqlite3_bind_text (insertIntoFilesStatement, 1,
+			reinterpret_cast<const char*> (
+				sqlite3_column_text (selectFilesForDefaultPackageStatement, 1)),
+			-1, SQLITE_TRANSIENT);
+
+		if (contentObjectId != -1) {
+			sqlite3_bind_int64 (insertIntoFilesStatement, 2,
+				contentObjectId);
+		} else {
+			sqlite3_bind_null (insertIntoFilesStatement, 2);
+		}
+
+		sqlite3_bind_int64 (insertIntoFilesStatement, 3,
+			sqlite3_column_int64 (selectFilesForDefaultPackageStatement, 2));
+		sqlite3_step (insertIntoFilesStatement);
+		sqlite3_reset (insertIntoFilesStatement);
+	}
+
+	// Flush if needed
+	if (dataInCurrentPackage > 0) {
+		InsertStorageMappingEntries(installationDatabase,
+			currentPackageId, contentObjectsInCurrentPackage);
+
+		spw.Finalize ();
+	}
+
+	sqlite3_finalize (selectFilesForDefaultPackageStatement);
 	sqlite3_finalize (insertIntoFilesStatement);
 
 	sqlite3_exec (installationDatabase, "COMMIT TRANSACTION;",
