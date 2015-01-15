@@ -919,7 +919,6 @@ int main (int argc, char* argv[])
 		gc.sourceDirectory, gc.temporaryDirectory,
 		gc.buildDatabase, gc.installationDatabase);
 
-	gc.WriteInstallationDatabase (outputFile.string () + "-debug.nimdb");
 	const auto packageInfos = WritePackages (gc.buildDatabase, gc.installationDatabase,
 		gc.temporaryDirectory, gc.productNode, pathToContentObject);
 

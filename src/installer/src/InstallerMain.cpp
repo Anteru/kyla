@@ -2,8 +2,39 @@
 #include <openssl/evp.h>
 #include <boost/program_options.hpp>
 #include <string>
+#include <sstream>
+
+#include <boost/log/trivial.hpp>
 
 #include "Hash.h"
+
+template <typename T>
+std::string Join (const std::vector<T>& elements, const char* infix = ", ")
+{
+	std::stringstream result;
+
+	for (typename std::vector<T>::size_type i = 0, e = elements.size (); i < e; ++i) {
+		result << elements [i];
+
+		if (i+1 < e) {
+			result << infix;
+		}
+	}
+
+	return result.str ();
+}
+
+std::string GetSourcePackagesForSelectedFeaturesQueryString (
+	const std::vector<std::int64_t>& featureIds)
+{
+	std::stringstream result;
+	result << "SELECT Filename FROM source_packages WHERE Id IN ("
+		   << "SELECT SourcePackageId FROM storage_mapping WHERE ContentObjectId "
+		   << "IN (SELECT ContentObjectId FROM files WHERE FeatureId IN ("
+		   << Join (featureIds)
+		   << ")) GROUP BY SourcePackageId);";
+	return result.str ();
+}
 
 int main (int argc, char* argv [])
 {
@@ -53,14 +84,31 @@ int main (int argc, char* argv [])
 		"SELECT Id, Name, UIName FROM features;", -1,
 		&selectFeaturesStatement, nullptr);
 
+	std::vector<std::int64_t> selectedFeatureIds;
+
 	std::cout << "Installing features:\n";
 	while (sqlite3_step (selectFeaturesStatement) == SQLITE_ROW) {
 		const std::string featureName = reinterpret_cast<const char*> (
 			sqlite3_column_text (selectFeaturesStatement, 2));
 		std::cout << "\t" << featureName << "\n";
+
+		selectedFeatureIds.push_back (
+			sqlite3_column_int64 (selectFeaturesStatement, 0));
 	}
 
 	sqlite3_finalize (selectFeaturesStatement);
+
+	sqlite3_stmt* selectRequiredSourcePackagesStatement = nullptr;
+	sqlite3_prepare_v2 (db,
+		GetSourcePackagesForSelectedFeaturesQueryString (selectedFeatureIds).c_str (),
+		-1, &selectRequiredSourcePackagesStatement, nullptr);
+
+	while (sqlite3_step (selectRequiredSourcePackagesStatement) == SQLITE_ROW) {
+		BOOST_LOG_TRIVIAL (debug) << "Requesting package " <<
+			reinterpret_cast<const char*> (sqlite3_column_text (selectRequiredSourcePackagesStatement, 0));
+	}
+
+	sqlite3_finalize (selectRequiredSourcePackagesStatement);
 
 	sqlite3_close (db);
 }
