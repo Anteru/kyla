@@ -685,10 +685,10 @@ public:
 		sqlite3_close (installationDatabase);
 	}
 
-	bool WriteInstallationDatabase (const std::string& filename) const
+	bool WriteInstallationDatabase (const boost::filesystem::path& outputFile) const
 	{
 		sqlite3* targetDb;
-		sqlite3_open (filename.c_str (), &targetDb);
+		sqlite3_open (outputFile.c_str (), &targetDb);
 		auto backup = sqlite3_backup_init(targetDb, "main",
 			installationDatabase, "main");
 		sqlite3_backup_step (backup, -1);
@@ -700,6 +700,7 @@ public:
 	sqlite3*		buildDatabase;
 	boost::filesystem::path sourceDirectory;
 	boost::filesystem::path	temporaryDirectory;
+	boost::filesystem::path targetDirectory;
 };
 
 /*
@@ -860,10 +861,10 @@ int main (int argc, char* argv[])
     po::options_description desc ("Configuration");
     desc.add_options ()
 		("source-directory", po::value<std::string> ()->default_value ("."))
+		("target-directory", po::value<std::string> ()->default_value ("."))
 		("temp-directory", po::value<std::string> ()->default_value (
 			 std::string ("nimtmp-") + boost::filesystem::unique_path ().string ()))
-		("output,o", po::value<std::string> ()->default_value ("installer"),
-			"Output file name");
+		;
 
     po::options_description hidden ("Hidden options");
     hidden.add_options ()
@@ -902,9 +903,12 @@ int main (int argc, char* argv[])
 		vm ["source-directory"].as<std::string> ()));
 	gc.temporaryDirectory = absolute (boost::filesystem::path (
 		vm ["temp-directory"].as<std::string> ()));
+	gc.targetDirectory = absolute (boost::filesystem::path (
+		vm ["target-directory"].as<std::string> ()));
 
 	boost::filesystem::create_directories (gc.temporaryDirectory);
 	BOOST_LOG_TRIVIAL(debug) << "Temporary directory: " << gc.temporaryDirectory;
+	BOOST_LOG_TRIVIAL(debug) << "Target directory: " << gc.targetDirectory;
 
 	gc.SetupBuildDatabase (gc.temporaryDirectory);
 
@@ -919,15 +923,16 @@ int main (int argc, char* argv[])
 		gc.sourceDirectory, gc.temporaryDirectory,
 		gc.buildDatabase, gc.installationDatabase);
 
-	const auto packageInfos = WritePackages (gc.buildDatabase, gc.installationDatabase,
-		gc.temporaryDirectory, gc.productNode, pathToContentObject);
+	const auto packageInfos = WritePackages (gc.buildDatabase,
+		gc.installationDatabase,
+		gc.targetDirectory, gc.productNode, pathToContentObject);
 
 	FinalizeSourcePackageNames (
 		GetSourcePackageNameTemplate (gc.productNode),
 		packageInfos,
 		gc.installationDatabase);
 
-	gc.WriteInstallationDatabase (outputFile.string () + ".nimdb");
+	gc.WriteInstallationDatabase (gc.targetDirectory / (outputFile.string () + ".nimdb"));
 
-	// boost::filesystem::remove_all (gc.temporaryDirectory);
+	boost::filesystem::remove_all (gc.temporaryDirectory);
 }
