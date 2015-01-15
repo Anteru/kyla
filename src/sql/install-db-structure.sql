@@ -16,7 +16,8 @@ CREATE TABLE directories (Path TEXT PRIMARY KEY NOT NULL,
     FOREIGN KEY(FeatureId) REFERENCES features(Id));
 CREATE TABLE source_packages (Id INTEGER PRIMARY KEY NOT NULL,
     Name VARCHAR NOT NULL UNIQUE,
-    Filename VARCHAR NOT NULL UNIQUE);
+    Filename VARCHAR NOT NULL UNIQUE,
+    Hash BLOB NOT NULL);
 
 -- Maps one content object to one or more source packages
 CREATE TABLE storage_mapping (

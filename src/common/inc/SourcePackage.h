@@ -56,7 +56,7 @@ public:
 
 	void Open (const boost::filesystem::path& outputFile);
 	void Add (const Hash& hash, const boost::filesystem::path& chunkPath);
-	void Finalize ();
+	Hash Finalize ();
 
 	bool IsOpen () const;
 

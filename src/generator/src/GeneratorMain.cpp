@@ -356,8 +356,14 @@ SourcePackageNameTemplate GetSourcePackageNameTemplate (const pugi::xml_node& pr
 	return SourcePackageNameTemplate (packageNameTemplate);
 }
 
+struct SourcePackageInfo
+{
+	std::int64_t	id;
+	Hash			hash;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
-void WritePackages (
+std::vector<SourcePackageInfo> WritePackages (
 	sqlite3* buildDatabase,
 	sqlite3* installationDatabase,
 	const boost::filesystem::path& targetDirectory,
@@ -367,6 +373,8 @@ void WritePackages (
 {
 	sqlite3_exec (installationDatabase, "BEGIN TRANSACTION;",
 		nullptr, nullptr, nullptr);
+
+	std::vector<SourcePackageInfo> result;
 
 	BOOST_LOG_TRIVIAL(debug) << "Writing packages";
 	const auto packageNameTemplate = GetSourcePackageNameTemplate (productNode);
@@ -472,7 +480,14 @@ void WritePackages (
 			}
 		}
 
-		spw.Finalize ();
+		const auto sourcePackageHash = spw.Finalize ();
+
+		const SourcePackageInfo sourcePackageInfo = {
+			sourcePackageId,
+			sourcePackageHash
+		};
+
+		result.push_back(sourcePackageInfo);
 		BOOST_LOG_TRIVIAL(info) << "Created package "
 			<< reinterpret_cast<const char*> (sqlite3_column_text (
 				selectSourcePackageIdsStatement, 1));
@@ -522,7 +537,7 @@ void WritePackages (
 					// Add a new source package
 					sqlite3_stmt* insertSourcePackageStatement;
 					sqlite3_prepare_v2 (installationDatabase,
-						"INSERT INTO source_packages (Name, Filename) VALUES (?, ?);", -1,
+						"INSERT INTO source_packages (Name, Filename, Hash) VALUES (?, ?, ?);", -1,
 						&insertSourcePackageStatement, nullptr);
 
 					const std::string packageName = std::string ("Generated_")
@@ -531,9 +546,12 @@ void WritePackages (
 					sqlite3_bind_text (insertSourcePackageStatement, 1,
 						packageName.c_str (), -1, SQLITE_TRANSIENT);
 
-					// Dummy filename, will be fixed up later
+					// Dummy filename and hash, will be fixed up later
 					sqlite3_bind_text (insertSourcePackageStatement, 2,
 						packageName.c_str (), -1, SQLITE_TRANSIENT);
+					sqlite3_bind_blob (insertSourcePackageStatement, 3,
+						packageName.c_str (), packageName.size (), SQLITE_TRANSIENT);
+
 					sqlite3_step (insertSourcePackageStatement);
 
 					currentPackageId = sqlite3_last_insert_rowid (installationDatabase);
@@ -561,11 +579,14 @@ void WritePackages (
 					dataInCurrentPackage = 0;
 					// Update storage mapping
 
-					InsertStorageMappingEntries(installationDatabase,
+					InsertStorageMappingEntries (installationDatabase,
 						currentPackageId, contentObjectsInCurrentPackage);
 					contentObjectsInCurrentPackage.clear ();
 
-					spw.Finalize ();
+					const auto sourcePackageHash = spw.Finalize ();
+					const SourcePackageInfo sourcePackageInfo = {
+						currentPackageId, sourcePackageHash};
+					result.push_back (sourcePackageInfo);
 				}
 			}
 
@@ -594,10 +615,13 @@ void WritePackages (
 
 	// Flush if needed
 	if (dataInCurrentPackage > 0) {
-		InsertStorageMappingEntries(installationDatabase,
+		InsertStorageMappingEntries (installationDatabase,
 			currentPackageId, contentObjectsInCurrentPackage);
 
-		spw.Finalize ();
+		const auto sourcePackageHash = spw.Finalize ();
+		const SourcePackageInfo sourcePackageInfo = {
+			currentPackageId, sourcePackageHash};
+		result.push_back (sourcePackageInfo);
 	}
 
 	sqlite3_finalize (selectFilesForDefaultPackageStatement);
@@ -605,6 +629,8 @@ void WritePackages (
 
 	sqlite3_exec (installationDatabase, "COMMIT TRANSACTION;",
 		nullptr, nullptr, nullptr);
+
+	return result;
 }
 
 struct GeneratorContext
@@ -713,10 +739,10 @@ std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorCon
 
 	sqlite3_stmt* insertSourcePackageStatement;
 	sqlite3_prepare_v2 (gc.installationDatabase,
-		"INSERT INTO source_packages (Name, Filename) VALUES (?, ?)", -1, &insertSourcePackageStatement,
+		"INSERT INTO source_packages (Name, Filename, Hash) VALUES (?, ?, ?)", -1, &insertSourcePackageStatement,
 		nullptr);
 
-	// We must use dummy names for the file names first, and fix this later up
+	// We must use dummy file names/hashes, and fix this later up
 	// once we have all packages in place
 	boost::uuids::random_generator uuidGen;
 
@@ -725,8 +751,12 @@ std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorCon
 		const auto sourcePackageId = sourcePackage.attribute ("Id").value ();
 		sqlite3_bind_text (insertSourcePackageStatement, 1,
 			sourcePackageId, -1, SQLITE_TRANSIENT);
+
+		const auto randomId = ToString (uuidGen().data);
 		sqlite3_bind_text (insertSourcePackageStatement, 2,
-			ToString (uuidGen().data).c_str (), -1, SQLITE_TRANSIENT);
+			randomId.c_str (), -1, SQLITE_TRANSIENT);
+		sqlite3_bind_blob (insertSourcePackageStatement, 3,
+			randomId.c_str (), randomId.size (), SQLITE_TRANSIENT);
 
 		sqlite3_step (insertSourcePackageStatement);
 		sqlite3_reset (insertSourcePackageStatement);
@@ -750,36 +780,28 @@ std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorCon
 
 ////////////////////////////////////////////////////////////////////////////////
 void FinalizeSourcePackageNames (const SourcePackageNameTemplate& nameTemplate,
+	const std::vector<SourcePackageInfo>& infos,
 	sqlite3* installationDatabase)
 {
 	sqlite3_exec (installationDatabase, "BEGIN TRANSACTION;",
 		nullptr, nullptr, nullptr);
 
-	sqlite3_stmt* selectSourcePackagesCountStatement;
-	sqlite3_prepare_v2 (installationDatabase,
-		"SELECT COUNT(*) FROM source_packages;", -1,
-		&selectSourcePackagesCountStatement, nullptr);
-	sqlite3_step (selectSourcePackagesCountStatement);
-	const auto sourcePackageCount = sqlite3_column_int64 (
-		selectSourcePackagesCountStatement, 0);
-
-	BOOST_LOG_TRIVIAL(debug) << "Found " << sourcePackageCount << " source packages";
-	BOOST_LOG_TRIVIAL(debug) << sqlite3_errmsg(installationDatabase);
-
-	sqlite3_finalize (selectSourcePackagesCountStatement);
-
 	sqlite3_stmt* updateSourcePackageFilenameStatement;
 	sqlite3_prepare_v2 (installationDatabase,
-		"UPDATE source_packages SET Filename=? WHERE Id=?;", -1,
+		"UPDATE source_packages SET Filename=?,Hash=? WHERE Id=?;", -1,
 		&updateSourcePackageFilenameStatement, nullptr);
 
-	for (std::int64_t sourcePackageId = 1; sourcePackageId <= sourcePackageCount; ++sourcePackageId) {
-		sqlite3_bind_int64 (updateSourcePackageFilenameStatement, 2,
+	for (const auto& info : infos) {
+		const auto sourcePackageId = info.id;
+
+		sqlite3_bind_int64 (updateSourcePackageFilenameStatement, 3,
 			sourcePackageId);
 		const auto packageName = nameTemplate (sourcePackageId);
 		BOOST_LOG_TRIVIAL(debug) << "Package " << sourcePackageId << " stored in file " << packageName;
 		sqlite3_bind_text (updateSourcePackageFilenameStatement, 1,
 			packageName.c_str (), -1, SQLITE_TRANSIENT);
+		sqlite3_bind_blob (updateSourcePackageFilenameStatement, 2,
+			info.hash.hash, sizeof (info.hash.hash), SQLITE_TRANSIENT);
 		sqlite3_step (updateSourcePackageFilenameStatement);
 		sqlite3_reset (updateSourcePackageFilenameStatement);
 	}
@@ -859,10 +881,12 @@ int main (int argc, char* argv[])
 		gc.sourceDirectory, gc.temporaryDirectory,
 		gc.buildDatabase, gc.installationDatabase);
 
-	WritePackages (gc.buildDatabase, gc.installationDatabase,
+	const auto packageInfos = WritePackages (gc.buildDatabase, gc.installationDatabase,
 		gc.temporaryDirectory, gc.productNode, pathToContentObject);
+
 	FinalizeSourcePackageNames (
 		GetSourcePackageNameTemplate (gc.productNode),
+		packageInfos,
 		gc.installationDatabase);
 
 	gc.WriteInstallationDatabase (outputFile.string () + ".nimdb");
