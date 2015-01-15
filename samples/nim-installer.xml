@@ -3,6 +3,12 @@
     <Product Id="" Name="nim SDK" Version="1.0">
         <!-- All features that can be installed. Features can be nested -->
         <Features>
+            <!-- A single feature.
+            Attributes:
+                - Name: The name displayed to the user
+                - Description: An optional description
+                - Id: The feature id
+            -->
             <Feature Name="Source code" Id="Feature_SC" />
             <Feature Name="Headers" Id="Feature_H" />
         </Features>

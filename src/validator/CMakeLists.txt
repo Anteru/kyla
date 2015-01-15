@@ -8,7 +8,7 @@ INCLUDE_DIRECTORIES(${OPENSSL_INCLUDE_DIR})
 
 # Needed for log
 ADD_DEFINITIONS(-DBOOST_LOG_DYN_LINK)
-FIND_PACKAGE(Boost 1.55.0 REQUIRED COMPONENTS program_options filesystem system log)
+FIND_PACKAGE(Boost 1.55.0 REQUIRED QUIET COMPONENTS program_options filesystem system log)
 
 ADD_EXECUTABLE(nim.Validator ${SOURCES})
 TARGET_LINK_LIBRARIES(nim.Validator nim.Common sqlite ${OPENSSL_LIBRARIES} ${Boost_LIBRARIES})

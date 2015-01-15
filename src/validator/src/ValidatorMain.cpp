@@ -7,7 +7,6 @@
 
 int main (int argc, char* argv[])
 {
-
 	namespace po = boost::program_options;
 	po::options_description generic ("Generic options");
 	generic.add_options ()
@@ -99,6 +98,5 @@ int main (int argc, char* argv[])
 	}
 
 	sqlite3_finalize (selectSourcePackagesStatement);
-
 	sqlite3_close (installationDb);
 }
