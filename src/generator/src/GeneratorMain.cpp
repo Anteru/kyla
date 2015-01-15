@@ -694,7 +694,7 @@ std::unordered_map<std::string, std::int64_t> CreateFeatures (GeneratorContext& 
 
 	sqlite3_stmt* insertFeatureStatement;
 	sqlite3_prepare_v2 (gc.installationDatabase,
-		"INSERT INTO features (Name) VALUES (?)", -1, &insertFeatureStatement,
+		"INSERT INTO features (Name, UIName, UIDescription) VALUES (?, ?, ?)", -1, &insertFeatureStatement,
 		nullptr);
 
 	int featureCount = 0;
@@ -702,6 +702,18 @@ std::unordered_map<std::string, std::int64_t> CreateFeatures (GeneratorContext& 
 		const auto featureId = feature.attribute ("Id").value ();
 		sqlite3_bind_text (insertFeatureStatement, 1, featureId,
 			-1, SQLITE_TRANSIENT);
+
+		const auto featureName = feature.attribute ("Name").value ();
+		sqlite3_bind_text (insertFeatureStatement, 2, featureName,
+			-1, SQLITE_TRANSIENT);
+
+		if (feature.attribute ("Description")) {
+			sqlite3_bind_text (insertFeatureStatement, 3,
+				feature.attribute ("Description").value (), -1, SQLITE_TRANSIENT);
+		} else {
+			sqlite3_bind_null (insertFeatureStatement, 3);
+		}
+
 		sqlite3_step (insertFeatureStatement);
 		sqlite3_reset (insertFeatureStatement);
 

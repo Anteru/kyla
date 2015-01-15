@@ -3,7 +3,11 @@ CREATE TABLE content_objects (Id INTEGER PRIMARY KEY NOT NULL,
     Size INTEGER NOT NULL,
     ChunkCount INTEGER NOT NULL);
 CREATE TABLE features (Id INTEGER PRIMARY KEY NOT NULL,
-    Name VARCHAR NOT NULL UNIQUE);
+    Name VARCHAR NOT NULL UNIQUE,
+    ParentId INTEGER,
+    UIName TEXT NOT NULL,
+    UIDescription TEXT,
+    FOREIGN KEY(ParentId) REFERENCES features(Id));
 
 -- If a file has no ContentObjectId, it's an empty file
 CREATE TABLE files (Path TEXT PRIMARY KEY NOT NULL,
