@@ -3,6 +3,7 @@
 #include <boost/program_options.hpp>
 #include <string>
 #include <sstream>
+#include <iostream>
 
 #include <boost/log/trivial.hpp>
 
