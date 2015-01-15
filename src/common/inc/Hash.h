@@ -5,6 +5,7 @@
 #include <string.h>
 #include <boost/functional/hash.hpp>
 #include <string>
+#include <boost/filesystem.hpp>
 
 template <int size>
 struct THash
@@ -33,6 +34,8 @@ struct HashHash
 typedef THash<64> Hash;
 
 Hash ComputeHash (const int64_t size, const void* data);
+Hash ComputeHash (const boost::filesystem::path& p);
+Hash ComputeHash (const boost::filesystem::path& p, std::vector<char>& buffer);
 
 template <int size>
 std::string ToString (const std::uint8_t (&hash) [size])

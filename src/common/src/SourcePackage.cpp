@@ -103,25 +103,7 @@ Hash SourcePackageWriter::Finalize()
 	// We have to read again, as we can't make a fully streaming update due to
 	// our delayed index write. Hopefully, the file is still in the disk cache,
 	// so this should be quick
-	boost::filesystem::ifstream input (impl_->filename, std::ios::binary);
-
-	EVP_MD_CTX* fileCtx = EVP_MD_CTX_create ();
-	EVP_DigestInit_ex (fileCtx, EVP_sha512 (), nullptr);
-
-	for (;;) {
-		input.read (buffer.data (), buffer.size ());
-		const auto bytesRead = input.gcount();
-
-		EVP_DigestUpdate (fileCtx, buffer.data (), bytesRead);
-
-		if (bytesRead < buffer.size ()) {
-			break;
-		}
-	}
-
-	Hash result;
-	EVP_DigestFinal_ex (fileCtx, result.hash, nullptr);
-	return result;
+	return ComputeHash (impl_->filename, buffer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
