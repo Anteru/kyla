@@ -1,5 +1,5 @@
 CREATE TABLE content_objects (Id INTEGER PRIMARY KEY NOT NULL,
-    Hash VARCHAR NOT NULL UNIQUE,
+    Hash BLOB NOT NULL UNIQUE,
     Size INTEGER NOT NULL,
     ChunkCount INTEGER NOT NULL);
 CREATE TABLE features (Id INTEGER PRIMARY KEY NOT NULL,
@@ -15,7 +15,8 @@ CREATE TABLE directories (Path TEXT PRIMARY KEY NOT NULL,
     FeatureId INTEGER NOT NULL,
     FOREIGN KEY(FeatureId) REFERENCES features(Id));
 CREATE TABLE source_packages (Id INTEGER PRIMARY KEY NOT NULL,
-    Name VARCHAR NOT NULL UNIQUE);
+    Name VARCHAR NOT NULL UNIQUE,
+    Filename VARCHAR NOT NULL UNIQUE);
 
 -- Maps one content object to one or more source packages
 CREATE TABLE storage_mapping (

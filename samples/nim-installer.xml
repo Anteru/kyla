@@ -29,8 +29,13 @@
             <File Source="src/common/inc/SourcePackage.h" Target="include/SourcePackage.h"/>
         </Files>
 
-        <!-- Source packages may be present to enforce bundling -->
-        <SourcePackages>
+        <!-- Source packages may be present to enforce bundling
+            Attributes:
+                - NameTemplate: A string which must contain the string {id}.
+                    {id} will be replaced by the package id. If nothing is
+                    specified, the string pack{id} will be used.
+        -->
+        <SourcePackages NameTemplate="nimSDK{id}">
             <!-- The Id is only used during build, the generated package will
             have a unique hash -->
             <SourcePackage Id="SourcePackage_M" />
