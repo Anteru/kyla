@@ -1,4 +1,4 @@
-Welcome to Nim's documentation!
+Welcome to Kyla's documentation!
 ===============================
 
 Contents:

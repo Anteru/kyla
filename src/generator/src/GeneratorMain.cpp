@@ -361,7 +361,7 @@ public:
 
 	std::string operator () (const std::int64_t i) const
 	{
-		return prefix_ + std::to_string (i) + suffix_ + ".nimpkg";
+		return prefix_ + std::to_string (i) + suffix_ + ".kypkg";
 	}
 
 private:
@@ -945,7 +945,7 @@ int main (int argc, char* argv[])
 		("source-directory", po::value<std::string> ()->default_value ("."))
 		("target-directory", po::value<std::string> ()->default_value ("."))
 		("temp-directory", po::value<std::string> ()->default_value (
-			 std::string ("nimtmp-") + boost::filesystem::unique_path ().string ()))
+			 std::string ("kytmp-") + boost::filesystem::unique_path ().string ()))
 		;
 
     po::options_description hidden ("Hidden options");
@@ -1014,7 +1014,7 @@ int main (int argc, char* argv[])
 		packageInfos,
 		gc.installationDatabase);
 
-	gc.WriteInstallationDatabase (gc.targetDirectory / (outputFile.string () + ".nimdb"));
+	gc.WriteInstallationDatabase (gc.targetDirectory / (outputFile.string () + ".kydb"));
 
 	boost::filesystem::remove_all (gc.temporaryDirectory);
 }

@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='utf-8'?>
-<Nim>
-    <Product Id="" Name="nim SDK" Version="1.0">
+<Installer>
+    <Product Id="" Name="Kyla SDK" Version="1.0">
         <!-- All features that can be installed. Features can be nested -->
         <Features>
             <!-- A single feature.
@@ -48,4 +48,4 @@
             <SourcePackage Id="SourcePackage_H" />
         </SourcePackages>
     </Product>
-</Nim>
+</Installer>
