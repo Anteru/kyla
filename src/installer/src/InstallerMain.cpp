@@ -5,6 +5,7 @@
 #include <sstream>
 #include <iostream>
 #include <unordered_map>
+#include <set>
 
 #include <boost/log/trivial.hpp>
 #include <boost/filesystem.hpp>
@@ -190,6 +191,28 @@ int main (int argc, char* argv [])
 		GetFilesForSelectedFeaturesQueryString (selectedFeatureIds).c_str (),
 		-1, &selectFilesStatement, nullptr);
 
+	// Find unique directory paths first
+	std::set<std::string> directories;
+
+	while (sqlite3_step (selectFilesStatement) == SQLITE_ROW) {
+		const auto targetPath =
+			installationDirectory / (reinterpret_cast<const char*> (
+				sqlite3_column_text (selectFilesStatement, 0)));
+
+		directories.insert (targetPath.parent_path ().string ());
+	}
+
+	// This is sorted by length, so child paths always come after parent paths
+	for (const auto directory : directories) {
+		if (! boost::filesystem::exists (directory)) {
+			boost::filesystem::create_directory (directory);
+
+			BOOST_LOG_TRIVIAL(debug) << "Creating directory " << directory;
+		}
+	}
+
+	sqlite3_reset (selectFilesStatement);
+
 	while (sqlite3_step (selectFilesStatement) == SQLITE_ROW) {
 		const auto targetPath =
 			installationDirectory / (reinterpret_cast<const char*> (
@@ -204,10 +227,6 @@ int main (int argc, char* argv [])
 			// TODO Validate size
 			::memcpy (hash.hash, sqlite3_column_blob (selectFilesStatement, 1),
 				sizeof (hash.hash));
-
-			if (! boost::filesystem::exists (targetPath.parent_path ())) {
-				boost::filesystem::create_directories (targetPath.parent_path ());
-			}
 
 			BOOST_LOG_TRIVIAL(debug) << "Copying " << (stagingDirectory / ToString (hash)) << " to " << targetPath;
 

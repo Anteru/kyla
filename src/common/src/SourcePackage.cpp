@@ -164,8 +164,6 @@ public:
 			static_assert (sizeof (hash.hash) == sizeof (entry.hash), "Hash size mismatch!");
 			::memcpy (hash.hash, entry.hash, sizeof (entry.hash));
 
-			BOOST_LOG_TRIVIAL(trace) << "Found content object " << ToString (hash);
-
 			if (filter (hash)) {
 				BOOST_LOG_TRIVIAL(debug) << "Decompressing " << ToString (hash);
 				input_.seekg (entry.offset);
