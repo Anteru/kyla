@@ -268,6 +268,12 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 		}
 
 		Hash fileHash;
+
+		if (contentObjectSize == 0) {
+			// Don't create a content object when the file is empty
+			continue;
+		}
+
 		EVP_DigestFinal_ex (fileCtx, fileHash.hash, nullptr);
 
 		BOOST_LOG_TRIVIAL(debug) << sourcePath << " -> " << ToString (fileHash.hash);

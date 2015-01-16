@@ -40,6 +40,8 @@ Hash ComputeHash (const boost::filesystem::path& p, std::vector<char>& buffer);
 template <int size>
 std::string ToString (const std::uint8_t (&hash) [size])
 {
+	// TODO Use a 6bit mapping to 0-9a-zA-Z_- to get more compact hash names
+
 	char result [size*2] = { 0 };
 	char* p = result;
 

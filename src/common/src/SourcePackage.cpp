@@ -4,6 +4,17 @@
 #include <boost/filesystem/fstream.hpp>
 #include <openssl/evp.h>
 
+#include <boost/log/trivial.hpp>
+
+#include <zlib.h>
+
+// For Linux memory mapping
+#include <sys/mman.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 struct SourcePackageWriter::Impl
 {
 public:
@@ -70,10 +81,16 @@ Hash SourcePackageWriter::Finalize()
 	header.indexEntries = static_cast<std::int32_t> (impl_->hashChunkMap.size ());
 	header.indexOffset = sizeof (header);
 
-	output.write (reinterpret_cast<const char*> (&header), sizeof (header));
-
 	// Reserve space for index
-	std::int64_t offset = sizeof (header) + impl_->hashChunkMap.size () * sizeof (PackageIndex);
+	std::int64_t offset = sizeof (header);
+
+	// Count all chunks, as we will create one entry per chunk
+	for (const auto& hashChunks : impl_->hashChunkMap) {
+		header.indexEntries += hashChunks.second.size ();
+		offset += sizeof (PackageIndex) * hashChunks.second.size ();
+	}
+
+	output.write (reinterpret_cast<const char*> (&header), sizeof (header));
 	output.seekp (offset);
 
 	// This is our I/O buffer, we read/write in blocks of this size, and also
@@ -88,6 +105,8 @@ Hash SourcePackageWriter::Finalize()
 			PackageIndex indexEntry;
 			::memcpy (indexEntry.hash, hashChunks.first.hash, sizeof (hashChunks.first.hash));
 			indexEntry.offset = offset;
+
+			BOOST_LOG_TRIVIAL(debug) << "Storing " << ToString (indexEntry.hash);
 
 			offset += BlockCopy (chunk, output, buffer);
 			packageIndex.push_back (indexEntry);
@@ -110,4 +129,105 @@ Hash SourcePackageWriter::Finalize()
 bool SourcePackageWriter::IsOpen () const
 {
 	return ! impl_->filename.empty ();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void ISourcePackageReader::Store (const std::function<bool (const Hash&)>& filter,
+	const boost::filesystem::path& directory)
+{
+	StoreImpl (filter, directory);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+struct FileSourcePackageReader::Impl
+{
+public:
+	Impl (const boost::filesystem::path& packageFilename)
+	: input_ (packageFilename, std::ios::binary)
+	{
+	}
+
+	void Store (const std::function<bool (const Hash &)>& filter,
+		const boost::filesystem::path& directory)
+	{
+		PackageHeader header;
+		input_.read (reinterpret_cast<char*> (&header), sizeof (header));
+		input_.seekg (header.indexOffset);
+
+		std::vector<PackageIndex> index (header.indexEntries);
+		input_.read (reinterpret_cast<char*> (index.data ()),
+			sizeof (PackageIndex) * index.size ());
+
+		std::vector<char> buffer;
+		for (const auto& entry : index) {
+			Hash hash;
+			static_assert (sizeof (hash.hash) == sizeof (entry.hash), "Hash size mismatch!");
+			::memcpy (hash.hash, entry.hash, sizeof (entry.hash));
+
+			BOOST_LOG_TRIVIAL(trace) << "Found content object " << ToString (hash);
+
+			if (filter (hash)) {
+				BOOST_LOG_TRIVIAL(debug) << "Decompressing " << ToString (hash);
+				input_.seekg (entry.offset);
+
+				PackageDataChunk chunkEntry;
+				input_.read (reinterpret_cast<char*> (&chunkEntry),
+					sizeof (chunkEntry));
+
+				if (chunkEntry.compressionMode == CompressionMode_Zip) {
+					if (buffer.size () < chunkEntry.compressedSize) {
+						buffer.resize (chunkEntry.compressedSize);
+					}
+
+					input_.read (buffer.data (), chunkEntry.compressedSize);
+
+					const auto targetPath = directory / ToString (hash);
+
+					// Linux specific
+					auto fd = open (targetPath.c_str (), O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+					struct stat statBuffer;
+					fstat (fd, &statBuffer);
+
+					if (statBuffer.st_size < (chunkEntry.size + chunkEntry.offset)) {
+						ftruncate (fd, chunkEntry.size + chunkEntry.offset);
+					}
+
+					unsigned char* mapping = static_cast<unsigned char*> (mmap (
+						nullptr, chunkEntry.size + chunkEntry.offset,
+						PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0));
+
+					uLongf destinationBufferSize = chunkEntry.size;
+					::uncompress (
+						mapping + chunkEntry.offset,
+						&destinationBufferSize,
+						reinterpret_cast<unsigned char*> (buffer.data ()),
+						static_cast<int> (chunkEntry.compressedSize));
+
+					munmap (mapping, chunkEntry.size + chunkEntry.offset);
+					close (fd);
+				}
+			}
+		}
+	}
+
+private:
+	boost::filesystem::ifstream input_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+FileSourcePackageReader::FileSourcePackageReader (const boost::filesystem::path& filename)
+: impl_ (new Impl (filename))
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+FileSourcePackageReader::~FileSourcePackageReader ()
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void FileSourcePackageReader::StoreImpl (const std::function<bool (const Hash &)>& filter,
+	const boost::filesystem::path& directory)
+{
+	impl_->Store (filter, directory);
 }

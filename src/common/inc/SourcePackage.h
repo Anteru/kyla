@@ -7,6 +7,7 @@
 #include <vector>
 #include <boost/filesystem.hpp>
 #include <memory>
+#include <functional>
 
 struct PackageHeader
 {
@@ -68,26 +69,31 @@ private:
 class ISourcePackageReader
 {
 public:
-    virtual ~ISourcePackageReader () = default;
+	ISourcePackageReader () = default;
+	virtual ~ISourcePackageReader () = default;
     ISourcePackageReader (const ISourcePackageReader&) = delete;
     ISourcePackageReader& operator= (const ISourcePackageReader&) = delete;
 
-    std::vector<Hash>   GetHashes () const;
-    std::vector<unsigned char>  GetEntry (const Hash& hash);
+	void Store (const std::function<bool (const Hash&)>& filter,
+		const boost::filesystem::path& directory);
 
 private:
-    virtual std::vector<Hash> GetHashesImpl () const = 0;
-    virtual std::vector<unsigned char> GetEntryImpl () const = 0;
+	virtual void StoreImpl (const std::function<bool (const Hash&)>& filter,
+		const boost::filesystem::path& directory) = 0;
 };
 
 class FileSourcePackageReader final : public ISourcePackageReader
 {
 public:
-    FileSourcePackageReader (const char* filename);
+	FileSourcePackageReader (const boost::filesystem::path& filename);
+	~FileSourcePackageReader ();
 
 private:
-    std::vector<Hash> GetHashesImpl () const;
-    std::vector<unsigned char> GetEntryImpl () const;
+	void StoreImpl (const std::function<bool (const Hash&)>& filter,
+		const boost::filesystem::path& directory) override;
+
+	struct Impl;
+	std::unique_ptr<Impl> impl_;
 };
 
 #endif

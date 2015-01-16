@@ -29,9 +29,7 @@ FIND_PACKAGE(OpenSSL)
 FIND_PACKAGE(ZLIB)
 INCLUDE_DIRECTORIES()
 
-# Needed for log
-ADD_DEFINITIONS(-DBOOST_LOG_DYN_LINK)
-FIND_PACKAGE(Boost 1.55.0 REQUIRED QUIET COMPONENTS program_options filesystem system log)
+FIND_PACKAGE(Boost 1.55.0 REQUIRED QUIET COMPONENTS program_options filesystem system log thread)
 
 ADD_EXECUTABLE(nim.Generator ${SOURCES} ${HEADERS})
 TARGET_LINK_LIBRARIES(nim.Generator

@@ -4,11 +4,16 @@
 #include <string>
 #include <sstream>
 #include <iostream>
+#include <unordered_map>
 
 #include <boost/log/trivial.hpp>
+#include <boost/filesystem.hpp>
+#include <boost/filesystem/fstream.hpp>
 
 #include "Hash.h"
+#include "SourcePackage.h"
 
+////////////////////////////////////////////////////////////////////////////////
 template <typename T>
 std::string Join (const std::vector<T>& elements, const char* infix = ", ")
 {
@@ -25,6 +30,7 @@ std::string Join (const std::vector<T>& elements, const char* infix = ", ")
 	return result.str ();
 }
 
+////////////////////////////////////////////////////////////////////////////////
 std::string GetSourcePackagesForSelectedFeaturesQueryString (
 	const std::vector<std::int64_t>& featureIds)
 {
@@ -37,6 +43,32 @@ std::string GetSourcePackagesForSelectedFeaturesQueryString (
 	return result.str ();
 }
 
+////////////////////////////////////////////////////////////////////////////////
+std::string GetContentObjectHashesChunkCountForSelectedFeaturesQueryString (
+	const std::vector<std::int64_t>& featureIds)
+{
+	std::stringstream result;
+	result << "SELECT Hash, ChunkCount FROM content_objects WHERE Id IN ("
+		   << "SELECT ContentObjectId FROM files WHERE FeatureId IN ("
+		   << Join (featureIds)
+			  // We have to group by to resolve duplicates
+		   << ") GROUP BY ContentObjectId);";
+	return result.str ();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+std::string GetFilesForSelectedFeaturesQueryString (
+	const std::vector<std::int64_t>& featureIds)
+{
+	std::stringstream result;
+	result << "SELECT Path, Hash FROM files JOIN content_objects "
+		   << "ON files.ContentObjectId = content_objects.Id WHERE FeatureId IN ("
+		   << Join (featureIds)
+		   << ");";
+	return result.str ();
+}
+
+////////////////////////////////////////////////////////////////////////////////
 int main (int argc, char* argv [])
 {
 	namespace po = boost::program_options;
@@ -104,12 +136,88 @@ int main (int argc, char* argv [])
 		GetSourcePackagesForSelectedFeaturesQueryString (selectedFeatureIds).c_str (),
 		-1, &selectRequiredSourcePackagesStatement, nullptr);
 
+	std::vector<std::string> requiredSourcePackageFilenames;
 	while (sqlite3_step (selectRequiredSourcePackagesStatement) == SQLITE_ROW) {
-		BOOST_LOG_TRIVIAL (debug) << "Requesting package " <<
+		const std::string packageFilename =
 			reinterpret_cast<const char*> (sqlite3_column_text (selectRequiredSourcePackagesStatement, 0));
+		BOOST_LOG_TRIVIAL (debug) << "Requesting package " << packageFilename;
+		requiredSourcePackageFilenames.push_back (packageFilename);
 	}
 
 	sqlite3_finalize (selectRequiredSourcePackagesStatement);
+
+	sqlite3_stmt* selectRequiredContentObjectsStatement = nullptr;
+	sqlite3_prepare_v2 (db,
+		GetContentObjectHashesChunkCountForSelectedFeaturesQueryString (selectedFeatureIds).c_str (),
+		-1, &selectRequiredContentObjectsStatement, nullptr);
+
+	std::unordered_map<Hash, int, HashHash, HashEqual> requiredContentObjects;
+	while (sqlite3_step (selectRequiredContentObjectsStatement) == SQLITE_ROW) {
+		Hash hash;
+		::memcpy (hash.hash,
+			sqlite3_column_blob (selectRequiredContentObjectsStatement, 0),
+			sizeof (hash.hash));
+
+		int chunkCount = sqlite3_column_int (selectRequiredContentObjectsStatement, 1);
+		requiredContentObjects [hash] = chunkCount;
+
+		BOOST_LOG_TRIVIAL(trace) << "Content object " << ToString (hash) << " required";
+	}
+
+	BOOST_LOG_TRIVIAL (debug) << "Requested " << requiredContentObjects.size () << " content objects";
+
+	sqlite3_finalize (selectRequiredContentObjectsStatement);
+
+	boost::filesystem::path installationDirectory = "installdir";
+	boost::filesystem::path stagingDirectory = "stage";
+	boost::filesystem::create_directories (installationDirectory);
+	boost::filesystem::create_directories (stagingDirectory);
+
+	// Process all source packages into temporary directory, only extracting
+	// the requested content objects
+	for (const auto& sourcePackageFilename : requiredSourcePackageFilenames) {
+		FileSourcePackageReader reader (sourcePackageFilename);
+
+		reader.Store ([&requiredContentObjects](const Hash& hash) -> bool {
+			return requiredContentObjects.find (hash) != requiredContentObjects.end ();
+		}, stagingDirectory);
+	}
+
+	// Once done, we walk once more over the file list and just copy the
+	// content object to its target location
+	sqlite3_stmt* selectFilesStatement = nullptr;
+	sqlite3_prepare_v2(db,
+		GetFilesForSelectedFeaturesQueryString (selectedFeatureIds).c_str (),
+		-1, &selectFilesStatement, nullptr);
+
+	while (sqlite3_step (selectFilesStatement) == SQLITE_ROW) {
+		const auto targetPath =
+			installationDirectory / (reinterpret_cast<const char*> (
+				sqlite3_column_text (selectFilesStatement, 0)));
+
+		// If null, we need to create an empty file there
+		if (sqlite3_column_type (selectFilesStatement, 1) == SQLITE_NULL) {
+			boost::filesystem::ofstream output (targetPath, std::ios::binary);
+			output.close ();
+		} else {
+			Hash hash;
+			// TODO Validate size
+			::memcpy (hash.hash, sqlite3_column_blob (selectFilesStatement, 1),
+				sizeof (hash.hash));
+
+			if (! boost::filesystem::exists (targetPath.parent_path ())) {
+				boost::filesystem::create_directories (targetPath.parent_path ());
+			}
+
+			BOOST_LOG_TRIVIAL(debug) << "Copying " << (stagingDirectory / ToString (hash)) << " to " << targetPath;
+
+			// Make this smarter, i.e. move first time, and on second time, copy
+			boost::filesystem::copy_file (stagingDirectory / ToString (hash),
+				targetPath);
+		}
+	}
+
+	sqlite3_finalize (selectFilesStatement);
 
 	sqlite3_close (db);
 }
