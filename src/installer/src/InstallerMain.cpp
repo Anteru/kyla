@@ -11,6 +11,12 @@
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
 
+// For Linux memory mapping
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include "Hash.h"
 #include "SourcePackage.h"
 
@@ -49,7 +55,7 @@ std::string GetContentObjectHashesChunkCountForSelectedFeaturesQueryString (
 	const std::vector<std::int64_t>& featureIds)
 {
 	std::stringstream result;
-	result << "SELECT Hash, ChunkCount FROM content_objects WHERE Id IN ("
+	result << "SELECT Hash, ChunkCount, Size FROM content_objects WHERE Id IN ("
 		   << "SELECT ContentObjectId FROM files WHERE FeatureId IN ("
 		   << Join (featureIds)
 			  // We have to group by to resolve duplicates
@@ -109,6 +115,11 @@ int main (int argc, char* argv [])
 	const auto packageDirectory = absolute (boost::filesystem::path (
 		vm ["package-directory"].as<std::string> ()));
 
+	boost::filesystem::path installationDirectory = "install";
+	boost::filesystem::path stagingDirectory = "stage";
+	boost::filesystem::create_directories (installationDirectory);
+	boost::filesystem::create_directories (stagingDirectory);
+
 	sqlite3* db;
 	sqlite3_open_v2 (inputFilePath.c_str (), &db,
 		SQLITE_OPEN_READONLY, nullptr);
@@ -160,22 +171,29 @@ int main (int argc, char* argv [])
 			sizeof (hash.hash));
 
 		int chunkCount = sqlite3_column_int (selectRequiredContentObjectsStatement, 1);
+		const auto size = sqlite3_column_int64 (selectRequiredContentObjectsStatement, 2);
 		requiredContentObjects [hash] = chunkCount;
 
-		BOOST_LOG_TRIVIAL(trace) << "Content object " << ToString (hash) << " required";
+		// Linux-specific
+		auto fd = open ((stagingDirectory / ToString (hash)).c_str (),
+			 O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+
+		if (ftruncate(fd, size) == 0) {
+			BOOST_LOG_TRIVIAL(trace) << "Content object " << ToString (hash) << " allocated";
+		} else {
+			BOOST_LOG_TRIVIAL(error) << "Could not allocate content object " << ToString (hash);
+		}
+
+		close (fd);
 	}
 
 	BOOST_LOG_TRIVIAL (debug) << "Requested " << requiredContentObjects.size () << " content objects";
 
 	sqlite3_finalize (selectRequiredContentObjectsStatement);
 
-	boost::filesystem::path installationDirectory = "installdir";
-	boost::filesystem::path stagingDirectory = "stage";
-	boost::filesystem::create_directories (installationDirectory);
-	boost::filesystem::create_directories (stagingDirectory);
-
 	// Process all source packages into temporary directory, only extracting
 	// the requested content objects
+	// As we have pre-allocated everything, this can run in parallel
 	for (const auto& sourcePackageFilename : requiredSourcePackageFilenames) {
 		FileSourcePackageReader reader (sourcePackageFilename);
 

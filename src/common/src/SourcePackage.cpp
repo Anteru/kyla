@@ -182,26 +182,22 @@ public:
 					const auto targetPath = directory / ToString (hash);
 
 					// Linux specific
-					auto fd = open (targetPath.c_str (), O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
-					struct stat statBuffer;
-					fstat (fd, &statBuffer);
-
-					if (statBuffer.st_size < (chunkEntry.size + chunkEntry.offset)) {
-						ftruncate (fd, chunkEntry.size + chunkEntry.offset);
-					}
+					auto fd = open (targetPath.c_str (), O_RDWR, S_IRUSR | S_IWUSR);
+					// we expect that the target is already pre-allocated at
+					// the right size, otherwise, the mmap below will fail
 
 					unsigned char* mapping = static_cast<unsigned char*> (mmap (
-						nullptr, chunkEntry.size + chunkEntry.offset,
-						PROT_WRITE | PROT_READ, MAP_SHARED, fd, 0));
+						nullptr, chunkEntry.size,
+						PROT_WRITE | PROT_READ, MAP_SHARED, fd, chunkEntry.offset));
 
 					uLongf destinationBufferSize = chunkEntry.size;
 					::uncompress (
-						mapping + chunkEntry.offset,
+						mapping,
 						&destinationBufferSize,
 						reinterpret_cast<unsigned char*> (buffer.data ()),
 						static_cast<int> (chunkEntry.compressedSize));
 
-					munmap (mapping, chunkEntry.size + chunkEntry.offset);
+					munmap (mapping, chunkEntry.size);
 					close (fd);
 				}
 			}
