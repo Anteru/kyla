@@ -1,0 +1,6 @@
+CREATE TABLE files (
+    Path VARCHAR PRIMARY KEY NOT NULL,
+    Hash BLOB NOT NULL,
+    SourcePackage VARCHAR NOT NULL,
+    InstallerId VARCHAR NOT NULL
+);

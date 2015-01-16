@@ -15,9 +15,6 @@ CREATE TABLE files (Path TEXT PRIMARY KEY NOT NULL,
     FeatureId INTEGER NOT NULL,
     FOREIGN KEY(ContentObjectId) REFERENCES content_objects(Id),
     FOREIGN KEY(FeatureId) REFERENCES features(Id));
-CREATE TABLE directories (Path TEXT PRIMARY KEY NOT NULL,
-    FeatureId INTEGER NOT NULL,
-    FOREIGN KEY(FeatureId) REFERENCES features(Id));
 CREATE TABLE source_packages (Id INTEGER PRIMARY KEY NOT NULL,
     Name VARCHAR NOT NULL UNIQUE,
     Filename VARCHAR NOT NULL UNIQUE,
