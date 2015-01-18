@@ -1,5 +1,7 @@
 #!/bin/bash
 
+mkdir data
+
 wget https://www.kernel.org/pub/linux/kernel/v3.x/linux-3.18.tar.xz
 dtrx linux-3.18.tar.xz
 mv linux-3.18  data
