@@ -40,7 +40,7 @@ std::unordered_set<std::string> GetUniqueSourcePaths (const pugi::xml_node& prod
 	std::unordered_set<std::string> result;
 
 	int inputFileCount = 0;
-	for (auto files : product.children ("Files")) {
+	for (auto files : product.children ("FileGroup")) {
 		for (auto file : files.children ("File")) {
 			// TODO Also validate that these are actually file paths
 			// TODO Validate that a source path is not empty
@@ -73,37 +73,20 @@ void AssignFilesToFeaturesPackages (const pugi::xml_node& product,
 		-1, &insertFilesStatement, nullptr));
 
 	int inputFileCount = 0;
-	for (auto files : product.children ("Files")) {
-		std::int64_t featureId = -1;
-		std::int64_t sourcePackageId = -1;
 
-		if (files.attribute ("SourcePackage")) {
-			// TODO Validate it's present
-			sourcePackageId = sourcePackageIds.find (
-				files.attribute ("SourcePackage").value ())->second;
-		}
+	for (const auto& feature : product.child ("Features").children ("Feature")) {
+		std::int64_t fileFeatureId = -1;
+		std::int64_t fileSourcePackageId = -1;
 
-		if (files.attribute ("Feature")) {
-			featureId = featureIds.find (
-				files.attribute ("Feature").value ())->second;
-		}
+		fileFeatureId = featureIds.find (
+				feature.attribute ("Id").value ())->second;
 
-		for (auto file : files.children ("File")) {
-			// TODO Validate Source= is present
+		SAFE_SQLITE (sqlite3_bind_int64 (insertFilesStatement, 3, fileFeatureId));
 
-			std::int64_t fileFeatureId = featureId;
-			std::int64_t fileSourcePackageId = sourcePackageId;
+		for (const auto& file : feature.children ("File")) {
+			// Embed directly
 
-			if (file.attribute ("SourcePackage")) {
-				// TODO Validate it's present
-				fileSourcePackageId = sourcePackageIds.find (
-					file.attribute ("SourcePackage").value ())->second;
-			}
-
-			if (file.attribute ("Feature")) {
-				fileFeatureId = featureIds.find (
-					file.attribute ("Feature").value ())->second;
-			}
+			fileSourcePackageId = sourcePackageIds.find (file.attribute ("SourcePackage").value ())->second;
 
 			SAFE_SQLITE (sqlite3_bind_text (insertFilesStatement, 1,
 				file.attribute ("Source").value (), -1, SQLITE_TRANSIENT));
@@ -116,18 +99,64 @@ void AssignFilesToFeaturesPackages (const pugi::xml_node& product,
 					file.attribute ("Source").value (), -1, SQLITE_TRANSIENT));
 			}
 
-			SAFE_SQLITE (sqlite3_bind_int64 (insertFilesStatement, 3, fileFeatureId));
-
-			if (fileSourcePackageId != -1) {
-				SAFE_SQLITE (sqlite3_bind_int64 (insertFilesStatement, 4, fileSourcePackageId));
-			} else {
+			if (fileSourcePackageId == -1) {
 				SAFE_SQLITE (sqlite3_bind_null (insertFilesStatement, 4));
+			} else {
+				SAFE_SQLITE (sqlite3_bind_int64 (insertFilesStatement, 4,
+					fileSourcePackageId));
 			}
 
-			SAFE_SQLITE_INSERT (sqlite3_step (insertFilesStatement));
-			SAFE_SQLITE (sqlite3_reset (insertFilesStatement));
+			sqlite3_step (insertFilesStatement);
+			sqlite3_reset (insertFilesStatement);
 
 			++inputFileCount;
+		}
+
+		for (const auto& fileGroupRef : feature.children ("FileGroupReference")) {
+			const auto fileGroup = product.select_single_node (
+						(std::string ("FileGroup[@Id='")
+					  + std::string (fileGroupRef.attribute ("Id").value ())
+					  + std::string ("']")).c_str ());
+
+			if (!fileGroup) {
+				spdlog::get ("log")->error () << "Could not find file group "
+				  << fileGroupRef.attribute ("Id").value ()
+				  << " referenced from feature "
+				  << feature.attribute ("Id").value ();
+			}
+
+			if (fileGroup.node ().attribute ("SourcePackage")) {
+				fileSourcePackageId = sourcePackageIds.find (
+					fileGroup.node ().attribute ("SourcePackage").value ())->second;
+			} else {
+				fileSourcePackageId = -1;
+			}
+
+			for (const auto& file : fileGroup.node().children ("File")) {
+				SAFE_SQLITE (sqlite3_bind_text (insertFilesStatement, 1,
+					file.attribute ("Source").value (), -1, SQLITE_TRANSIENT));
+				SAFE_SQLITE (sqlite3_bind_int64 (insertFilesStatement, 4, fileSourcePackageId));
+
+				if (file.attribute ("Target")) {
+					SAFE_SQLITE (sqlite3_bind_text (insertFilesStatement, 2,
+						file.attribute ("Target").value (), -1, SQLITE_TRANSIENT));
+				} else {
+					SAFE_SQLITE (sqlite3_bind_text (insertFilesStatement, 2,
+						file.attribute ("Source").value (), -1, SQLITE_TRANSIENT));
+				}
+
+				if (fileSourcePackageId == -1) {
+					SAFE_SQLITE (sqlite3_bind_null (insertFilesStatement, 4));
+				} else {
+					SAFE_SQLITE (sqlite3_bind_int64 (insertFilesStatement, 4,
+						fileSourcePackageId));
+				}
+
+				sqlite3_step (insertFilesStatement);
+				sqlite3_reset (insertFilesStatement);
+
+				++inputFileCount;
+			}
 		}
 	}
 
@@ -994,8 +1023,6 @@ int main (int argc, char* argv[])
         return 0;
     }
 
-	size_t q_size = 1048576; //queue size must be power of 2
-	spdlog::set_async_mode(q_size);
 	auto log = spdlog::stdout_logger_mt ("log");
 
 	const auto inputFile = vm ["input-file"].as<std::string> ();

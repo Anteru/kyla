@@ -9,8 +9,12 @@
                 - Description: An optional description
                 - Id: The feature id
             -->
-            <Feature Name="Source code" Id="Feature_SC" />
-            <Feature Name="Headers" Id="Feature_H" />
+            <Feature Name="Source code" Id="Feature_SC">
+				<FileGroupReference Id="Files_SC"/>
+			</Feature>
+            <Feature Name="Headers" Id="Feature_H">
+				<FileGroupReference Id="Files_H"/>
+			</Feature>
         </Features>
 
         <!-- Files is a list of files associated with a feature
@@ -21,7 +25,7 @@
                 generated, otherwise, this file will be put into the specified
                 package.
         -->
-        <Files Feature="Feature_SC" SourcePackage="SourcePackage_M">
+        <FileGroup Id="Files_SC" SourcePackage="SourcePackage_M">
             <!-- A single file.
             Attributes:
                 - Source: Must be present, relative to $SRC_DIR
@@ -29,11 +33,11 @@
                           if not set, will be same as source.
             -->
             <File Source="src/CMakeLists.txt" Target="src/CMakeLists.txt"/>
-        </Files>
+        </FileGroup>
 
-        <Files Feature="Feature_H" SourcePackage="SourcePackage_H">
+        <FileGroup Id="Files_H" SourcePackage="SourcePackage_H">
             <File Source="src/common/inc/SourcePackage.h" Target="include/SourcePackage.h"/>
-        </Files>
+        </FileGroup>
 
         <!-- Source packages may be present to enforce bundling
             Attributes:
