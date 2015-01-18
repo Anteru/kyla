@@ -11,6 +11,8 @@
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
 
+#include <spdlog.h>
+
 // For Linux memory mapping
 #include <unistd.h>
 #include <sys/types.h>
@@ -110,6 +112,8 @@ int main (int argc, char* argv [])
 		return 0;
 	}
 
+	auto log = spdlog::stdout_logger_mt ("install");
+
 	const auto inputFilePath =
 		absolute (boost::filesystem::path (vm ["input-file"].as<std::string> ()));
 	const auto packageDirectory = absolute (boost::filesystem::path (
@@ -152,7 +156,7 @@ int main (int argc, char* argv [])
 	while (sqlite3_step (selectRequiredSourcePackagesStatement) == SQLITE_ROW) {
 		const std::string packageFilename =
 			reinterpret_cast<const char*> (sqlite3_column_text (selectRequiredSourcePackagesStatement, 0));
-		BOOST_LOG_TRIVIAL (debug) << "Requesting package " << packageFilename;
+		log->debug () << "Requesting package " << packageFilename;
 		requiredSourcePackageFilenames.push_back (packageFilename);
 	}
 
@@ -179,15 +183,15 @@ int main (int argc, char* argv [])
 			 O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
 
 		if (ftruncate(fd, size) == 0) {
-			BOOST_LOG_TRIVIAL(trace) << "Content object " << ToString (hash) << " allocated";
+			log->trace () << "Content object " << ToString (hash) << " allocated";
 		} else {
-			BOOST_LOG_TRIVIAL(error) << "Could not allocate content object " << ToString (hash);
+			log->error () << "Could not allocate content object " << ToString (hash);
 		}
 
 		close (fd);
 	}
 
-	BOOST_LOG_TRIVIAL (debug) << "Requested " << requiredContentObjects.size () << " content objects";
+	log->info () << "Requested " << requiredContentObjects.size () << " content objects";
 
 	sqlite3_finalize (selectRequiredContentObjectsStatement);
 
@@ -200,6 +204,8 @@ int main (int argc, char* argv [])
 		reader.Store ([&requiredContentObjects](const Hash& hash) -> bool {
 			return requiredContentObjects.find (hash) != requiredContentObjects.end ();
 		}, stagingDirectory);
+
+		log->info () << "Processed source package " << sourcePackageFilename;
 	}
 
 	// Once done, we walk once more over the file list and just copy the
@@ -223,13 +229,16 @@ int main (int argc, char* argv [])
 	// This is sorted by length, so child paths always come after parent paths
 	for (const auto directory : directories) {
 		if (! boost::filesystem::exists (directory)) {
-			boost::filesystem::create_directory (directory);
+			boost::filesystem::create_directories (directory);
 
-			BOOST_LOG_TRIVIAL(debug) << "Creating directory " << directory;
+			log->debug () << "Creating directory " << directory;
 		}
 	}
 
 	sqlite3_reset (selectFilesStatement);
+
+	log->info () << "Created directories";
+	log->info () << "Deploying files";
 
 	while (sqlite3_step (selectFilesStatement) == SQLITE_ROW) {
 		const auto targetPath =
@@ -246,7 +255,7 @@ int main (int argc, char* argv [])
 			::memcpy (hash.hash, sqlite3_column_blob (selectFilesStatement, 1),
 				sizeof (hash.hash));
 
-			BOOST_LOG_TRIVIAL(debug) << "Copying " << (stagingDirectory / ToString (hash)) << " to " << targetPath;
+			log->debug () << "Copying " << (stagingDirectory / ToString (hash)).string () << " to " << targetPath.string ();
 
 			// Make this smarter, i.e. move first time, and on second time, copy
 			boost::filesystem::copy_file (stagingDirectory / ToString (hash),
@@ -254,6 +263,7 @@ int main (int argc, char* argv [])
 		}
 	}
 
+	log->info () << "Done";
 	sqlite3_finalize (selectFilesStatement);
 
 	sqlite3_close (db);

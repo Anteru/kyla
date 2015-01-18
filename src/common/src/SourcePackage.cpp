@@ -4,8 +4,6 @@
 #include <boost/filesystem/fstream.hpp>
 #include <openssl/evp.h>
 
-#include <boost/log/trivial.hpp>
-
 #include <zlib.h>
 
 // For Linux memory mapping
@@ -106,8 +104,6 @@ Hash SourcePackageWriter::Finalize()
 			::memcpy (indexEntry.hash, hashChunks.first.hash, sizeof (hashChunks.first.hash));
 			indexEntry.offset = offset;
 
-			BOOST_LOG_TRIVIAL(debug) << "Storing " << ToString (indexEntry.hash);
-
 			offset += BlockCopy (chunk, output, buffer);
 			packageIndex.push_back (indexEntry);
 		}
@@ -165,7 +161,6 @@ public:
 			::memcpy (hash.hash, entry.hash, sizeof (entry.hash));
 
 			if (filter (hash)) {
-				BOOST_LOG_TRIVIAL(debug) << "Decompressing " << ToString (hash);
 				input_.seekg (entry.offset);
 
 				PackageDataChunk chunkEntry;

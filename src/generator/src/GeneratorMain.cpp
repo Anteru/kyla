@@ -662,7 +662,7 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 
 			if (contentObjectsInCurrentPackage.find (contentObjectId) == contentObjectsInCurrentPackage.end ()) {
 				// We have found a new content object
-				spdlog::get ("log")->info () << "'" << sourcePath << "' references " << contentObjectId;
+				spdlog::get ("log")->trace () << "'" << sourcePath << "' references " << contentObjectId;
 
 				// Write the chunks into this package
 				sqlite3_stmt* selectChunksForContentObject = nullptr;
@@ -711,7 +711,7 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 				sqlite3_reset (selectChunksForContentObject);
 				sqlite3_finalize (selectChunksForContentObject);
 			} else {
-				spdlog::get ("log")->info () << "'" << sourcePath
+				spdlog::get ("log")->trace () << "'" << sourcePath
 					<< "' references " << contentObjectId
 					<< " (already in package)";
 			}
