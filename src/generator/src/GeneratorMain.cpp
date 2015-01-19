@@ -252,6 +252,7 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 		EVP_DigestInit_ex (fileCtx, EVP_sha512 (), nullptr);
 		int chunkNumber = 0;
 		std::int64_t contentObjectSize = 0;
+		std::int64_t contentObjectCompressedSize = 0;
 
 		for (;;) {
 			input.read (reinterpret_cast<char*> (buffer.data ()), fileChunkSize);
@@ -280,7 +281,7 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 			pdc.offset = fileChunkSize * chunkNumber;
 			pdc.compressionMode = CompressionMode_Zip;
 
-			totalCompressedSize += compressedSize;
+			contentObjectCompressedSize += compressedSize;
 
 			EVP_DigestInit_ex (chunkCtx, EVP_sha512 (), nullptr);
 			EVP_DigestUpdate(chunkCtx, compressed.data (), compressedSize);
@@ -340,6 +341,8 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 				SAFE_SQLITE_INSERT (sqlite3_step (insertChunkStatement));
 				SAFE_SQLITE (sqlite3_reset (insertChunkStatement));
 			}
+
+			totalCompressedSize += contentObjectCompressedSize;
 		} else {
 			// We have two files with the same hash
 			pathToContentObject [sourcePath] = {
