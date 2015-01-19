@@ -2,7 +2,8 @@ PROJECT(kyla_generator)
 
 SET(HEADERS
 	${CMAKE_CURRENT_BINARY_DIR}/build-db-structure.h
-	${CMAKE_CURRENT_BINARY_DIR}/install-db-structure.h)
+	${CMAKE_CURRENT_BINARY_DIR}/install-db-structure.h
+	${CMAKE_CURRENT_BINARY_DIR}/install-db-indices.h)
 
 ADD_CUSTOM_COMMAND(
 	OUTPUT
@@ -20,6 +21,15 @@ ADD_CUSTOM_COMMAND(
 		txttoheader install_db_structure ${niven_installation_manager_SOURCE_DIR}/sql/install-db-structure.sql > ${CMAKE_CURRENT_BINARY_DIR}/install-db-structure.h
 	DEPENDS
 		${niven_installation_manager_SOURCE_DIR}/sql/install-db-structure.sql
+	)
+
+ADD_CUSTOM_COMMAND(
+	OUTPUT
+		${CMAKE_CURRENT_BINARY_DIR}/install-db-indices.h
+	COMMAND
+		txttoheader install_db_indices ${niven_installation_manager_SOURCE_DIR}/sql/install-db-indices.sql > ${CMAKE_CURRENT_BINARY_DIR}/install-db-indices.h
+	DEPENDS
+		${niven_installation_manager_SOURCE_DIR}/sql/install-db-indices.sql
 	)
 
 SET(SOURCES

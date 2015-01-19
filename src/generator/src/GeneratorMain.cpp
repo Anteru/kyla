@@ -28,6 +28,7 @@
 
 #include "build-db-structure.h"
 #include "install-db-structure.h"
+#include "install-db-indices.h"
 
 #define SAFE_SQLITE_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_OK) { spdlog::get ("log")->error () << file << ":" << line << " " << sqlite3_errstr(r_); exit (1); } } while (0)
 #define SAFE_SQLITE_INSERT_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_DONE) { spdlog::get ("log")->error () << file << ":" << line << " " << sqlite3_errstr(r_); exit (1); } } while (0)
@@ -54,7 +55,7 @@ std::unordered_set<std::string> GetUniqueSourcePaths (const pugi::xml_node& prod
 	}
 
 	spdlog::get ("log")->info () << "Processed " << inputFileCount
-		<< " source paths, " << result.size () << " unique paths found.";
+		<< " file entries, " << result.size () << " unique source paths found.";
 
 	return result;
 }
@@ -228,7 +229,7 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 		"SELECT Id FROM content_objects WHERE Hash=?", -1,
 		&selectContentObjectIdStatement, nullptr));
 
-	spdlog::get ("log")->info () << "Compressing " << sourcePaths.size () << " files";
+	spdlog::get ("log")->info () << "Processing " << sourcePaths.size () << " files";
 
 	std::int64_t totalSize = 0, totalCompressedSize = 0;
 
@@ -361,7 +362,18 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 	SAFE_SQLITE (sqlite3_exec (installationDatabase, "COMMIT TRANSACTION;",
 		nullptr, nullptr, nullptr));
 
-	spdlog::get ("log")->info () << "Created " << pathToContentObject.size ()
+	sqlite3_stmt* selectContentObjectCountStatement = nullptr;
+	sqlite3_prepare_v2 (installationDatabase,
+		"SELECT COUNT() FROM content_objects;", -1,
+		&selectContentObjectCountStatement, nullptr);
+	sqlite3_step (selectContentObjectCountStatement);
+
+	const auto contentObjectCount = sqlite3_column_int64 (
+		selectContentObjectCountStatement, 0);
+
+	sqlite3_finalize (selectContentObjectCountStatement);
+
+	spdlog::get ("log")->info () << "Created " << contentObjectCount
 								 << " content objects";
 	spdlog::get ("log")->info () << "Compressed from " << totalSize
 		<< " bytes to " << totalCompressedSize << " bytes ("
@@ -641,6 +653,14 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 		"SELECT SourcePath, TargetPath, FeatureId FROM files WHERE SourcePackageId IS NULL;",
 		-1, &selectFilesForDefaultPackageStatement, nullptr);
 
+	sqlite3_stmt* selectChunksForContentObject = nullptr;
+	// Order by rowid, so we get a sequential write into the output
+	// file
+	sqlite3_prepare_v2 (buildDatabase,
+		"SELECT Path, Size FROM chunks WHERE ContentObjectId=? ORDER BY rowid ASC",
+		-1, &selectChunksForContentObject, nullptr);
+	assert (selectChunksForContentObject);
+
 	boost::uuids::random_generator uuidGen;
 
 	SourcePackageWriter spw;
@@ -664,14 +684,6 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 				// We have found a new content object
 				spdlog::get ("log")->trace () << "'" << sourcePath << "' references " << contentObjectId;
 
-				// Write the chunks into this package
-				sqlite3_stmt* selectChunksForContentObject = nullptr;
-				// Order by rowid, so we get a sequential write into the output
-				// file
-				sqlite3_prepare_v2 (buildDatabase,
-					"SELECT Path, Size FROM chunks WHERE ContentObjectId=? ORDER BY rowid ASC",
-					-1, &selectChunksForContentObject, nullptr);
-				assert (selectChunksForContentObject);
 				sqlite3_bind_int64 (selectChunksForContentObject, 1, contentObjectId);
 
 				while (sqlite3_step (selectChunksForContentObject) == SQLITE_ROW) {
@@ -709,7 +721,6 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 				}
 
 				sqlite3_reset (selectChunksForContentObject);
-				sqlite3_finalize (selectChunksForContentObject);
 			} else {
 				spdlog::get ("log")->trace () << "'" << sourcePath
 					<< "' references " << contentObjectId
@@ -749,6 +760,7 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 
 	sqlite3_finalize (selectFilesForDefaultPackageStatement);
 	sqlite3_finalize (insertIntoFilesStatement);
+	sqlite3_finalize (selectChunksForContentObject);
 
 	return result;
 }
@@ -825,6 +837,9 @@ public:
 			installationDatabase, "main");
 		sqlite3_backup_step (backup, -1);
 		sqlite3_backup_finish (backup);
+
+		spdlog::get ("log")->info () << "Wrote installation database "
+			<< outputFile.string ();
 	}
 
 	pugi::xml_node	productNode;
@@ -1067,6 +1082,10 @@ int main (int argc, char* argv[])
 		GetSourcePackageNameTemplate (gc.productNode),
 		packageInfos,
 		gc.installationDatabase);
+
+	// Create indices
+	sqlite3_exec (gc.installationDatabase,
+		install_db_indices, nullptr, nullptr, nullptr);
 
 	gc.WriteInstallationDatabase (gc.targetDirectory / (outputFile.string () + ".kydb"));
 
