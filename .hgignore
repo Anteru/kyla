@@ -4,3 +4,4 @@ build/**
 *.user
 nimtmp-*
 samples/linux-3.18/data/**
+samples/glfw/data/**
