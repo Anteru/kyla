@@ -1128,6 +1128,10 @@ int main (int argc, char* argv[])
 	sqlite3_exec (gc.installationDatabase,
 		install_db_indices, nullptr, nullptr, nullptr);
 
+	// Help the query optimizer
+	sqlite3_exec (gc.installationDatabase,
+		"ANALYZE;", nullptr, nullptr, nullptr);
+
 	gc.WriteInstallationDatabase (gc.targetDirectory / (outputFile.string () + ".kydb"));
 
 	boost::filesystem::remove_all (gc.temporaryDirectory);
