@@ -9,8 +9,8 @@ CREATE TABLE features (Id INTEGER PRIMARY KEY NOT NULL,
     UIDescription TEXT,
     FOREIGN KEY(ParentId) REFERENCES features(Id));
 
--- If a file has no ContentObjectId, it's an empty file
 CREATE TABLE files (Path TEXT PRIMARY KEY NOT NULL,
+    -- If a file has no ContentObjectId, it's an empty file
     ContentObjectId INTEGER,
     FeatureId INTEGER NOT NULL,
     FOREIGN KEY(ContentObjectId) REFERENCES content_objects(Id),
@@ -26,3 +26,10 @@ CREATE TABLE storage_mapping (
     SourcePackageId INTEGER NOT NULL,
     FOREIGN KEY(ContentObjectId) REFERENCES content_objects(Id),
 	FOREIGN KEY(SourcePackageId) REFERENCES source_packages(Id));
+
+-- Take advantage of SQLite's dynamic types here so we don't have to store
+-- whether it is an int, a blob or a string
+CREATE TABLE properties (
+    Name VARCHAR PRIMARY KEY,
+    Value NOT NULL
+)

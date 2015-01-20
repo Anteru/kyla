@@ -967,6 +967,42 @@ std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorCon
 	return result;
 }
 
+/*
+Write global properties
+*/
+void WriteProperties (sqlite3* installationDatabase,
+	const pugi::xml_node& productNode)
+{
+	sqlite3_exec (installationDatabase, "BEGIN TRANSACTION;",
+		nullptr, nullptr, nullptr);
+
+	spdlog::get ("log")->trace () << "Populating properties table";
+
+	sqlite3_stmt* insertPropertiesStatement = nullptr;
+	sqlite3_prepare_v2 (installationDatabase,
+		"INSERT INTO properties (Name, Value) VALUES (?, ?)", -1, &insertPropertiesStatement,
+		nullptr);
+
+	sqlite3_bind_text (insertPropertiesStatement, 1,
+		"ProductName", -1, nullptr);
+	sqlite3_bind_text (insertPropertiesStatement, 2,
+		productNode.attribute ("Name").value (), -1, SQLITE_TRANSIENT);
+	sqlite3_step (insertPropertiesStatement);
+	sqlite3_reset (insertPropertiesStatement);
+
+	sqlite3_bind_text (insertPropertiesStatement, 1,
+		"ProductVersion", -1, nullptr);
+	sqlite3_bind_text (insertPropertiesStatement, 2,
+		productNode.attribute ("Version").value (), -1, SQLITE_TRANSIENT);
+	sqlite3_step (insertPropertiesStatement);
+	sqlite3_reset (insertPropertiesStatement);
+
+	sqlite3_finalize (insertPropertiesStatement);
+
+	sqlite3_exec (installationDatabase, "COMMIT TRANSACTION;",
+		nullptr, nullptr, nullptr);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 void FinalizeSourcePackageNames (const SourcePackageNameTemplate& nameTemplate,
 	const std::vector<SourcePackageInfo>& infos,
@@ -1085,6 +1121,8 @@ int main (int argc, char* argv[])
 		GetSourcePackageNameTemplate (gc.productNode),
 		packageInfos,
 		gc.installationDatabase);
+
+	WriteProperties (gc.installationDatabase, gc.productNode);
 
 	// Create indices
 	sqlite3_exec (gc.installationDatabase,
