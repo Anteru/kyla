@@ -70,7 +70,7 @@ std::string GetFilesForSelectedFeaturesQueryString (
 	const std::vector<std::int64_t>& featureIds)
 {
 	std::stringstream result;
-	result << "SELECT Path, Hash FROM files JOIN content_objects "
+	result << "SELECT Path, Hash, LENGTH(Hash) FROM files JOIN content_objects "
 		   << "ON files.ContentObjectId = content_objects.Id WHERE FeatureId IN ("
 		   << Join (featureIds)
 		   << ");";
@@ -251,7 +251,14 @@ int main (int argc, char* argv [])
 			output.close ();
 		} else {
 			Hash hash;
-			// TODO Validate size
+
+			const auto hashSize = sqlite3_column_int64 (selectFilesStatement, 2);
+
+			if (hashSize != sizeof (hash.hash)) {
+				log->error () << "Hash size mismatch, skipping file";
+				continue;
+			}
+
 			::memcpy (hash.hash, sqlite3_column_blob (selectFilesStatement, 1),
 				sizeof (hash.hash));
 
