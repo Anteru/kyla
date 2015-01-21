@@ -1129,6 +1129,11 @@ int main (int argc, char* argv[])
 	sqlite3_exec (gc.installationDatabase,
 		install_db_indices, nullptr, nullptr, nullptr);
 
+	// Set the reference counts
+	sqlite3_exec (gc.installationDatabase,
+		"UPDATE content_objects SET ReferenceCount = (SELECT COUNT() FROM files WHERE files.ContentObjectId=content_objects.Id);",
+		nullptr, nullptr, nullptr);
+
 	// Help the query optimizer
 	sqlite3_exec (gc.installationDatabase,
 		"ANALYZE;", nullptr, nullptr, nullptr);

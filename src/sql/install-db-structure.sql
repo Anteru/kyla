@@ -1,7 +1,8 @@
 CREATE TABLE content_objects (Id INTEGER PRIMARY KEY NOT NULL,
     Hash BLOB NOT NULL UNIQUE,
     Size INTEGER NOT NULL,
-    ChunkCount INTEGER NOT NULL);
+    ChunkCount INTEGER NOT NULL,
+    ReferenceCount INTEGER NOT NULL DEFAULT 1);
 CREATE TABLE features (Id INTEGER PRIMARY KEY NOT NULL,
     Name VARCHAR NOT NULL UNIQUE,
     ParentId INTEGER,
@@ -32,4 +33,4 @@ CREATE TABLE storage_mapping (
 CREATE TABLE properties (
     Name VARCHAR PRIMARY KEY,
     Value NOT NULL
-)
+);
