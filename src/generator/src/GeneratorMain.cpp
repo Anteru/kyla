@@ -41,17 +41,15 @@ std::unordered_set<std::string> GetUniqueSourcePaths (const pugi::xml_node& prod
 	std::unordered_set<std::string> result;
 
 	int inputFileCount = 0;
-	for (auto files : product.children ("FileGroup")) {
-		for (auto file : files.children ("File")) {
-			// TODO Also validate that these are actually file paths
-			// TODO Validate that a source path is not empty
-			// TODO Validate that the target path is not empty if present
-			// TODO Validate that target paths don't collide
+	for (const auto file : product.select_nodes ("//File")) {
+		// TODO Also validate that these are actually file paths
+		// TODO Validate that a source path is not empty
+		// TODO Validate that the target path is not empty if present
+		// TODO Validate that target paths don't collide
 
-			result.insert (file.attribute ("Source").value ());
+		result.insert (file.node ().attribute ("Source").value ());
 
-			++inputFileCount;
-		}
+		++inputFileCount;
 	}
 
 	spdlog::get ("log")->info () << "Processed " << inputFileCount
@@ -87,7 +85,10 @@ void AssignFilesToFeaturesPackages (const pugi::xml_node& product,
 		for (const auto& file : feature.children ("File")) {
 			// Embed directly
 
-			fileSourcePackageId = sourcePackageIds.find (file.attribute ("SourcePackage").value ())->second;
+			if (file.attribute ("SourcePackage")) {
+				fileSourcePackageId = sourcePackageIds.find (
+					file.attribute ("SourcePackage").value ())->second;
+			}
 
 			SAFE_SQLITE (sqlite3_bind_text (insertFilesStatement, 1,
 				file.attribute ("Source").value (), -1, SQLITE_TRANSIENT));
