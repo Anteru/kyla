@@ -67,7 +67,14 @@ private:
 	virtual void CloseImpl () = 0;
 };
 
-std::unique_ptr<File> OpenFile (const char* path);
+enum class FileOpenMode
+{
+	Read,
+	Write,
+	ReadWrite
+};
+
+std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode);
 std::unique_ptr<File> CreateFile (const char* path);
 }
 

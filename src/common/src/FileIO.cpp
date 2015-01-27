@@ -94,9 +94,24 @@ std::unique_ptr<File> CreateFile (const char* path)
 	return std::unique_ptr<File> (new LinuxFile (fd));
 }
 
-std::unique_ptr<File> OpenFile (const char* path)
+std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode)
 {
-	auto fd = open (path, O_RDWR, S_IRUSR | S_IWUSR);
+	int mode;
+	switch (openMode) {
+	case FileOpenMode::Read:
+		mode = O_RDONLY;
+		break;
+
+	case FileOpenMode::Write:
+		mode = O_WRONLY;
+		break;
+
+	case FileOpenMode::ReadWrite:
+		mode = O_RDWR;
+		break;
+	}
+
+	auto fd = open (path, mode, S_IRUSR | S_IWUSR);
 	return std::unique_ptr<File> (new LinuxFile (fd));
 }
 }

@@ -27,7 +27,7 @@ Hash ComputeHash (const boost::filesystem::path& p)
 ////////////////////////////////////////////////////////////////////////////////
 Hash ComputeHash (const boost::filesystem::path& p, std::vector<char>& buffer)
 {
-	auto input = kyla::OpenFile (p.c_str ());
+	auto input = kyla::OpenFile (p.c_str (), kyla::FileOpenMode::Read);
 
 	EVP_MD_CTX* fileCtx = EVP_MD_CTX_create ();
 	EVP_DigestInit_ex (fileCtx, EVP_sha512 (), nullptr);

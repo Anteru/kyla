@@ -134,7 +134,7 @@ struct FileSourcePackageReader::Impl
 {
 public:
 	Impl (const boost::filesystem::path& packageFilename)
-	: input_ (kyla::OpenFile (packageFilename.c_str ()))
+		: input_ (kyla::OpenFile (packageFilename.c_str (), kyla::FileOpenMode::Read))
 	{
 	}
 
