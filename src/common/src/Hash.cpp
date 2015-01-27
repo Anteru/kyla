@@ -20,12 +20,12 @@ Hash ComputeHash (const int64_t size, const void* data)
 ////////////////////////////////////////////////////////////////////////////////
 Hash ComputeHash (const boost::filesystem::path& p)
 {
-	std::vector<char> buffer (4 << 20 /* 4 MiB */);
+	std::vector<unsigned char> buffer (4 << 20 /* 4 MiB */);
 	return ComputeHash (p, buffer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-Hash ComputeHash (const boost::filesystem::path& p, std::vector<char>& buffer)
+Hash ComputeHash (const boost::filesystem::path& p, std::vector<unsigned char>& buffer)
 {
 	auto input = kyla::OpenFile (p.c_str (), kyla::FileOpenMode::Read);
 

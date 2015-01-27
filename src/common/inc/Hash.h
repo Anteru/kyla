@@ -35,7 +35,7 @@ typedef THash<64> Hash;
 
 Hash ComputeHash (const int64_t size, const void* data);
 Hash ComputeHash (const boost::filesystem::path& p);
-Hash ComputeHash (const boost::filesystem::path& p, std::vector<char>& buffer);
+Hash ComputeHash (const boost::filesystem::path& p, std::vector<unsigned char>& buffer);
 
 template <int size>
 std::string ToString (const std::uint8_t (&hash) [size])

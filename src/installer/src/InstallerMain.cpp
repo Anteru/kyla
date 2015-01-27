@@ -186,11 +186,11 @@ int main (int argc, char* argv [])
 
 	sqlite3_finalize (selectRequiredContentObjectsStatement);
 
-	// Process all source packages into temporary directory, only extracting
+	// Process all source packages into the staging directory, only extracting
 	// the requested content objects
 	// As we have pre-allocated everything, this can run in parallel
 	for (const auto& sourcePackageFilename : requiredSourcePackageFilenames) {
-		FileSourcePackageReader reader (sourcePackageFilename);
+		FileSourcePackageReader reader (packageDirectory / sourcePackageFilename);
 
 		reader.Store ([&requiredContentObjects](const Hash& hash) -> bool {
 			return requiredContentObjects.find (hash) != requiredContentObjects.end ();
@@ -202,7 +202,7 @@ int main (int argc, char* argv [])
 	// Once done, we walk once more over the file list and just copy the
 	// content object to its target location
 	sqlite3_stmt* selectFilesStatement = nullptr;
-	sqlite3_prepare_v2(db,
+	sqlite3_prepare_v2 (db,
 		GetFilesForSelectedFeaturesQueryString (selectedFeatureIds).c_str (),
 		-1, &selectFilesStatement, nullptr);
 
@@ -238,8 +238,9 @@ int main (int argc, char* argv [])
 
 		// If null, we need to create an empty file there
 		if (sqlite3_column_type (selectFilesStatement, 1) == SQLITE_NULL) {
-			boost::filesystem::ofstream output (targetPath, std::ios::binary);
-			output.close ();
+			log->debug () << "Creating empty file " << targetPath.string ();
+
+			kyla::CreateFile (targetPath.c_str ());
 		} else {
 			Hash hash;
 

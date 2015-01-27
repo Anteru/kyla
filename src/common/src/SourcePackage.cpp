@@ -42,15 +42,14 @@ void SourcePackageWriter::Add (const Hash& hash,
 ////////////////////////////////////////////////////////////////////////////////
 namespace {
 std::int64_t BlockCopy (const boost::filesystem::path& file, kyla::File& out,
-	std::vector<char>& buffer)
+	std::vector<unsigned char>& buffer)
 {
-	boost::filesystem::ifstream input (file, std::ios::binary);
+	auto input = kyla::OpenFile (file.c_str (), kyla::FileOpenMode::Read);
 
 	std::int64_t bytesReadTotal = 0;
 
 	for (;;) {
-		input.read (buffer.data (), buffer.size ());
-		const auto bytesRead = input.gcount ();
+		const auto bytesRead = input->Read (buffer.data (), buffer.size ());
 		bytesReadTotal += bytesRead;
 		out.Write (buffer.data (), bytesRead);
 
@@ -69,7 +68,7 @@ Hash SourcePackageWriter::Finalize()
 	// Write header
 	PackageHeader header;
 	::memset (&header, 0, sizeof (header));
-	::memcpy (header.id, "NIMSRCPK", 8);
+	::memcpy (header.id, "KYLAPACK", 8);
 	header.version = 1;
 	header.indexEntries = static_cast<std::int32_t> (impl_->hashChunkMap.size ());
 	header.indexOffset = sizeof (header);
@@ -88,7 +87,7 @@ Hash SourcePackageWriter::Finalize()
 
 	// This is our I/O buffer, we read/write in blocks of this size, and also
 	// compute the final hash in this buffer
-	std::vector<char> buffer (4 << 20);
+	std::vector<unsigned char> buffer (4 << 20);
 
 	std::vector<PackageIndex> packageIndex;
 	packageIndex.reserve (impl_->hashChunkMap.size ());
@@ -148,7 +147,7 @@ public:
 		std::vector<PackageIndex> index (header.indexEntries);
 		input_->Read (index.data (), sizeof (PackageIndex) * index.size ());
 
-		std::vector<char> buffer;
+		std::vector<unsigned char> buffer;
 		for (const auto& entry : index) {
 			Hash hash;
 			static_assert (sizeof (hash.hash) == sizeof (entry.hash), "Hash size mismatch!");
@@ -181,7 +180,7 @@ public:
 					::uncompress (
 						mapping,
 						&destinationBufferSize,
-						reinterpret_cast<unsigned char*> (buffer.data ()),
+						buffer.data (),
 						static_cast<int> (chunkEntry.compressedSize));
 
 					targetFile->Unmap (mapping);
