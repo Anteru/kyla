@@ -6,12 +6,7 @@
 
 #include <zlib.h>
 
-// For Linux memory mapping
-#include <sys/mman.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#include "FileIO.h"
 
 struct SourcePackageWriter::Impl
 {
@@ -24,7 +19,6 @@ public:
 SourcePackageWriter::SourcePackageWriter ()
 : impl_ (new Impl)
 {
-
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -39,14 +33,15 @@ void SourcePackageWriter::Open (const boost::filesystem::path& filename)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void SourcePackageWriter::Add (const Hash& hash, const boost::filesystem::path& chunkPath)
+void SourcePackageWriter::Add (const Hash& hash,
+	const boost::filesystem::path& chunkPath)
 {
 	impl_->hashChunkMap [hash].push_back (chunkPath);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 namespace {
-std::int64_t BlockCopy (const boost::filesystem::path& file, std::ostream& out,
+std::int64_t BlockCopy (const boost::filesystem::path& file, kyla::File& out,
 	std::vector<char>& buffer)
 {
 	boost::filesystem::ifstream input (file, std::ios::binary);
@@ -55,9 +50,9 @@ std::int64_t BlockCopy (const boost::filesystem::path& file, std::ostream& out,
 
 	for (;;) {
 		input.read (buffer.data (), buffer.size ());
-		const auto bytesRead = input.gcount();
+		const auto bytesRead = input.gcount ();
 		bytesReadTotal += bytesRead;
-		out.write (buffer.data (), bytesRead);
+		out.Write (buffer.data (), bytesRead);
 
 		if (bytesRead < buffer.size ()) {
 			return bytesReadTotal;
@@ -69,7 +64,7 @@ std::int64_t BlockCopy (const boost::filesystem::path& file, std::ostream& out,
 ////////////////////////////////////////////////////////////////////////////////
 Hash SourcePackageWriter::Finalize()
 {
-	boost::filesystem::ofstream output (impl_->filename, std::ios::binary);
+	auto output = kyla::CreateFile (impl_->filename.c_str ());
 
 	// Write header
 	PackageHeader header;
@@ -88,8 +83,8 @@ Hash SourcePackageWriter::Finalize()
 		offset += sizeof (PackageIndex) * hashChunks.second.size ();
 	}
 
-	output.write (reinterpret_cast<const char*> (&header), sizeof (header));
-	output.seekp (offset);
+	output->Write (&header, sizeof (header));
+	output->Seek (offset);
 
 	// This is our I/O buffer, we read/write in blocks of this size, and also
 	// compute the final hash in this buffer
@@ -104,16 +99,16 @@ Hash SourcePackageWriter::Finalize()
 			::memcpy (indexEntry.hash, hashChunks.first.hash, sizeof (hashChunks.first.hash));
 			indexEntry.offset = offset;
 
-			offset += BlockCopy (chunk, output, buffer);
+			offset += BlockCopy (chunk, *output, buffer);
 			packageIndex.push_back (indexEntry);
 		}
 	}
 
-	output.seekp (sizeof (header));
-	output.write (reinterpret_cast<const char*> (packageIndex.data ()),
+	output->Seek (sizeof (header));
+	output->Write (packageIndex.data (),
 		sizeof (PackageIndex) * packageIndex.size ());
 
-	output.close ();
+	output->Close ();
 
 	// We have to read again, as we can't make a fully streaming update due to
 	// our delayed index write. Hopefully, the file is still in the disk cache,
@@ -139,7 +134,7 @@ struct FileSourcePackageReader::Impl
 {
 public:
 	Impl (const boost::filesystem::path& packageFilename)
-	: input_ (packageFilename, std::ios::binary)
+	: input_ (kyla::OpenFile (packageFilename.c_str ()))
 	{
 	}
 
@@ -147,12 +142,11 @@ public:
 		const boost::filesystem::path& directory)
 	{
 		PackageHeader header;
-		input_.read (reinterpret_cast<char*> (&header), sizeof (header));
-		input_.seekg (header.indexOffset);
+		input_->Read (&header, sizeof (header));
+		input_->Seek (header.indexOffset);
 
 		std::vector<PackageIndex> index (header.indexEntries);
-		input_.read (reinterpret_cast<char*> (index.data ()),
-			sizeof (PackageIndex) * index.size ());
+		input_->Read (index.data (), sizeof (PackageIndex) * index.size ());
 
 		std::vector<char> buffer;
 		for (const auto& entry : index) {
@@ -161,29 +155,27 @@ public:
 			::memcpy (hash.hash, entry.hash, sizeof (entry.hash));
 
 			if (filter (hash)) {
-				input_.seekg (entry.offset);
+				input_->Seek (entry.offset);
 
 				PackageDataChunk chunkEntry;
-				input_.read (reinterpret_cast<char*> (&chunkEntry),
-					sizeof (chunkEntry));
+				input_->Read (&chunkEntry, sizeof (chunkEntry));
 
 				if (chunkEntry.compressionMode == CompressionMode_Zip) {
 					if (buffer.size () < chunkEntry.compressedSize) {
 						buffer.resize (chunkEntry.compressedSize);
 					}
 
-					input_.read (buffer.data (), chunkEntry.compressedSize);
+					input_->Read (buffer.data (), chunkEntry.compressedSize);
 
 					const auto targetPath = directory / ToString (hash);
 
-					// Linux specific
-					auto fd = open (targetPath.c_str (), O_RDWR, S_IRUSR | S_IWUSR);
+					auto targetFile = kyla::CreateFile (targetPath.c_str ());
+
 					// we expect that the target is already pre-allocated at
 					// the right size, otherwise, the mmap below will fail
 
-					unsigned char* mapping = static_cast<unsigned char*> (mmap (
-						nullptr, chunkEntry.size,
-						PROT_WRITE | PROT_READ, MAP_SHARED, fd, chunkEntry.offset));
+					unsigned char* mapping = static_cast<unsigned char*> (
+						targetFile->Map (chunkEntry.offset, chunkEntry.size));
 
 					uLongf destinationBufferSize = chunkEntry.size;
 					::uncompress (
@@ -192,15 +184,14 @@ public:
 						reinterpret_cast<unsigned char*> (buffer.data ()),
 						static_cast<int> (chunkEntry.compressedSize));
 
-					munmap (mapping, chunkEntry.size);
-					close (fd);
+					targetFile->Unmap (mapping);
 				}
 			}
 		}
 	}
 
 private:
-	boost::filesystem::ifstream input_;
+	std::unique_ptr<kyla::File> input_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

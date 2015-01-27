@@ -13,11 +13,7 @@
 
 #include <spdlog.h>
 
-// For Linux memory mapping
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#include "FileIO.h"
 
 #include "Hash.h"
 #include "SourcePackage.h"
@@ -179,16 +175,11 @@ int main (int argc, char* argv [])
 		requiredContentObjects [hash] = chunkCount;
 
 		// Linux-specific
-		auto fd = open ((stagingDirectory / ToString (hash)).c_str (),
-			 O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
+		auto targetFile = kyla::CreateFile (
+			(stagingDirectory / ToString (hash)).c_str ());
 
-		if (ftruncate(fd, size) == 0) {
-			log->trace () << "Content object " << ToString (hash) << " allocated";
-		} else {
-			log->error () << "Could not allocate content object " << ToString (hash);
-		}
-
-		close (fd);
+		targetFile->SetSize (size);
+		log->trace () << "Content object " << ToString (hash) << " allocated";
 	}
 
 	log->info () << "Requested " << requiredContentObjects.size () << " content objects";

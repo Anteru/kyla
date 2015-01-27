@@ -4,7 +4,7 @@
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 
-#include <boost/filesystem/fstream.hpp>
+#include "FileIO.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 Hash ComputeHash (const int64_t size, const void* data)
@@ -27,14 +27,13 @@ Hash ComputeHash (const boost::filesystem::path& p)
 ////////////////////////////////////////////////////////////////////////////////
 Hash ComputeHash (const boost::filesystem::path& p, std::vector<char>& buffer)
 {
-	boost::filesystem::ifstream input (p, std::ios::binary);
+	auto input = kyla::OpenFile (p.c_str ());
 
 	EVP_MD_CTX* fileCtx = EVP_MD_CTX_create ();
 	EVP_DigestInit_ex (fileCtx, EVP_sha512 (), nullptr);
 
 	for (;;) {
-		input.read (buffer.data (), buffer.size ());
-		const auto bytesRead = input.gcount();
+		const auto bytesRead = input->Read (buffer.data (), buffer.size ());
 
 		EVP_DigestUpdate (fileCtx, buffer.data (), bytesRead);
 

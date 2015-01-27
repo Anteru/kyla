@@ -9,19 +9,27 @@
 #include <memory>
 #include <functional>
 
+/**
+A source package consists of:
+- The package header
+- The package index, containing zero or more package index entries
+- Zero or more data chunks
+*/
+
 struct PackageHeader
 {
-    unsigned char id [8];
-    int32_t   version;
-    int32_t   indexEntries;
-    int64_t   indexOffset;
-    int64_t   dataOffset;
+	unsigned char	id [8];
+	int32_t			version;
+	int32_t			indexEntries;
+	int64_t			indexOffset;
+	int64_t			dataOffset;
 };
 
 struct PackageIndex
 {
     uint8_t hash [64];
-    int64_t offset;
+	int64_t offset;				// Absolute offset within the source package
+								// to the entry
 };
 
 enum CompressionMode
@@ -29,18 +37,19 @@ enum CompressionMode
     CompressionMode_Uncompressed,
     CompressionMode_Zip,
     CompressionMode_LZMA,
-    CompressionMode_LZ4
+	CompressionMode_LZ4,
+	CompressionMode_LZHAM
 };
 
 struct PackageDataChunk
 {
     uint8_t hash [64];
-    int64_t offset;
-    int64_t size;
+	int64_t offset;				// Offset into the target file
+	int64_t size;				// Size of the uncompressed data
 
-    int64_t compressedSize;
-    int8_t  compressionMode;
-    uint8_t reserved [7];
+	int64_t compressedSize;		// Size of this package chunk
+	int8_t  compressionMode;	// One of the CompressionMode entries
+	uint8_t reserved [7];
 };
 
 /*

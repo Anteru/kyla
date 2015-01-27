@@ -1,10 +1,12 @@
 PROJECT(kyla_common)
 
 SET(HEADERS
+	inc/FileIO.h
     inc/Hash.h
     inc/SourcePackage.h)
 
 SET(SOURCES
+	src/FileIO.cpp
     src/Hash.cpp
     src/SourcePackage.cpp)
 
