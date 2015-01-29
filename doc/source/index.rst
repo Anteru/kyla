@@ -70,3 +70,15 @@ Source package
 --------------------
 
 A source package consists of two parts: The package index and the data. The package index is simply a list of (SHA512, offset) to each entry in the package. The data is a list of (Header, Compressed-Data) chunks.
+
+API
+---
+
+The installation is started by instatiating a ``KylaInstallationPackage``. Next, features have to be queried and selected. Before the installation can be started, the installation environment must be populated by setting properties. At least, the following properties must be set:
+
+* ``TargetDirectory``: A string property which describes the target directory.
+
+Optionally, the following properties can be set:
+
+* ``StagingDirectory``: The staging directory. This directory will be used while the installation is prepared. It should be placed on the same drive/partition as the ``TargetDirectory``.
+* ``SourcePackageDirectory``: Path to the source packages.

@@ -10,10 +10,10 @@ struct KylaFeatures;
 
 struct KylaFeature
 {
-	const char* id;
+	int id;
 	const char* name;
 	const char* description;
-	const struct KylaFeature* parent;
+	int parentId; /* -1 if no parent */
 };
 
 enum KylaResult
@@ -24,32 +24,33 @@ enum KylaResult
 
 struct KylaProperty;
 
-KylaProperty* CreateStringProperty (const char* s);
-KylaProperty* CreateIntProperty (const int value);
-KylaProperty* CreateBinaryProperty (const void* d, const int size);
+KylaProperty* kylaCreateStringProperty (const char* s);
+KylaProperty* kylaCreateIntProperty (const int value);
+KylaProperty* kylaCreateBinaryProperty (const void* d, const int size);
 
-int DeleteProperty (struct KylaProperty* property);
+int kylaDeleteProperty (struct KylaProperty* property);
 
-int OpenInstallationPackage (const char* path, KylaInstallationPackage** output);
-int GetFeatures (KylaInstallationPackage* package,
+int kylaOpenInstallationPackage (const char* path, KylaInstallationPackage** output);
+int kylaGetFeatures (KylaInstallationPackage* package,
 	KylaFeatures** features);
-int DeleteFeatures (KylaFeatures* features);
+int kylaDeleteFeatures (KylaFeatures* features);
 
-int EnumerateFeatures (KylaFeatures* features,
+int kylaEnumerateFeatures (KylaFeatures* features,
 	int* count,
-	KylaFeature** first);
+	KylaFeature*** first);
 
-int SelectFeatures (KylaInstallationPackage* package,
+int kylaSelectFeatures (KylaInstallationPackage* package,
 	int count,
-	KylaFeature* selected);
+	KylaFeature** selected);
 
-int SetProperty (const char* name, const struct KylaProperty* value);
+int kylaSetProperty (KylaInstallationPackage* package,
+	const char* name, const struct KylaProperty* value);
 
 typedef void (*KylaProgressCallback)(const int stageCount, const int stageProgress, const char* stageDescription);
 
-int InstallPackage (KylaInstallationPackage* package, KylaProgressCallback callback);
+int kylaInstallPackage (KylaInstallationPackage* package, KylaProgressCallback callback);
 
-int CloseInstallationPackage (KylaInstallationPackage* package);
+int kylaCloseInstallationPackage (KylaInstallationPackage* package);
 
 #ifdef __cplusplus
 }
