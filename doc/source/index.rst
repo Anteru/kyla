@@ -11,7 +11,7 @@ Contents:
     installer-file-format
 
 Features
-=====
+========
 
 * Support for installation packages with 100.000 and more files
 * Support for files larger than 4 GiB
@@ -62,23 +62,26 @@ The installation consists of the following steps:
 #. The content objects required are identified
 #. The source packages which contain the required content objects are identified
 #. All source packages are processed. A source package can be streamed, and each content object can be decompressed/validated/reassembled in parallel.
-#. Each content object is checked whether it is in the list of requested content objects, if so, it is decompressed to a temporary location. Content objects have unique file names (their hash), so no collisions can occur here.
-#. The file list is traversed and content objects are moved to the first location.
-#. The installation database is created.
+#. Each content object is checked whether it is in the list of requested content objects, if so, it is decompressed to the *staging directory*. Content objects have unique file names (their hash), so no collisions can occur here.
+#. The installation database is generated in memory.
+#. The file list is traversed and content objects are moved to the *target directory*.
+#. The installation database is stored persistently.
+
+If the user aborts the installation, the installation database is queried to undo the operations so far. If the installation is aborted before the installation database has been created, it is enough to delete the *staging directory*.
 
 Source package
---------------------
+--------------
 
 A source package consists of two parts: The package index and the data. The package index is simply a list of (SHA512, offset) to each entry in the package. The data is a list of (Header, Compressed-Data) chunks.
 
 API
 ---
 
-The installation is started by instatiating a ``KylaInstallationPackage``. Next, features have to be queried and selected. Before the installation can be started, the installation environment must be populated by setting properties. At least, the following properties must be set:
+The install engine can be accessed using a C API. An installation must specify which features should be installed. Additional options like the installation directory are passed using properties. At least the following properties must be set:
 
-* ``TargetDirectory``: A string property which describes the target directory.
+* ``TargetDirectory``: A string property which specifies the target directory.
 
 Optionally, the following properties can be set:
 
 * ``StagingDirectory``: The staging directory. This directory will be used while the installation is prepared. It should be placed on the same drive/partition as the ``TargetDirectory``.
-* ``SourcePackageDirectory``: Path to the source packages.
+* ``SourcePackageDirectory``: The path to the source packages.

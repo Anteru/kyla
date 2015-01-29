@@ -5,7 +5,7 @@
 extern "C" {
 #endif
 
-struct KylaInstallationPackage;
+struct KylaInstaller;
 struct KylaFeatures;
 
 struct KylaFeature
@@ -22,35 +22,53 @@ enum KylaResult
 	KylaError = 1
 };
 
+enum KylaLogLevel
+{
+	KylaLogLevelDebug,
+	KylaLogLevelInfo,
+	KylaLogLevelWarning,
+	KylaLogLevelError
+};
+
 struct KylaProperty;
 
 KylaProperty* kylaCreateStringProperty (const char* s);
 KylaProperty* kylaCreateIntProperty (const int value);
 KylaProperty* kylaCreateBinaryProperty (const void* d, const int size);
 
+int kylaPropertyGetStringValue (const struct KylaProperty* property, const char** value);
+int kylaPropertyGetIntValue (const struct KylaProperty* property, int* value);
+int kylaPropertyGetBinaryValue (const struct KylaProperty* property, void** d, int* size);
+
 int kylaDeleteProperty (struct KylaProperty* property);
 
-int kylaOpenInstallationPackage (const char* path, KylaInstallationPackage** output);
-int kylaGetFeatures (KylaInstallationPackage* package,
-	KylaFeatures** features);
-int kylaDeleteFeatures (KylaFeatures* features);
+int kylaLog (struct KylaInstaller* installer, const char* logFileName,
+	const int logLevel);
 
-int kylaEnumerateFeatures (KylaFeatures* features,
+int kylaOpenInstallationPackage (const char* path, struct KylaInstaller** installer);
+int kylaGetFeatures (struct KylaInstaller* installer,
+	struct KylaFeatures** features);
+int kylaDeleteFeatures (struct KylaFeatures* features);
+
+int kylaEnumerateFeatures (struct KylaFeatures* features,
 	int* count,
-	KylaFeature*** first);
+	struct KylaFeature*** first);
 
-int kylaSelectFeatures (KylaInstallationPackage* package,
+int kylaSelectFeatures (struct KylaInstaller* installer,
 	int count,
-	KylaFeature** selected);
+	struct KylaFeature** selected);
 
-int kylaSetProperty (KylaInstallationPackage* package,
+int kylaSetProperty (struct KylaInstaller* installer,
 	const char* name, const struct KylaProperty* value);
+
+int kylaGetProperty (struct KylaInstaller* installer,
+	const char* name, struct KylaProperty** output);
 
 typedef void (*KylaProgressCallback)(const int stageCount, const int stageProgress, const char* stageDescription);
 
-int kylaInstallPackage (KylaInstallationPackage* package, KylaProgressCallback callback);
+int kylaInstall (struct KylaInstaller* package, KylaProgressCallback callback);
 
-int kylaCloseInstallationPackage (KylaInstallationPackage* package);
+int kylaCloseInstallationPackage (struct KylaInstaller* package);
 
 #ifdef __cplusplus
 }

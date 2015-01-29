@@ -15,6 +15,8 @@ int main (int argc, char* argv [])
 
 	po::options_description desc ("Configuration");
 	desc.add_options ()
+		("log-level", po::value<int> ()->default_value (1))
+		("log-file", po::value<std::string> ()->default_value ("install.log"))
 		("package-directory", po::value<std::string> ()->default_value ("."));
 
 	po::options_description hidden ("Hidden options");
@@ -48,7 +50,7 @@ int main (int argc, char* argv [])
 	boost::filesystem::path installationDirectory = "install";
 	boost::filesystem::path stagingDirectory = "stage";
 
-	KylaInstallationPackage* installer;
+	KylaInstaller* installer;
 	kylaOpenInstallationPackage (inputFilePath.c_str (),
 		&installer);
 
@@ -80,6 +82,9 @@ int main (int argc, char* argv [])
 	kylaSetProperty (installer, "SourcePackageDirectory", sourcePackageDirectoryProperty);
 	kylaDeleteProperty (sourcePackageDirectoryProperty);
 
-	kylaInstallPackage (installer, nullptr);
+	kylaLog (installer, vm ["log-file"].as<std::string> ().c_str (),
+			vm ["log-level"].as<int> ());
+
+	kylaInstall (installer, nullptr);
 	kylaCloseInstallationPackage (installer);
 }

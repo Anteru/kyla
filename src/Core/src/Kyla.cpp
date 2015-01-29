@@ -130,14 +130,14 @@ struct KylaProperty
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-struct KylaInstallationPackage
+struct KylaInstaller
 {
-	KylaInstallationPackage (const char* path)
+	KylaInstaller (const char* path)
 	{
 		sqlite3_open (path, &db_);
 	}
 
-	~KylaInstallationPackage ()
+	~KylaInstaller ()
 	{
 		sqlite3_close (db_);
 	}
@@ -145,6 +145,18 @@ struct KylaInstallationPackage
 	void SetProperty (const char* name, const KylaProperty* value)
 	{
 		environment_.SetProperty (name, value->property);
+	}
+
+	bool HasProperty (const char* name) const
+	{
+		return environment_.HasProperty (name);
+	}
+
+	KylaProperty* GetProperty (const char* name) const
+	{
+		KylaProperty* result = new KylaProperty;
+		result->property = environment_.GetProperty (name);
+		return result;
 	}
 
 	void Install ()
@@ -169,14 +181,14 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-int kylaOpenInstallationPackage (const char* path, KylaInstallationPackage** output)
+int kylaOpenInstallationPackage (const char* path, KylaInstaller** installer)
 {
-	*output = new KylaInstallationPackage (path);
+	*installer = new KylaInstaller (path);
 	return KylaSuccess;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-int kylaCoseInstallationPackage (KylaInstallationPackage* package)
+int kylaCoseInstallationPackage (KylaInstaller* package)
 {
 	delete package;
 }
@@ -217,10 +229,10 @@ int kylaDeleteProperty (struct KylaProperty* property)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-int kylaGetFeatures (KylaInstallationPackage* package,
+int kylaGetFeatures (KylaInstaller* installer,
 	KylaFeatures** features)
 {
-	*features = new KylaFeatures (package->GetInstallationDatabase ());
+	*features = new KylaFeatures (installer->GetInstallationDatabase ());
 
 	return KylaSuccess;
 }
@@ -246,7 +258,7 @@ int kylaEnumerateFeatures(KylaFeatures* features, int* count, KylaFeature*** fir
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-int kylaSelectFeatures (KylaInstallationPackage* package,
+int kylaSelectFeatures (KylaInstaller* installer,
 	int count, KylaFeature** selected)
 {
 	std::vector<int> selectedIds (count, -1);
@@ -255,13 +267,13 @@ int kylaSelectFeatures (KylaInstallationPackage* package,
 		selectedIds [i] = selected [i]->id;
 	}
 
-	package->GetEnvironment().SelectFeatures (selectedIds);
+	installer->GetEnvironment().SelectFeatures (selectedIds);
 
 	return KylaSuccess;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-int kylaInstallPackage (KylaInstallationPackage* package, KylaProgressCallback callback)
+int kylaInstall (KylaInstaller* package, KylaProgressCallback callback)
 {
 	package->Install ();
 
@@ -269,15 +281,92 @@ int kylaInstallPackage (KylaInstallationPackage* package, KylaProgressCallback c
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-int kylaSetProperty (KylaInstallationPackage* package, const char* name, const KylaProperty* value)
+int kylaSetProperty (KylaInstaller* installer, const char* name, const KylaProperty* value)
 {
-	package->SetProperty (name, value);
+	// Property names starting with $ are reserved
+	if (name && name [0] == '$') {
+		return KylaError;
+	}
+
+	installer->SetProperty (name, value);
 
 	return KylaSuccess;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-int kylaCloseInstallationPackage (KylaInstallationPackage* package)
+int kylaGetProperty (KylaInstaller *installer, const char *name, KylaProperty **output)
+{
+	if (installer->HasProperty (name)) {
+		*output = installer->GetProperty (name);
+		return KylaSuccess;
+	} else {
+		return KylaError;
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+int kylaCloseInstallationPackage (KylaInstaller* package)
 {
 	delete package;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+int kylaPropertyGetBinaryValue (const KylaProperty* property, void** d, int* size)
+{
+	if (property->property.type != kyla::PropertyType::Binary) {
+		return KylaError;
+	}
+
+	if (d) {
+		*d = property->property.b;
+	}
+
+	if (size) {
+		*size = property->property.size;
+	}
+
+	return KylaSuccess;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+int kylaPropertyGetStringValue (const KylaProperty* property, const char** o)
+{
+	if (property->property.type != kyla::PropertyType::String) {
+		return KylaError;
+	}
+
+	if (o) {
+		*o = property->property.s;
+	}
+
+	return KylaSuccess;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+int kylaPropertyGetIntValue (const KylaProperty* property, int* i)
+{
+	if (property->property.type != kyla::PropertyType::Int) {
+		return KylaError;
+	}
+
+	if (i) {
+		*i = property->property.i;
+	}
+
+	return KylaSuccess;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+int kylaLog (KylaInstaller *installer, const char *logFileName, const int logLevel)
+{
+	if (!installer) {
+		return KylaError;
+	}
+
+	if (logLevel < KylaLogLevelDebug || logLevel > KylaLogLevelError) {
+		return KylaError;
+	}
+
+	installer->GetEnvironment().SetProperty ("$LogFilename", kyla::Property (logFileName));
+	installer->GetEnvironment().SetProperty ("$LogLevel", kyla::Property (logLevel));
 }

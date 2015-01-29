@@ -14,6 +14,7 @@
 #include "FileIO.h"
 
 #include <spdlog.h>
+#include <sinks/null_sink.h>
 
 #include "Hash.h"
 #include "SourcePackage.h"
@@ -110,7 +111,31 @@ std::string GetFilesForSelectedFeaturesQueryString (
 ////////////////////////////////////////////////////////////////////////////////
 void Installer::Install (sqlite3* db, InstallationEnvironment env)
 {
-	auto log = spdlog::stdout_logger_mt ("install");
+	std::shared_ptr<spdlog::logger>  log;
+
+	if (env.HasProperty("$LogFilename") && env.GetProperty("$LogFilename").s) {
+		log = spdlog::create<spdlog::sinks::simple_file_sink_mt> ("install",
+			env.GetProperty("$LogFilename").s);
+
+		if (env.HasProperty ("$LogLevel")) {
+			switch (env.GetProperty ("$LogLevel").i) {
+			case 0:
+				log->set_level (spdlog::level::debug);
+				break;
+			case 1:
+				log->set_level (spdlog::level::info);
+				break;
+			case 2:
+				log->set_level (spdlog::level::warn);
+				break;
+			case 3:
+				log->set_level (spdlog::level::err);
+				break;
+			}
+		}
+	} else {
+		log = spdlog::create<spdlog::sinks::null_sink_mt> ("install");
+	}
 
 	const auto sourcePackageDirectory = env.HasProperty ("SourcePackageDirectory") ?
 			absolute (boost::filesystem::path (
@@ -185,9 +210,11 @@ void Installer::Install (sqlite3* db, InstallationEnvironment env)
 	for (const auto& sourcePackageFilename : requiredSourcePackageFilenames) {
 		kyla::FileSourcePackageReader reader (sourcePackageDirectory / sourcePackageFilename);
 
+		log->info () << "Processing source package " << sourcePackageFilename;
+
 		reader.Store ([&requiredContentObjects](const kyla::Hash& hash) -> bool {
 			return requiredContentObjects.find (hash) != requiredContentObjects.end ();
-		}, stagingDirectory);
+		}, stagingDirectory, *log);
 
 		log->info () << "Processed source package " << sourcePackageFilename;
 	}
@@ -247,7 +274,7 @@ void Installer::Install (sqlite3* db, InstallationEnvironment env)
 			::memcpy (hash.hash, sqlite3_column_blob (selectFilesStatement, 1),
 				sizeof (hash.hash));
 
-			log->debug () << "Copying " << (stagingDirectory / ToString (hash)).string () << " to " << targetPath.string ();
+			log->debug () << "Copying " << (stagingDirectory / ToString (hash)).string () << " to " << absolute (targetPath).string ();
 
 			// Make this smarter, i.e. move first time, and on second time, copy
 			boost::filesystem::copy_file (stagingDirectory / ToString (hash),
