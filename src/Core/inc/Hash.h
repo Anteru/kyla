@@ -1,5 +1,5 @@
-#ifndef _NIM_COMMON_H_HASH_
-#define _NIM_COMMON_H_HASH_
+#ifndef KYLA_CORE_INTERNAL_HASH_H
+#define KYLA_CORE_INTERNAL_HASH_H
 
 #include <stdint.h>
 #include <string.h>
@@ -7,6 +7,7 @@
 #include <string>
 #include <boost/filesystem.hpp>
 
+namespace kyla {
 template <int size>
 struct THash
 {
@@ -31,9 +32,12 @@ struct HashHash
 	}
 };
 
+/*
+The default hash in Kyla is a 64-byte SHA512.
+*/
 typedef THash<64> Hash;
 
-Hash ComputeHash (const int64_t size, const void* data);
+Hash ComputeHash (const void* data, const std::int64_t size);
 Hash ComputeHash (const boost::filesystem::path& p);
 Hash ComputeHash (const boost::filesystem::path& p, std::vector<unsigned char>& buffer);
 
@@ -61,6 +65,7 @@ template <int size>
 std::string ToString (const THash<size>& hash)
 {
 	return ToString (hash.hash);
+}
 }
 
 #endif

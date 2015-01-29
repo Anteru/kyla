@@ -42,7 +42,7 @@ FIND_PACKAGE(Boost 1.55.0 REQUIRED QUIET COMPONENTS program_options filesystem s
 
 ADD_EXECUTABLE(kyla.Generator ${SOURCES} ${HEADERS})
 TARGET_LINK_LIBRARIES(kyla.Generator
-	kyla.Common pugixml sqlite
+	kyla.Core pugixml sqlite
 	${Boost_LIBRARIES} ${OPENSSL_LIBRARIES} ZLIB::ZLIB spdlog)
 TARGET_INCLUDE_DIRECTORIES(kyla.Generator
 	PRIVATE ${Boost_INCLUDE_DIRS} ${CMAKE_CURRENT_BINARY_DIR} ${OPENSSL_INCLUDE_DIR})

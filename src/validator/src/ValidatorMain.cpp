@@ -77,7 +77,7 @@ int main (int argc, char* argv[])
 				  << packagePath.filename () << " (" << i++ << "/"
 				  << sourcePackageCount << "): ";
 
-		Hash expectedHash;
+		kyla::Hash expectedHash;
 		const auto hashSize = sqlite3_column_int64 (
 			selectSourcePackagesStatement, 2);
 
@@ -90,8 +90,8 @@ int main (int argc, char* argv[])
 			sqlite3_column_blob (selectSourcePackagesStatement, 0),
 			sizeof (expectedHash.hash));
 
-		Hash actualHash = ComputeHash (packagePath);
-		if (! HashEqual() (expectedHash, actualHash)) {
+		const auto actualHash = kyla::ComputeHash (packagePath);
+		if (! kyla::HashEqual() (expectedHash, actualHash)) {
 			std::cout << "ERROR, hash mismatch\n";
 		} else {
 			std::cout << "OK\n";

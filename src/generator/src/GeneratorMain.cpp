@@ -30,6 +30,8 @@
 #include "install-db-structure.h"
 #include "install-db-indices.h"
 
+#include "SourcePackageWriter.h"
+
 #define SAFE_SQLITE_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_OK) { spdlog::get ("log")->error () << file << ":" << line << " " << sqlite3_errstr(r_); exit (1); } } while (0)
 #define SAFE_SQLITE_INSERT_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_DONE) { spdlog::get ("log")->error () << file << ":" << line << " " << sqlite3_errstr(r_); exit (1); } } while (0)
 
@@ -174,7 +176,7 @@ void AssignFilesToFeaturesPackages (const pugi::xml_node& product,
 struct ContentObjectIdHash
 {
 	std::int64_t id;
-	Hash hash;
+	kyla::Hash hash;
 };
 
 /**
@@ -268,19 +270,19 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 				&compressedSize,
 				buffer.data (), chunkSize, Z_BEST_COMPRESSION);
 
-			const auto chunkName = ToString (uuidGen ().data);
+			const auto chunkName = kyla::ToString (uuidGen ().data);
 
 			const ChunkInfo chunkInfo {chunkName,
 				static_cast<std::int64_t> (compressedSize)};
 			chunks.push_back (chunkInfo);
 
-			PackageDataChunk pdc;
+			kyla::PackageDataChunk pdc;
 			::memset (&pdc, 0, sizeof (pdc));
 
 			pdc.compressedSize = compressedSize;
 			pdc.size = chunkSize;
 			pdc.offset = fileChunkSize * chunkNumber;
-			pdc.compressionMode = CompressionMode_Zip;
+			pdc.compressionMode = kyla::CompressionMode_Zip;
 
 			contentObjectCompressedSize += compressedSize;
 
@@ -308,7 +310,7 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 
 		totalSize += contentObjectSize;
 
-		Hash fileHash;
+		kyla::Hash fileHash;
 
 		if (contentObjectSize == 0) {
 			// Don't create a content object when the file is empty
@@ -317,7 +319,7 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 
 		EVP_DigestFinal_ex (fileCtx, fileHash.hash, nullptr);
 
-		spdlog::get ("log")->debug() << sourcePath << " -> " << ToString (fileHash.hash);
+		spdlog::get ("log")->debug() << sourcePath << " -> " << ToString (fileHash);
 
 		sqlite3_bind_blob (selectContentObjectIdStatement, 1,
 			fileHash.hash, sizeof (fileHash.hash), nullptr);
@@ -448,7 +450,7 @@ SourcePackageNameTemplate GetSourcePackageNameTemplate (const pugi::xml_node& pr
 struct SourcePackageInfo
 {
 	std::int64_t	id;
-	Hash			hash;
+	kyla::Hash		hash;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -489,7 +491,7 @@ std::vector<SourcePackageInfo> WriteUserPackages (
 		sqlite3_bind_int64 (selectFilesForPackageStatement, 1, sourcePackageId);
 
 		// contentObject (Hash) -> list of chunks that will go into this package
-		std::unordered_map<Hash, std::vector<std::string>, HashHash, HashEqual>
+		std::unordered_map<kyla::Hash, std::vector<std::string>, kyla::HashHash, kyla::HashEqual>
 				contentObjectsAndChunksInPackage;
 
 		// We need to handle duplicates in case multiple files reference the
@@ -571,7 +573,7 @@ std::vector<SourcePackageInfo> WriteUserPackages (
 			sourcePackageId, contentObjectsInPackage);
 
 		// Write the package
-		SourcePackageWriter spw;
+		kyla::SourcePackageWriter spw;
 		spw.Open (targetDirectory / (packageNameTemplate (sourcePackageId)));
 
 		for (const auto kv : contentObjectsAndChunksInPackage) {
@@ -609,7 +611,7 @@ std::int64_t CreateGeneratedPackage (sqlite3* installationDatabase,
 		&insertSourcePackageStatement, nullptr);
 
 	const std::string packageName = std::string ("Generated_")
-		+ ToString (uuidGen ().data);
+		+ kyla::ToString (uuidGen ().data);
 
 	sqlite3_bind_text (insertSourcePackageStatement, 1,
 		packageName.c_str (), -1, SQLITE_TRANSIENT);
@@ -667,7 +669,7 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 
 	boost::uuids::random_generator uuidGen;
 
-	SourcePackageWriter spw;
+	kyla::SourcePackageWriter spw;
 	std::int64_t dataInCurrentPackage = 0;
 	std::int64_t currentPackageId = -1;
 
@@ -942,7 +944,7 @@ std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorCon
 		sqlite3_bind_text (insertSourcePackageStatement, 1,
 			sourcePackageId, -1, SQLITE_TRANSIENT);
 
-		const auto randomId = ToString (uuidGen().data);
+		const auto randomId = kyla::ToString (uuidGen().data);
 		sqlite3_bind_text (insertSourcePackageStatement, 2,
 			randomId.c_str (), -1, SQLITE_TRANSIENT);
 		sqlite3_bind_blob (insertSourcePackageStatement, 3,

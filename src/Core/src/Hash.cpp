@@ -6,8 +6,9 @@
 
 #include "FileIO.h"
 
+namespace kyla {
 ////////////////////////////////////////////////////////////////////////////////
-Hash ComputeHash (const int64_t size, const void* data)
+Hash ComputeHash (const void* data, const std::int64_t size)
 {
     Hash result;
 
@@ -46,4 +47,5 @@ Hash ComputeHash (const boost::filesystem::path& p, std::vector<unsigned char>& 
 	EVP_DigestFinal_ex (fileCtx, result.hash, nullptr);
 
 	return result;
+}
 }

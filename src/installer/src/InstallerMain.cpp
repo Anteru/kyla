@@ -17,6 +17,7 @@
 
 #include "Hash.h"
 #include "SourcePackage.h"
+#include "SourcePackageReader.h"
 
 ////////////////////////////////////////////////////////////////////////////////
 template <typename T>
@@ -53,7 +54,7 @@ std::string GetContentObjectHashesChunkCountForSelectedFeaturesQueryString (
 	const std::vector<std::int64_t>& featureIds)
 {
 	std::stringstream result;
-	result << "SELECT Hash, ChunkCount, Size FROM content_objects WHERE Id IN ("
+	result << "SELECT Hash, ChunkCount, Size, LENGTH(Hash) FROM content_objects WHERE Id IN ("
 		   << "SELECT ContentObjectId FROM files WHERE FeatureId IN ("
 		   << Join (featureIds)
 			  // We have to group by to resolve duplicates
@@ -163,9 +164,17 @@ int main (int argc, char* argv [])
 		GetContentObjectHashesChunkCountForSelectedFeaturesQueryString (selectedFeatureIds).c_str (),
 		-1, &selectRequiredContentObjectsStatement, nullptr);
 
-	std::unordered_map<Hash, int, HashHash, HashEqual> requiredContentObjects;
+	std::unordered_map<kyla::Hash, int, kyla::HashHash, kyla::HashEqual> requiredContentObjects;
 	while (sqlite3_step (selectRequiredContentObjectsStatement) == SQLITE_ROW) {
-		Hash hash;
+		kyla::Hash hash;
+
+		const auto hashSize = sqlite3_column_int64 (selectRequiredContentObjectsStatement, 4);
+
+		if (hashSize != sizeof (hash.hash)) {
+			log->error () << "Hash size mismatch, skipping file";
+			continue;
+		}
+
 		::memcpy (hash.hash,
 			sqlite3_column_blob (selectRequiredContentObjectsStatement, 0),
 			sizeof (hash.hash));
@@ -174,7 +183,6 @@ int main (int argc, char* argv [])
 		const auto size = sqlite3_column_int64 (selectRequiredContentObjectsStatement, 2);
 		requiredContentObjects [hash] = chunkCount;
 
-		// Linux-specific
 		auto targetFile = kyla::CreateFile (
 			(stagingDirectory / ToString (hash)).c_str ());
 
@@ -190,9 +198,9 @@ int main (int argc, char* argv [])
 	// the requested content objects
 	// As we have pre-allocated everything, this can run in parallel
 	for (const auto& sourcePackageFilename : requiredSourcePackageFilenames) {
-		FileSourcePackageReader reader (packageDirectory / sourcePackageFilename);
+		kyla::FileSourcePackageReader reader (packageDirectory / sourcePackageFilename);
 
-		reader.Store ([&requiredContentObjects](const Hash& hash) -> bool {
+		reader.Store ([&requiredContentObjects](const kyla::Hash& hash) -> bool {
 			return requiredContentObjects.find (hash) != requiredContentObjects.end ();
 		}, stagingDirectory);
 
@@ -242,7 +250,7 @@ int main (int argc, char* argv [])
 
 			kyla::CreateFile (targetPath.c_str ());
 		} else {
-			Hash hash;
+			kyla::Hash hash;
 
 			const auto hashSize = sqlite3_column_int64 (selectFilesStatement, 2);
 
