@@ -6,39 +6,39 @@
 namespace kyla {
 ////////////////////////////////////////////////////////////////////////////////
 Property::Property (const Property& p)
-	: type (p.type)
-	, size (p.size)
+	: type_ (p.type_)
+	, size_ (p.size_)
 {
-	switch (p.type) {
+	switch (p.type_) {
 	case PropertyType::Int:
-		i = p.i;
+		i_ = p.i_;
 		break;
 	case PropertyType::String:
-		s = ::strdup (p.s);
+		str_ = ::strdup (p.str_);
 		break;
 	case PropertyType::Binary:
-		b = ::malloc (size);
-		::memcpy (b, p.b, size);
+		binary_ = ::malloc (size_);
+		::memcpy (binary_, p.binary_, size_);
 		break;
 	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-Property& Property::operator=(const Property& p)
+Property& Property::operator= (const Property& p)
 {
-	type = p.type;
-	size = p.size;
+	type_ = p.type_;
+	size_ = p.size_;
 
-	switch (p.type) {
+	switch (p.type_) {
 	case PropertyType::Int:
-		i = p.i;
+		i_ = p.i_;
 		break;
 	case PropertyType::String:
-		s = ::strdup (p.s);
+		str_ = ::strdup (p.str_);
 		break;
 	case PropertyType::Binary:
-		b = ::malloc (size);
-		::memcpy (b, p.b, size);
+		binary_ = ::malloc (size_);
+		::memcpy (binary_, p.binary_, size_);
 		break;
 	}
 
@@ -47,86 +47,86 @@ Property& Property::operator=(const Property& p)
 
 ////////////////////////////////////////////////////////////////////////////////
 Property::Property (Property&& p)
-	: type (p.type)
-	, size (p.size)
+	: type_ (p.type_)
+	, size_ (p.size_)
 {
-	switch (p.type) {
+	switch (p.type_) {
 	case PropertyType::Int:
-		i = p.i;
+		i_ = p.i_;
 		break;
 	case PropertyType::String:
-		s = p.s;
+		str_ = p.str_;
 		break;
 	case PropertyType::Binary:
-		b = p.b;
+		binary_ = p.binary_;
 		break;
 	}
 
 	// Undefined but safe state, we take ownership of memory, so null it
 	// out
-	p.type = PropertyType::Null;
+	p.type_ = PropertyType::Null;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 Property& Property::operator=(Property&& p)
 {
-	type = p.type;
-	size = p.size;
+	type_ = p.type_;
+	size_ = p.size_;
 
-	switch (p.type) {
+	switch (p.type_) {
 	case PropertyType::Int:
-		i = p.i;
+		i_ = p.i_;
 		break;
 	case PropertyType::String:
-		s = p.s;
+		str_ = p.str_;
 		break;
 	case PropertyType::Binary:
-		b = p.b;
+		binary_ = p.binary_;
 		break;
 	}
 
 	// Undefined but safe state, we take ownership of memory, so null it
 	// out
-	p.type = PropertyType::Null;
+	p.type_ = PropertyType::Null;
 
 	return *this;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 Property::Property (const int i)
-	: type (PropertyType::Int)
-	, i (i)
-	, size (sizeof (i))
+	: type_ (PropertyType::Int)
+	, i_ (i)
+	, size_ (sizeof (i))
 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 Property::Property (const char* s)
-	: type (PropertyType::String)
-	, s (::strdup (s))
-	, size (::strlen (s) + 1)
+	: type_ (PropertyType::String)
+	, str_ (::strdup (s))
+	, size_ (::strlen (s) + 1)
 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 Property::Property (const void* b, const int size)
-	: type (PropertyType::Binary)
-	, size (size)
+	: type_ (PropertyType::Binary)
+	, size_ (size)
 {
-	this->b = ::malloc (size);
-	::memcpy (this->b, b, size);
+	this->binary_ = ::malloc (size);
+	::memcpy (this->binary_, b, size);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 Property::~Property ()
 {
-	switch (type) {
+	switch (type_) {
 	case PropertyType::String:
-		::free (s);
+		::free (str_);
 		break;
 
 	case PropertyType::Binary:
-		::free (b);
+		::free (binary_);
 		break;
 
 	default:

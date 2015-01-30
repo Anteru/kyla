@@ -311,18 +311,15 @@ int kylaCloseInstallationPackage (KylaInstaller* package)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-int kylaPropertyGetBinaryValue (const KylaProperty* property, void** d, int* size)
+int kylaPropertyGetBinaryValue (const KylaProperty* property, const void** d, int* size)
 {
-	if (property->property.type != kyla::PropertyType::Binary) {
+	if (property->property.GetType () != kyla::PropertyType::Binary) {
 		return KylaError;
 	}
 
+	const void* r = property->property.GetBinary (size);
 	if (d) {
-		*d = property->property.b;
-	}
-
-	if (size) {
-		*size = property->property.size;
+		*d = r;
 	}
 
 	return KylaSuccess;
@@ -331,12 +328,12 @@ int kylaPropertyGetBinaryValue (const KylaProperty* property, void** d, int* siz
 ////////////////////////////////////////////////////////////////////////////////
 int kylaPropertyGetStringValue (const KylaProperty* property, const char** o)
 {
-	if (property->property.type != kyla::PropertyType::String) {
+	if (property->property.GetType () != kyla::PropertyType::String) {
 		return KylaError;
 	}
 
 	if (o) {
-		*o = property->property.s;
+		*o = property->property.GetString ();
 	}
 
 	return KylaSuccess;
@@ -345,12 +342,12 @@ int kylaPropertyGetStringValue (const KylaProperty* property, const char** o)
 ////////////////////////////////////////////////////////////////////////////////
 int kylaPropertyGetIntValue (const KylaProperty* property, int* i)
 {
-	if (property->property.type != kyla::PropertyType::Int) {
+	if (property->property.GetType () != kyla::PropertyType::Int) {
 		return KylaError;
 	}
 
 	if (i) {
-		*i = property->property.i;
+		*i = property->property.GetInt ();
 	}
 
 	return KylaSuccess;

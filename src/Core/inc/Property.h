@@ -28,15 +28,46 @@ public:
 
 	~Property ();
 
-	PropertyType type = PropertyType::Null;
+	int GetInt () const
+	{
+		return i_;
+	}
+
+	const char* GetString () const
+	{
+		return str_;
+	}
+
+	const void* GetBinary (int* size) const
+	{
+		if (size) {
+			*size = size_;
+		}
+
+		return binary_;
+	}
+
+	int GetSize () const
+	{
+		return size_;
+	}
+
+	PropertyType GetType () const
+	{
+		return type_;
+	}
+
+private:
+
+	PropertyType type_ = PropertyType::Null;
 
 	union {
-		char* s;
-		int i;
-		void* b;
+		char* str_;
+		int i_;
+		void* binary_;
 	};
 
-	int size = 0;
+	int size_ = 0;
 };
 }
 

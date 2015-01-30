@@ -24,9 +24,6 @@ public:
 private:
 	std::unordered_map<std::string, Property> properties_;
 	std::vector<int> selectedFeatures_;
-
-	const char* logFilename_ = nullptr;
-	int logMode_ = 0;
 };
 
 class Installer

@@ -38,7 +38,7 @@ KylaProperty* kylaCreateBinaryProperty (const void* d, const int size);
 
 int kylaPropertyGetStringValue (const struct KylaProperty* property, const char** value);
 int kylaPropertyGetIntValue (const struct KylaProperty* property, int* value);
-int kylaPropertyGetBinaryValue (const struct KylaProperty* property, void** d, int* size);
+int kylaPropertyGetBinaryValue (const struct KylaProperty* property, const void** d, int* size);
 
 int kylaDeleteProperty (struct KylaProperty* property);
 

@@ -113,12 +113,12 @@ void Installer::Install (sqlite3* db, InstallationEnvironment env)
 {
 	std::shared_ptr<spdlog::logger>  log;
 
-	if (env.HasProperty("$LogFilename") && env.GetProperty("$LogFilename").s) {
+	if (env.HasProperty("$LogFilename") && env.GetProperty("$LogFilename").GetString ()) {
 		log = spdlog::create<spdlog::sinks::simple_file_sink_mt> ("install",
-			env.GetProperty("$LogFilename").s);
+			env.GetProperty("$LogFilename").GetString ());
 
 		if (env.HasProperty ("$LogLevel")) {
-			switch (env.GetProperty ("$LogLevel").i) {
+			switch (env.GetProperty ("$LogLevel").GetInt ()) {
 			case 0:
 				log->set_level (spdlog::level::debug);
 				break;
@@ -139,14 +139,14 @@ void Installer::Install (sqlite3* db, InstallationEnvironment env)
 
 	const auto sourcePackageDirectory = env.HasProperty ("SourcePackageDirectory") ?
 			absolute (boost::filesystem::path (
-				env.GetProperty ("SourcePackageDirectory").s))
+				env.GetProperty ("SourcePackageDirectory").GetString ()))
 		:	absolute (boost::filesystem::path ("."));
 
 	const boost::filesystem::path targetDirectory =
-		env.GetProperty ("TargetDirectory").s;
+		env.GetProperty ("TargetDirectory").GetString ();
 	const auto stagingDirectory = env.HasProperty ("StagingDirectory") ?
 			absolute (boost::filesystem::path (
-				env.GetProperty ("StagingDirectory").s))
+				env.GetProperty ("StagingDirectory").GetString ()))
 		:	absolute (boost::filesystem::path ("./stage"));
 
 	boost::filesystem::create_directories (targetDirectory);
