@@ -24,6 +24,7 @@ enum KylaResult
 
 enum KylaLogLevel
 {
+	KylaLogLevelTrace,
 	KylaLogLevelDebug,
 	KylaLogLevelInfo,
 	KylaLogLevelWarning,

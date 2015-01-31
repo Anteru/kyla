@@ -360,7 +360,7 @@ int kylaLog (KylaInstaller *installer, const char *logFileName, const int logLev
 		return KylaError;
 	}
 
-	if (logLevel < KylaLogLevelDebug || logLevel > KylaLogLevelError) {
+	if (logLevel < KylaLogLevelTrace || logLevel > KylaLogLevelError) {
 		return KylaError;
 	}
 

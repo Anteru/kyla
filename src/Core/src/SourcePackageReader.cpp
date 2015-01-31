@@ -5,10 +5,12 @@
 #include "SourcePackage.h"
 #include "FileIO.h"
 
+#include "Log.h"
+
 namespace kyla {
 ////////////////////////////////////////////////////////////////////////////////
 void ISourcePackageReader::Store (const std::function<bool (const Hash&)>& filter,
-	const boost::filesystem::path& directory, spdlog::logger& log)
+	const boost::filesystem::path& directory, Log& log)
 {
 	StoreImpl (filter, directory, log);
 }
@@ -24,7 +26,7 @@ public:
 
 	void Store (const std::function<bool (const Hash &)>& filter,
 		const boost::filesystem::path& directory,
-		spdlog::logger& log)
+		Log& log)
 	{
 		PackageHeader header;
 		input_->Read (&header, sizeof (header));
@@ -42,7 +44,7 @@ public:
 			if (filter (hash)) {
 				input_->Seek (entry.offset);
 
-				log.debug () << "Extracing content object " << ToString (hash) << " to "
+				log.Debug () << "Extracing content object " << ToString (hash) << " to "
 					<< absolute (directory / ToString (hash)).c_str ();
 
 				PackageDataChunk chunkEntry;
@@ -95,7 +97,7 @@ FileSourcePackageReader::~FileSourcePackageReader ()
 
 ////////////////////////////////////////////////////////////////////////////////
 void FileSourcePackageReader::StoreImpl (const std::function<bool (const Hash &)>& filter,
-	const boost::filesystem::path& directory, spdlog::logger& log)
+	const boost::filesystem::path& directory, Log& log)
 {
 	impl_->Store (filter, directory, log);
 }

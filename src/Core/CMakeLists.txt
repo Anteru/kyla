@@ -5,6 +5,7 @@ SET(HEADERS
     inc/Hash.h
 	inc/Installer.h
 	inc/Kyla.h
+	inc/Log.h
 	inc/Property.h
     inc/SourcePackage.h
 	inc/SourcePackageReader.h

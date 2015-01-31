@@ -13,8 +13,7 @@
 
 #include "FileIO.h"
 
-#include <spdlog.h>
-#include <sinks/null_sink.h>
+#include "Log.h"
 
 #include "Hash.h"
 #include "SourcePackage.h"
@@ -111,31 +110,17 @@ std::string GetFilesForSelectedFeaturesQueryString (
 ////////////////////////////////////////////////////////////////////////////////
 void Installer::Install (sqlite3* db, InstallationEnvironment env)
 {
-	std::shared_ptr<spdlog::logger>  log;
-
-	if (env.HasProperty("$LogFilename") && env.GetProperty("$LogFilename").GetString ()) {
-		log = spdlog::create<spdlog::sinks::simple_file_sink_mt> ("install",
-			env.GetProperty("$LogFilename").GetString ());
-
-		if (env.HasProperty ("$LogLevel")) {
-			switch (env.GetProperty ("$LogLevel").GetInt ()) {
-			case 0:
-				log->set_level (spdlog::level::debug);
-				break;
-			case 1:
-				log->set_level (spdlog::level::info);
-				break;
-			case 2:
-				log->set_level (spdlog::level::warn);
-				break;
-			case 3:
-				log->set_level (spdlog::level::err);
-				break;
-			}
-		}
-	} else {
-		log = spdlog::create<spdlog::sinks::null_sink_mt> ("install");
+	const char* logFilename = nullptr;
+	if (env.HasProperty ("$LogFilename")) {
+		logFilename = env.GetProperty ("$LogFilename").GetString ();
 	}
+
+	LogLevel logLevel = LogLevel::Info;
+	if (env.HasProperty ("$LogLevel")) {
+		logLevel = static_cast<LogLevel> (env.GetProperty ("$LogLevel").GetInt ());
+	}
+
+	Log log {"Install", logFilename, logLevel};
 
 	const auto sourcePackageDirectory = env.HasProperty ("SourcePackageDirectory") ?
 			absolute (boost::filesystem::path (
@@ -163,7 +148,7 @@ void Installer::Install (sqlite3* db, InstallationEnvironment env)
 	while (sqlite3_step (selectRequiredSourcePackagesStatement) == SQLITE_ROW) {
 		const std::string packageFilename =
 			reinterpret_cast<const char*> (sqlite3_column_text (selectRequiredSourcePackagesStatement, 0));
-		log->debug () << "Requesting package " << packageFilename;
+		log.Debug () << "Requesting package " << packageFilename;
 		requiredSourcePackageFilenames.push_back (packageFilename);
 	}
 
@@ -181,7 +166,7 @@ void Installer::Install (sqlite3* db, InstallationEnvironment env)
 		const auto hashSize = sqlite3_column_int64 (selectRequiredContentObjectsStatement, 3);
 
 		if (hashSize != sizeof (hash.hash)) {
-			log->error () << "Hash size mismatch, skipping content object";
+			log.Error () << "Hash size mismatch, skipping content object";
 			continue;
 		}
 
@@ -193,14 +178,13 @@ void Installer::Install (sqlite3* db, InstallationEnvironment env)
 		const auto size = sqlite3_column_int64 (selectRequiredContentObjectsStatement, 2);
 		requiredContentObjects [hash] = chunkCount;
 
-		auto targetFile = kyla::CreateFile (
-			(stagingDirectory / ToString (hash)).c_str ());
+		kyla::CreateFile (
+			(stagingDirectory / ToString (hash)).c_str ())->SetSize (size);
 
-		targetFile->SetSize (size);
-		log->trace () << "Content object " << ToString (hash) << " allocated";
+		log.Trace () << "Content object " << ToString (hash) << " allocated (" << size << " bytes)";
 	}
 
-	log->info () << "Requested " << requiredContentObjects.size () << " content objects";
+	log.Info () << "Requested " << requiredContentObjects.size () << " content objects";
 
 	sqlite3_finalize (selectRequiredContentObjectsStatement);
 
@@ -210,13 +194,13 @@ void Installer::Install (sqlite3* db, InstallationEnvironment env)
 	for (const auto& sourcePackageFilename : requiredSourcePackageFilenames) {
 		kyla::FileSourcePackageReader reader (sourcePackageDirectory / sourcePackageFilename);
 
-		log->info () << "Processing source package " << sourcePackageFilename;
+		log.Info () << "Processing source package " << sourcePackageFilename;
 
 		reader.Store ([&requiredContentObjects](const kyla::Hash& hash) -> bool {
 			return requiredContentObjects.find (hash) != requiredContentObjects.end ();
-		}, stagingDirectory, *log);
+		}, stagingDirectory, log);
 
-		log->info () << "Processed source package " << sourcePackageFilename;
+		log.Info () << "Processed source package " << sourcePackageFilename;
 	}
 
 	// Once done, we walk once more over the file list and just copy the
@@ -242,14 +226,14 @@ void Installer::Install (sqlite3* db, InstallationEnvironment env)
 		if (! boost::filesystem::exists (directory)) {
 			boost::filesystem::create_directories (directory);
 
-			log->debug () << "Creating directory " << directory;
+			log.Debug () << "Creating directory " << directory;
 		}
 	}
 
 	sqlite3_reset (selectFilesStatement);
 
-	log->info () << "Created directories";
-	log->info () << "Deploying files";
+	log.Info () << "Created directories";
+	log.Info () << "Deploying files";
 
 	while (sqlite3_step (selectFilesStatement) == SQLITE_ROW) {
 		const auto targetPath =
@@ -258,7 +242,7 @@ void Installer::Install (sqlite3* db, InstallationEnvironment env)
 
 		// If null, we need to create an empty file there
 		if (sqlite3_column_type (selectFilesStatement, 1) == SQLITE_NULL) {
-			log->debug () << "Creating empty file " << targetPath.string ();
+			log.Debug () << "Creating empty file " << targetPath.string ();
 
 			kyla::CreateFile (targetPath.c_str ());
 		} else {
@@ -267,14 +251,14 @@ void Installer::Install (sqlite3* db, InstallationEnvironment env)
 			const auto hashSize = sqlite3_column_int64 (selectFilesStatement, 2);
 
 			if (hashSize != sizeof (hash.hash)) {
-				log->error () << "Hash size mismatch, skipping file";
+				log.Error () << "Hash size mismatch, skipping file";
 				continue;
 			}
 
 			::memcpy (hash.hash, sqlite3_column_blob (selectFilesStatement, 1),
 				sizeof (hash.hash));
 
-			log->debug () << "Copying " << (stagingDirectory / ToString (hash)).string () << " to " << absolute (targetPath).string ();
+			log.Debug () << "Copying " << (stagingDirectory / ToString (hash)).string () << " to " << absolute (targetPath).string ();
 
 			// Make this smarter, i.e. move first time, and on second time, copy
 			boost::filesystem::copy_file (stagingDirectory / ToString (hash),
@@ -282,7 +266,7 @@ void Installer::Install (sqlite3* db, InstallationEnvironment env)
 		}
 	}
 
-	log->info () << "Done";
+	log.Info () << "Done";
 	sqlite3_finalize (selectFilesStatement);
 
 	sqlite3_close (db);

@@ -5,11 +5,11 @@
 #include <functional>
 #include <memory>
 
-#include <spdlog.h>
-
 #include "Hash.h"
 
 namespace kyla {
+class Log;
+
 class ISourcePackageReader
 {
 public:
@@ -20,12 +20,12 @@ public:
 
 	void Store (const std::function<bool (const Hash&)>& filter,
 		const boost::filesystem::path& directory,
-		spdlog::logger& log);
+		Log& log);
 
 private:
 	virtual void StoreImpl (const std::function<bool (const Hash&)>& filter,
 		const boost::filesystem::path& directory,
-		spdlog::logger& log) = 0;
+		Log& log) = 0;
 };
 
 class FileSourcePackageReader final : public ISourcePackageReader
@@ -37,7 +37,7 @@ public:
 private:
 	void StoreImpl (const std::function<bool (const Hash&)>& filter,
 		const boost::filesystem::path& directory,
-		spdlog::logger& log) override;
+		Log& log) override;
 
 	struct Impl;
 	std::unique_ptr<Impl> impl_;

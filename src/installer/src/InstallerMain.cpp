@@ -15,7 +15,7 @@ int main (int argc, char* argv [])
 
 	po::options_description desc ("Configuration");
 	desc.add_options ()
-		("log-level", po::value<int> ()->default_value (1))
+		("log-level", po::value<int> ()->default_value (KylaLogLevelInfo))
 		("log-file", po::value<std::string> ()->default_value ("install.log"))
 		("package-directory", po::value<std::string> ()->default_value ("."));
 
