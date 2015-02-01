@@ -24,8 +24,11 @@ Terms
 
 The following terms are used throughout the documentation:
 
+Installation package
+  The installer base file, at least containing an installation database, and optionally containing several embedded source packages.
+
 Source package
-  A compressed file containing content objects. Content objects may be split across multiple source packages.
+  A compressed file containing content objects. Content objects may be split across multiple source packages. A source package can be *embedded*, in which case it is added to the installation package.
 
 Content object
   Opaque data associated with one or more files. This is the actual payload installed by the installer. A content object is identified by it's content, that is, its SHA512 hash.
@@ -34,7 +37,7 @@ Installation source
   Either a URL or a directory, containing *source packages*.
 
 Installation database
-  A database describing the installation package (source packages, files, etc.)
+  A database describing the installation package (source packages, files, etc.) This is always stored in an installation package.
 
 Deployment database
   Stores all installed files and their content hashes. The deployment database is created during the installation and can be used to validate and repair an installation, as well as uninstalling.
