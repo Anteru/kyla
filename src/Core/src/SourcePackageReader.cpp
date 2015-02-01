@@ -47,7 +47,7 @@ public:
 				log.Debug () << "Extracing content object " << ToString (hash) << " to "
 					<< absolute (directory / ToString (hash)).c_str ();
 
-				SourcePackageDataChunk chunkEntry;
+				SourcePackageChunk chunkEntry;
 				input_->Read (&chunkEntry, sizeof (chunkEntry));
 
 				if (chunkEntry.compressionMode == CompressionMode_Zip) {

@@ -35,14 +35,14 @@ enum CompressionMode
 	CompressionMode_LZHAM
 };
 
-struct SourcePackageDataChunk
+struct SourcePackageChunk
 {
 	std::uint8_t hash [64];
 	std::int64_t offset;				// Offset into the target file
-	std::int64_t size;				// Size of the uncompressed data
+	std::int64_t size;					// Size of the uncompressed data
 
 	std::int64_t compressedSize;		// Size of this package chunk
-	std::int8_t  compressionMode;	// One of the CompressionMode entries
+	std::int8_t  compressionMode;		// One of the CompressionMode entries
 	std::uint8_t reserved [7];
 };
 }

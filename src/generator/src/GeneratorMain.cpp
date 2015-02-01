@@ -276,7 +276,7 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 				static_cast<std::int64_t> (compressedSize)};
 			chunks.push_back (chunkInfo);
 
-			kyla::SourcePackageDataChunk pdc;
+			kyla::SourcePackageChunk pdc;
 			::memset (&pdc, 0, sizeof (pdc));
 
 			pdc.compressedSize = compressedSize;
