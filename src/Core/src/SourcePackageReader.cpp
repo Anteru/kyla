@@ -28,12 +28,12 @@ public:
 		const boost::filesystem::path& directory,
 		Log& log)
 	{
-		PackageHeader header;
+		SourcePackageHeader header;
 		input_->Read (&header, sizeof (header));
 		input_->Seek (header.indexOffset);
 
-		std::vector<PackageIndex> index (header.indexEntries);
-		input_->Read (index.data (), sizeof (PackageIndex) * index.size ());
+		std::vector<SourcePackageIndexEntry> index (header.indexEntryCount);
+		input_->Read (index.data (), sizeof (SourcePackageIndexEntry) * index.size ());
 
 		std::vector<unsigned char> buffer;
 		for (const auto& entry : index) {
@@ -47,7 +47,7 @@ public:
 				log.Debug () << "Extracing content object " << ToString (hash) << " to "
 					<< absolute (directory / ToString (hash)).c_str ();
 
-				PackageDataChunk chunkEntry;
+				SourcePackageDataChunk chunkEntry;
 				input_->Read (&chunkEntry, sizeof (chunkEntry));
 
 				if (chunkEntry.compressionMode == CompressionMode_Zip) {

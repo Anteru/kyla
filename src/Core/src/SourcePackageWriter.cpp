@@ -64,11 +64,11 @@ Hash SourcePackageWriter::Finalize()
 	auto output = CreateFile (impl_->filename.c_str ());
 
 	// Write header
-	PackageHeader header;
+	SourcePackageHeader header;
 	::memset (&header, 0, sizeof (header));
 	::memcpy (header.id, "KYLAPACK", 8);
 	header.version = 1;
-	header.indexEntries = static_cast<std::int32_t> (impl_->hashChunkMap.size ());
+	header.indexEntryCount = static_cast<std::int32_t> (impl_->hashChunkMap.size ());
 	header.indexOffset = sizeof (header);
 
 	// Reserve space for index
@@ -76,8 +76,8 @@ Hash SourcePackageWriter::Finalize()
 
 	// Count all chunks, as we will create one entry per chunk
 	for (const auto& hashChunks : impl_->hashChunkMap) {
-		header.indexEntries += hashChunks.second.size ();
-		offset += sizeof (PackageIndex) * hashChunks.second.size ();
+		header.indexEntryCount += hashChunks.second.size ();
+		offset += sizeof (SourcePackageIndexEntry) * hashChunks.second.size ();
 	}
 
 	output->Write (&header, sizeof (header));
@@ -87,12 +87,12 @@ Hash SourcePackageWriter::Finalize()
 	// compute the final hash in this buffer
 	std::vector<unsigned char> buffer (4 << 20);
 
-	std::vector<PackageIndex> packageIndex;
+	std::vector<SourcePackageIndexEntry> packageIndex;
 	packageIndex.reserve (impl_->hashChunkMap.size ());
 
 	for (const auto& hashChunks : impl_->hashChunkMap) {
 		for (const auto& chunk : hashChunks.second) {
-			PackageIndex indexEntry;
+			SourcePackageIndexEntry indexEntry;
 			::memcpy (indexEntry.hash, hashChunks.first.hash, sizeof (hashChunks.first.hash));
 			indexEntry.offset = offset;
 
@@ -103,7 +103,7 @@ Hash SourcePackageWriter::Finalize()
 
 	output->Seek (sizeof (header));
 	output->Write (packageIndex.data (),
-		sizeof (PackageIndex) * packageIndex.size ());
+		sizeof (SourcePackageIndexEntry) * packageIndex.size ());
 
 	output->Close ();
 

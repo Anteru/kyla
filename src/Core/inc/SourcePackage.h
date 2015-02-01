@@ -11,16 +11,15 @@ A source package consists of:
 - Zero or more data chunks
 */
 
-struct PackageHeader
+struct SourcePackageHeader
 {
 	unsigned char	id [8];
-	std::int32_t			version;
-	std::int32_t			indexEntries;
-	std::int64_t			indexOffset;
-	std::int64_t			dataOffset;
+	std::int32_t	version;
+	std::int32_t	indexEntryCount;
+	std::int64_t	indexOffset;
 };
 
-struct PackageIndex
+struct SourcePackageIndexEntry
 {
 	std::uint8_t hash [64];
 	std::int64_t offset;		// Absolute offset within the source package
@@ -36,7 +35,7 @@ enum CompressionMode
 	CompressionMode_LZHAM
 };
 
-struct PackageDataChunk
+struct SourcePackageDataChunk
 {
 	std::uint8_t hash [64];
 	std::int64_t offset;				// Offset into the target file

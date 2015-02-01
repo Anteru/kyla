@@ -5,3 +5,6 @@ build/**
 nimtmp-*
 samples/linux-3.18/data/**
 samples/glfw/data/**
+samples/**/data
+samples/**/*.tar.xz
+samples/**/*.xml

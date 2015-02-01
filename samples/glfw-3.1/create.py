@@ -13,6 +13,9 @@ product.set ('Id', str (uuid.uuid4()).upper ())
 features = ET.SubElement (product, 'Features')
 sourcePackages = ET.SubElement (product, 'SourcePackages')
 
+# For this installer, we want everything packed nicely into one file
+sourcePackages.set ('Embedded', 'yes')
+
 feature = ET.SubElement (features, 'Feature')
 feature.set ('Id', 'Feature_{}'.format (uuid.uuid4().hex))
 
