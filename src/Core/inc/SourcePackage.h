@@ -2,6 +2,7 @@
 #define KYLA_CORE_INTERNAL_SOURCEPACKAGE_H
 
 #include <cstdint>
+#include "Compression.h"
 
 namespace kyla {
 /**
@@ -26,15 +27,6 @@ struct SourcePackageIndexEntry
 								// to the entry
 };
 
-enum CompressionMode
-{
-    CompressionMode_Uncompressed,
-    CompressionMode_Zip,
-    CompressionMode_LZMA,
-	CompressionMode_LZ4,
-	CompressionMode_LZHAM
-};
-
 struct SourcePackageChunk
 {
 	std::uint8_t hash [64];
@@ -42,7 +34,7 @@ struct SourcePackageChunk
 	std::int64_t size;					// Size of the uncompressed data
 
 	std::int64_t compressedSize;		// Size of this package chunk
-	std::int8_t  compressionMode;		// One of the CompressionMode entries
+	CompressionMode compressionMode;
 	std::uint8_t reserved [7];
 };
 }

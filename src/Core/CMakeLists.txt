@@ -1,9 +1,11 @@
 PROJECT(kyla_core)
 
 SET(HEADERS
+	inc/Compression.h
 	inc/FileIO.h
     inc/Hash.h
 	inc/Installer.h
+	inc/InstallPackage.h
 	inc/InstallPackageReader.h
 	inc/InstallPackageWriter.h
 	inc/Kyla.h

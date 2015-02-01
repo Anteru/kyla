@@ -282,7 +282,7 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 			pdc.compressedSize = compressedSize;
 			pdc.size = chunkSize;
 			pdc.offset = fileChunkSize * chunkNumber;
-			pdc.compressionMode = kyla::CompressionMode_Zip;
+			pdc.compressionMode = kyla::CompressionMode::Zip;
 
 			contentObjectCompressedSize += compressedSize;
 

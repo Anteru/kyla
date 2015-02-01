@@ -27,7 +27,7 @@ struct InstallPackageChunk
 	std::int64_t	offset;
 	std::int64_t	compressedSize;
 	std::int64_t	uncompressedSize;
-	std::uint8_t	compressionMode;
+	CompressionMode	compressionMode;
 	std::uint8_t	reserved [7];
 };
 }

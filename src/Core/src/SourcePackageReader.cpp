@@ -50,7 +50,7 @@ public:
 				SourcePackageChunk chunkEntry;
 				input_->Read (&chunkEntry, sizeof (chunkEntry));
 
-				if (chunkEntry.compressionMode == CompressionMode_Zip) {
+				if (chunkEntry.compressionMode == CompressionMode::Zip) {
 					if (buffer.size () < chunkEntry.compressedSize) {
 						buffer.resize (chunkEntry.compressedSize);
 					}
