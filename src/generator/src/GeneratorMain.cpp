@@ -115,53 +115,6 @@ void AssignFilesToFeaturesPackages (const pugi::xml_node& product,
 
 			++inputFileCount;
 		}
-
-		for (const auto& fileGroupRef : feature.children ("FileGroupReference")) {
-			const auto fileGroup = product.select_single_node (
-						(std::string ("FileGroup[@Id='")
-					  + std::string (fileGroupRef.attribute ("Id").value ())
-					  + std::string ("']")).c_str ());
-
-			if (!fileGroup) {
-				spdlog::get ("log")->error () << "Could not find file group "
-				  << fileGroupRef.attribute ("Id").value ()
-				  << " referenced from feature "
-				  << feature.attribute ("Id").value ();
-			}
-
-			if (fileGroup.node ().attribute ("SourcePackage")) {
-				fileSourcePackageId = sourcePackageIds.find (
-					fileGroup.node ().attribute ("SourcePackage").value ())->second;
-			} else {
-				fileSourcePackageId = -1;
-			}
-
-			for (const auto& file : fileGroup.node().children ("File")) {
-				SAFE_SQLITE (sqlite3_bind_text (insertFilesStatement, 1,
-					file.attribute ("Source").value (), -1, SQLITE_TRANSIENT));
-				SAFE_SQLITE (sqlite3_bind_int64 (insertFilesStatement, 4, fileSourcePackageId));
-
-				if (file.attribute ("Target")) {
-					SAFE_SQLITE (sqlite3_bind_text (insertFilesStatement, 2,
-						file.attribute ("Target").value (), -1, SQLITE_TRANSIENT));
-				} else {
-					SAFE_SQLITE (sqlite3_bind_text (insertFilesStatement, 2,
-						file.attribute ("Source").value (), -1, SQLITE_TRANSIENT));
-				}
-
-				if (fileSourcePackageId == -1) {
-					SAFE_SQLITE (sqlite3_bind_null (insertFilesStatement, 4));
-				} else {
-					SAFE_SQLITE (sqlite3_bind_int64 (insertFilesStatement, 4,
-						fileSourcePackageId));
-				}
-
-				sqlite3_step (insertFilesStatement);
-				sqlite3_reset (insertFilesStatement);
-
-				++inputFileCount;
-			}
-		}
 	}
 
 	SAFE_SQLITE (sqlite3_finalize (insertFilesStatement));

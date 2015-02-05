@@ -86,14 +86,8 @@ class InstallationBuilder:
 		decl = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
 		return decl + etree.tostring (root, encoding='utf-8').decode ('utf-8')
 
-def _PreprocessFileNodes (document):
-	for node in document.findall ('.//File'):
-		if not 'Target' in node.attrib:
-			node.set ('Target', node.attrib ['Source'])
-
 def Preprocess (xmlDocument, baseDirectory = os.getcwd ()):
 	'''Preprocess a Kyla XML installation description and return an element
 	tree corresponding to the preprocessed document. The baseDirectory is used
 	to resolve includes.'''
-	_PreprocessFileNodes (xmlDocument)
 	return xmlDocument
