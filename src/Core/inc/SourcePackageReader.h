@@ -10,13 +10,13 @@
 namespace kyla {
 class Log;
 
-class ISourcePackageReader
+class SourcePackageReader
 {
 public:
-	ISourcePackageReader () = default;
-	virtual ~ISourcePackageReader () = default;
-	ISourcePackageReader (const ISourcePackageReader&) = delete;
-	ISourcePackageReader& operator= (const ISourcePackageReader&) = delete;
+	SourcePackageReader () = default;
+	virtual ~SourcePackageReader () = default;
+	SourcePackageReader (const SourcePackageReader&) = delete;
+	SourcePackageReader& operator= (const SourcePackageReader&) = delete;
 
 	void Store (const std::function<bool (const Hash&)>& filter,
 		const boost::filesystem::path& directory,
@@ -28,7 +28,7 @@ private:
 		Log& log) = 0;
 };
 
-class FileSourcePackageReader final : public ISourcePackageReader
+class FileSourcePackageReader final : public SourcePackageReader
 {
 public:
 	FileSourcePackageReader (const boost::filesystem::path& filename);

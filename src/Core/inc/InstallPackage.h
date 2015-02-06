@@ -12,7 +12,7 @@ struct InstallPackageHeader
 	std::int64_t	indexOffset;
 };
 
-struct InstallPackageChunk
+struct InstallPackageIndexEntry
 {
 	std::uint8_t	hash [64];
 

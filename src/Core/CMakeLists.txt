@@ -16,6 +16,7 @@ SET(HEADERS
 	inc/SourcePackageWriter.h)
 
 SET(SOURCES
+	src/Compression.cpp
 	src/FileIO.cpp
     src/Hash.cpp
 	src/Installer.cpp

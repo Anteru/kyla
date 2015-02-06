@@ -30,22 +30,81 @@ Hash ComputeHash (const boost::filesystem::path& p, std::vector<unsigned char>& 
 {
 	auto input = kyla::OpenFile (p.c_str (), kyla::FileOpenMode::Read);
 
-	EVP_MD_CTX* fileCtx = EVP_MD_CTX_create ();
-	EVP_DigestInit_ex (fileCtx, EVP_sha512 (), nullptr);
+	StreamHasher hasher;
+	hasher.Initialize ();
 
 	for (;;) {
 		const auto bytesRead = input->Read (buffer.data (), buffer.size ());
 
-		EVP_DigestUpdate (fileCtx, buffer.data (), bytesRead);
+		hasher.Update (buffer.data (), bytesRead);
 
 		if (bytesRead < buffer.size ()) {
 			break;
 		}
 	}
 
-	Hash result;
-	EVP_DigestFinal_ex (fileCtx, result.hash, nullptr);
+	return hasher.Finalize ();
+}
 
-	return result;
+struct StreamHasher::Impl
+{
+public:
+	Impl ()
+	{
+		ctx_ = EVP_MD_CTX_create ();
+	}
+
+	~Impl ()
+	{
+		EVP_MD_CTX_destroy (ctx_);
+	}
+
+	void Initialize ()
+	{
+		EVP_DigestInit_ex (ctx_, EVP_sha512 (), nullptr);
+	}
+
+	void Update (const void* p, const std::int64_t size)
+	{
+		EVP_DigestUpdate (ctx_, p, size);
+	}
+
+	Hash Finalize ()
+	{
+		Hash result;
+		EVP_DigestFinal_ex (ctx_, result.hash, nullptr);
+	}
+
+private:
+	EVP_MD_CTX*	ctx_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+StreamHasher::StreamHasher ()
+: impl_ (new Impl)
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+StreamHasher::~StreamHasher ()
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void StreamHasher::Initialize ()
+{
+	impl_->Initialize ();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void StreamHasher::Update (const void* data, const std::int64_t size)
+{
+	impl_->Update (data, size);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+Hash StreamHasher::Finalize ()
+{
+	return impl_->Finalize ();
 }
 }

@@ -9,7 +9,7 @@
 
 namespace kyla {
 ////////////////////////////////////////////////////////////////////////////////
-void ISourcePackageReader::Store (const std::function<bool (const Hash&)>& filter,
+void SourcePackageReader::Store (const std::function<bool (const Hash&)>& filter,
 	const boost::filesystem::path& directory, Log& log)
 {
 	StoreImpl (filter, directory, log);

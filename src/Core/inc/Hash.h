@@ -37,6 +37,24 @@ The default hash in Kyla is a 64-byte SHA512.
 */
 typedef THash<64> Hash;
 
+class StreamHasher final
+{
+public:
+	StreamHasher ();
+	~StreamHasher ();
+
+	StreamHasher (const StreamHasher&) = delete;
+	StreamHasher& operator= (const StreamHasher&) = delete;
+
+	void Initialize ();
+	void Update (const void* data, const std::int64_t size);
+	Hash Finalize ();
+
+private:
+	struct Impl;
+	std::unique_ptr<Impl> impl_;
+};
+
 Hash ComputeHash (const void* data, const std::int64_t size);
 Hash ComputeHash (const boost::filesystem::path& p);
 Hash ComputeHash (const boost::filesystem::path& p, std::vector<unsigned char>& buffer);
