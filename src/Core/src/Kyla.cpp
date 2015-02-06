@@ -142,20 +142,23 @@ struct KylaInstaller
 		sqlite3_close (db_);
 	}
 
-	void SetProperty (const char* name, const KylaProperty* value)
+	void SetProperty (kyla::PropertyCategory category, const std::string& name,
+		const KylaProperty* value)
 	{
-		environment_.SetProperty (name, value->property);
+		environment_.SetProperty (category, name, value->property);
 	}
 
-	bool HasProperty (const char* name) const
+	bool HasProperty (kyla::PropertyCategory category,
+		const std::string& name) const
 	{
-		return environment_.HasProperty (name);
+		return environment_.HasProperty (category, name);
 	}
 
-	KylaProperty* GetProperty (const char* name) const
+	KylaProperty* GetProperty (kyla::PropertyCategory category,
+		const std::string& name) const
 	{
 		KylaProperty* result = new KylaProperty;
-		result->property = environment_.GetProperty (name);
+		result->property = environment_.GetProperty (category, name);
 		return result;
 	}
 
@@ -280,24 +283,51 @@ int kylaInstall (KylaInstaller* package, KylaProgressCallback callback)
 	return KylaSuccess;
 }
 
-////////////////////////////////////////////////////////////////////////////////
-int kylaSetProperty (KylaInstaller* installer, const char* name, const KylaProperty* value)
+namespace {
+static kyla::PropertyCategory ToKylaPropertyCategory (KylaPropertyCategory category)
 {
-	// Property names starting with $ are reserved
-	if (name && name [0] == '$') {
+	switch (category) {
+	case KylaPropertyCategoryInstallation:
+		return kyla::PropertyCategory::Installation;
+	case KylaPropertyCategoryEnvironment:
+		return kyla::PropertyCategory::Environment;
+	}
+}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+int kylaSetProperty (KylaInstaller* installer, KylaPropertyCategory category, const char* name, const KylaProperty* value)
+{
+	if (installer == nullptr) {
 		return KylaError;
 	}
 
-	installer->SetProperty (name, value);
+	if (name == nullptr) {
+		return KylaError;
+	}
+
+	if (value == nullptr) {
+		return KylaError;
+	}
+
+	installer->SetProperty (ToKylaPropertyCategory (category), name, value);
 
 	return KylaSuccess;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-int kylaGetProperty (KylaInstaller *installer, const char *name, KylaProperty **output)
+int kylaGetProperty (KylaInstaller *installer, KylaPropertyCategory category, const char *name, KylaProperty **output)
 {
-	if (installer->HasProperty (name)) {
-		*output = installer->GetProperty (name);
+	if (installer == nullptr) {
+		return KylaError;
+	}
+
+	if (name == nullptr) {
+		return KylaError;
+	}
+
+	if (installer->HasProperty (ToKylaPropertyCategory (category), name)) {
+		*output = installer->GetProperty (ToKylaPropertyCategory (category), name);
 		return KylaSuccess;
 	} else {
 		return KylaError;
@@ -354,7 +384,7 @@ int kylaPropertyGetIntValue (const KylaProperty* property, int* i)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-int kylaLog (KylaInstaller *installer, const char *logFileName, const int logLevel)
+int kylaConfigureLog (KylaInstaller *installer, const char *logFileName, const int logLevel)
 {
 	if (!installer) {
 		return KylaError;
@@ -364,6 +394,10 @@ int kylaLog (KylaInstaller *installer, const char *logFileName, const int logLev
 		return KylaError;
 	}
 
-	installer->GetEnvironment().SetProperty ("$LogFilename", kyla::Property (logFileName));
-	installer->GetEnvironment().SetProperty ("$LogLevel", kyla::Property (logLevel));
+	installer->GetEnvironment().SetProperty (kyla::PropertyCategory::Internal,
+		"LogFilename",
+		kyla::Property (logFileName));
+	installer->GetEnvironment().SetProperty (kyla::PropertyCategory::Internal,
+		"LogLevel",
+		kyla::Property (logLevel));
 }

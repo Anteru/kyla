@@ -35,21 +35,55 @@ const std::vector<int>& InstallationEnvironment::GetSelectedFeatures () const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void InstallationEnvironment::SetProperty (const char* name, const Property& value)
+void InstallationEnvironment::SetProperty (const PropertyCategory category,
+	const std::string& name, const Property& value)
 {
-	properties_ [name] = value;
+	switch (category) {
+	case PropertyCategory::Installation:
+		installationProperties_ [name] = value;
+		break;
+
+	case PropertyCategory::Internal:
+		internalProperties_ [name] = value;
+		break;
+
+	// cannot set other properties
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-bool InstallationEnvironment::HasProperty (const char* name) const
+bool InstallationEnvironment::HasProperty (const PropertyCategory category,
+	const std::string& name) const
 {
-	return properties_.find (name) != properties_.end ();
+	switch (category) {
+	case PropertyCategory::Installation:
+		return (installationProperties_.find (name) != installationProperties_.end ());
+
+	case PropertyCategory::Internal:
+		return (internalProperties_.find (name) != internalProperties_.end ());
+
+	/// TODO Handle environment properties here
+
+	default:
+		return false;
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-const Property& InstallationEnvironment::GetProperty (const char* name) const
+const Property& InstallationEnvironment::GetProperty (const PropertyCategory category,
+	const std::string& name) const
 {
-	return properties_.find (name)->second;
+	switch (category) {
+	case PropertyCategory::Installation:
+		return installationProperties_.find (name)->second;
+
+	case PropertyCategory::Internal:
+		return internalProperties_.find (name)->second;
+
+	/// TODO Handle environment properties here
+	default:
+		return Property ();
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -111,27 +145,29 @@ std::string GetFilesForSelectedFeaturesQueryString (
 void Installer::Install (sqlite3* db, InstallationEnvironment env)
 {
 	const char* logFilename = nullptr;
-	if (env.HasProperty ("$LogFilename")) {
-		logFilename = env.GetProperty ("$LogFilename").GetString ();
+	if (env.HasProperty (PropertyCategory::Internal, "LogFilename")) {
+		logFilename = env.GetProperty (PropertyCategory::Internal, "LogFilename").GetString ();
 	}
 
 	LogLevel logLevel = LogLevel::Info;
-	if (env.HasProperty ("$LogLevel")) {
-		logLevel = static_cast<LogLevel> (env.GetProperty ("$LogLevel").GetInt ());
+	if (env.HasProperty (PropertyCategory::Internal, "LogLevel")) {
+		logLevel = static_cast<LogLevel> (
+			env.GetProperty (PropertyCategory::Internal, "LogLevel").GetInt ());
 	}
 
 	Log log {"Install", logFilename, logLevel};
 
-	const auto sourcePackageDirectory = env.HasProperty ("SourcePackageDirectory") ?
+	const auto sourcePackageDirectory = env.HasProperty (
+		PropertyCategory::Installation, "SourcePackageDirectory") ?
 			absolute (boost::filesystem::path (
-				env.GetProperty ("SourcePackageDirectory").GetString ()))
+				env.GetProperty (PropertyCategory::Installation, "SourcePackageDirectory").GetString ()))
 		:	absolute (boost::filesystem::path ("."));
 
 	const boost::filesystem::path targetDirectory =
-		env.GetProperty ("TargetDirectory").GetString ();
-	const auto stagingDirectory = env.HasProperty ("StagingDirectory") ?
+		env.GetProperty (PropertyCategory::Installation, "TargetDirectory").GetString ();
+	const auto stagingDirectory = env.HasProperty (PropertyCategory::Installation, "StagingDirectory") ?
 			absolute (boost::filesystem::path (
-				env.GetProperty ("StagingDirectory").GetString ()))
+				env.GetProperty (PropertyCategory::Installation, "StagingDirectory").GetString ()))
 		:	absolute (boost::filesystem::path ("./stage"));
 
 	boost::filesystem::create_directories (targetDirectory);

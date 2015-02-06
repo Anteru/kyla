@@ -11,6 +11,8 @@ struct SourcePackageWriter::Impl
 public:
 	std::unordered_map<Hash, std::vector<boost::filesystem::path>, HashHash, HashEqual> hashChunkMap;
 	boost::filesystem::path filename;
+
+	std::uint8_t packageUuid [16];
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -25,9 +27,10 @@ SourcePackageWriter::~SourcePackageWriter ()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void SourcePackageWriter::Open (const boost::filesystem::path& filename)
+void SourcePackageWriter::Open (const boost::filesystem::path& filename, const void* uuid)
 {
 	impl_->filename = filename;
+	::memcpy (impl_->packageUuid, uuid, 16);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -68,6 +71,7 @@ Hash SourcePackageWriter::Finalize()
 	::memset (&header, 0, sizeof (header));
 	::memcpy (header.id, "KYLAPACK", 8);
 	header.version = 1;
+	::memcpy (header.packageId, impl_->packageUuid, sizeof (impl_->packageUuid));
 	header.indexEntryCount = static_cast<std::int32_t> (impl_->hashChunkMap.size ());
 	header.indexOffset = sizeof (header);
 

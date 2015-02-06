@@ -15,6 +15,7 @@ A source package consists of:
 struct SourcePackageHeader
 {
 	unsigned char	id [8];
+	std::uint8_t	packageId [16];
 	std::int32_t	version;
 	std::int32_t	indexEntryCount;
 	std::int64_t	indexOffset;

@@ -19,6 +19,7 @@ CREATE TABLE files (Path TEXT PRIMARY KEY NOT NULL,
 CREATE TABLE source_packages (Id INTEGER PRIMARY KEY NOT NULL,
     Name VARCHAR NOT NULL UNIQUE,
     Filename VARCHAR NOT NULL UNIQUE,
+    Uuid BLOB NOT NULL,
     Hash BLOB NOT NULL);
 
 -- Maps one content object to one or more source packages

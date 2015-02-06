@@ -71,19 +71,23 @@ int main (int argc, char* argv [])
 	kylaDeleteFeatures (features);
 
 	KylaProperty* targetDirectoryProperty = kylaCreateStringProperty (installationDirectory.c_str ());
-	kylaSetProperty (installer, "TargetDirectory", targetDirectoryProperty);
+	kylaSetProperty (installer, KylaPropertyCategoryInstallation,
+		"TargetDirectory", targetDirectoryProperty);
 	kylaDeleteProperty (targetDirectoryProperty);
 
 	KylaProperty* stagingDirectoryProperty = kylaCreateStringProperty (stagingDirectory.c_str ());
-	kylaSetProperty (installer, "StagingDirectory", stagingDirectoryProperty);
+	kylaSetProperty (installer, KylaPropertyCategoryInstallation,
+		"StagingDirectory", stagingDirectoryProperty);
 	kylaDeleteProperty (stagingDirectoryProperty);
 
 	KylaProperty* sourcePackageDirectoryProperty = kylaCreateStringProperty (packageDirectory.c_str ());
-	kylaSetProperty (installer, "SourcePackageDirectory", sourcePackageDirectoryProperty);
+	kylaSetProperty (installer, KylaPropertyCategoryInstallation,
+		"SourcePackageDirectory", sourcePackageDirectoryProperty);
 	kylaDeleteProperty (sourcePackageDirectoryProperty);
 
-	kylaLog (installer, vm ["log-file"].as<std::string> ().c_str (),
-			vm ["log-level"].as<int> ());
+	kylaConfigureLog (installer,
+		vm ["log-file"].as<std::string> ().c_str (),
+		vm ["log-level"].as<int> ());
 
 	kylaInstall (installer, nullptr);
 	kylaCloseInstallationPackage (installer);

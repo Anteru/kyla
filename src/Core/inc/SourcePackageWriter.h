@@ -19,7 +19,8 @@ public:
 	SourcePackageWriter (const SourcePackageWriter&) = delete;
 	SourcePackageWriter& operator=(const SourcePackageWriter&) = delete;
 
-	void Open (const boost::filesystem::path& outputFile);
+	void Open (const boost::filesystem::path& outputFile,
+		const void* uuid);
 	void Add (const Hash& hash, const boost::filesystem::path& chunkPath);
 	Hash Finalize ();
 

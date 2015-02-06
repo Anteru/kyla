@@ -425,7 +425,7 @@ std::vector<SourcePackageInfo> WriteUserPackages (
 	// First, we assemble all user-requested source packages
 	sqlite3_stmt* selectSourcePackageIdsStatement = nullptr;
 	SAFE_SQLITE (sqlite3_prepare_v2 (installationDatabase,
-		"SELECT Id, Name FROM source_packages;", -1,
+		"SELECT Id, Name, Uuid FROM source_packages;", -1,
 		&selectSourcePackageIdsStatement, nullptr));
 	assert (selectSourcePackageIdsStatement);
 
@@ -526,8 +526,10 @@ std::vector<SourcePackageInfo> WriteUserPackages (
 			sourcePackageId, contentObjectsInPackage);
 
 		// Write the package
+		const auto packageUuid = sqlite3_column_blob (selectSourcePackageIdsStatement, 2);
 		kyla::SourcePackageWriter spw;
-		spw.Open (targetDirectory / (packageNameTemplate (sourcePackageId)));
+		spw.Open (targetDirectory / (packageNameTemplate (sourcePackageId)),
+			packageUuid);
 
 		for (const auto kv : contentObjectsAndChunksInPackage) {
 			for (const auto chunk : kv.second) {
@@ -556,15 +558,15 @@ std::vector<SourcePackageInfo> WriteUserPackages (
 
 ////////////////////////////////////////////////////////////////////////////////
 std::int64_t CreateGeneratedPackage (sqlite3* installationDatabase,
-	boost::uuids::random_generator& uuidGen)
+	boost::uuids::uuid& packageUuid)
 {
 	sqlite3_stmt* insertSourcePackageStatement;
 	sqlite3_prepare_v2 (installationDatabase,
-		"INSERT INTO source_packages (Name, Filename, Hash) VALUES (?, ?, ?);", -1,
+		"INSERT INTO source_packages (Name, Filename, Uuid, Hash) VALUES (?, ?, ?, ?);", -1,
 		&insertSourcePackageStatement, nullptr);
 
 	const std::string packageName = std::string ("Generated_")
-		+ kyla::ToString (uuidGen ().data);
+		+ kyla::ToString (packageUuid.data);
 
 	sqlite3_bind_text (insertSourcePackageStatement, 1,
 		packageName.c_str (), -1, SQLITE_TRANSIENT);
@@ -572,7 +574,10 @@ std::int64_t CreateGeneratedPackage (sqlite3* installationDatabase,
 	// Dummy filename and hash, will be fixed up later
 	sqlite3_bind_text (insertSourcePackageStatement, 2,
 		packageName.c_str (), -1, SQLITE_TRANSIENT);
+
 	sqlite3_bind_blob (insertSourcePackageStatement, 3,
+		packageUuid.data, 16, SQLITE_TRANSIENT);
+	sqlite3_bind_blob (insertSourcePackageStatement, 4,
 		packageName.c_str (), packageName.size (), SQLITE_TRANSIENT);
 
 	SAFE_SQLITE_INSERT (sqlite3_step (insertSourcePackageStatement));
@@ -649,10 +654,12 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 					// Open current package if needed, start inserting
 					if (! spw.IsOpen ()) {
 						// Add a new source package
+						auto packageId = uuidGen ();
 						currentPackageId = CreateGeneratedPackage (
-							installationDatabase, uuidGen);
+							installationDatabase, packageId);
 
-						spw.Open (targetDirectory / packageNameTemplate (currentPackageId));
+						spw.Open (targetDirectory / packageNameTemplate (currentPackageId),
+							packageId.data);
 					}
 
 					// Insert the chunk right away, increment current size, if
@@ -807,6 +814,7 @@ public:
 	boost::filesystem::path sourceDirectory;
 	boost::filesystem::path	temporaryDirectory;
 	boost::filesystem::path targetDirectory;
+	boost::uuids::random_generator uuidGenerator;
 };
 
 /*
@@ -871,7 +879,8 @@ std::unordered_map<std::string, std::int64_t> CreateFeatures (GeneratorContext& 
 /*
 Returns a mapping of source package id string to the source package id in the database.
 */
-std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorContext& gc)
+std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorContext& gc,
+	boost::uuids::random_generator& uuidGen)
 {
 	sqlite3_exec (gc.installationDatabase, "BEGIN TRANSACTION;",
 		nullptr, nullptr, nullptr);
@@ -884,12 +893,8 @@ std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorCon
 
 	sqlite3_stmt* insertSourcePackageStatement;
 	sqlite3_prepare_v2 (gc.installationDatabase,
-		"INSERT INTO source_packages (Name, Filename, Hash) VALUES (?, ?, ?)", -1, &insertSourcePackageStatement,
+		"INSERT INTO source_packages (Name, Filename, Uuid, Hash) VALUES (?, ?, ?, ?)", -1, &insertSourcePackageStatement,
 		nullptr);
-
-	// We must use dummy file names/hashes, and fix this later up
-	// once we have all packages in place
-	boost::uuids::random_generator uuidGen;
 
 	int sourcePackageCount = 0;
 	for (const auto sourcePackage : gc.productNode.child ("SourcePackages").children ()) {
@@ -897,11 +902,13 @@ std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorCon
 		sqlite3_bind_text (insertSourcePackageStatement, 1,
 			sourcePackageId, -1, SQLITE_TRANSIENT);
 
-		const auto randomId = kyla::ToString (uuidGen().data);
+		const auto packageUuid = uuidGen ();
 		sqlite3_bind_text (insertSourcePackageStatement, 2,
-			randomId.c_str (), -1, SQLITE_TRANSIENT);
+			kyla::ToString (packageUuid.data).c_str (), -1, SQLITE_TRANSIENT);
 		sqlite3_bind_blob (insertSourcePackageStatement, 3,
-			randomId.c_str (), randomId.size (), SQLITE_TRANSIENT);
+			packageUuid.data, packageUuid.size (), SQLITE_TRANSIENT);
+		sqlite3_bind_blob (insertSourcePackageStatement, 4,
+			packageUuid.data, packageUuid.size (), SQLITE_TRANSIENT);
 
 		SAFE_SQLITE_INSERT (sqlite3_step (insertSourcePackageStatement));
 		sqlite3_reset (insertSourcePackageStatement);
@@ -1059,7 +1066,7 @@ int main (int argc, char* argv[])
 	gc.SetupBuildDatabase (gc.temporaryDirectory);
 
 	const auto featureIds = CreateFeatures (gc);
-	const auto sourcePackageIds = CreateSourcePackages (gc);
+	const auto sourcePackageIds = CreateSourcePackages (gc, gc.uuidGenerator);
 
 	AssignFilesToFeaturesPackages (gc.productNode, sourcePackageIds,
 		featureIds, gc.buildDatabase);

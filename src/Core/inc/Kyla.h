@@ -31,6 +31,12 @@ enum KylaLogLevel
 	KylaLogLevelError
 };
 
+enum KylaPropertyCategory
+{
+	KylaPropertyCategoryInstallation,
+	KylaPropertyCategoryEnvironment
+};
+
 struct KylaProperty;
 
 KylaProperty* kylaCreateStringProperty (const char* s);
@@ -43,7 +49,7 @@ int kylaPropertyGetBinaryValue (const struct KylaProperty* property, const void*
 
 int kylaDeleteProperty (struct KylaProperty* property);
 
-int kylaLog (struct KylaInstaller* installer, const char* logFileName,
+int kylaConfigureLog (struct KylaInstaller* installer, const char* logFileName,
 	const int logLevel);
 
 int kylaOpenInstallationPackage (const char* path, struct KylaInstaller** installer);
@@ -60,9 +66,11 @@ int kylaSelectFeatures (struct KylaInstaller* installer,
 	struct KylaFeature** selected);
 
 int kylaSetProperty (struct KylaInstaller* installer,
+	KylaPropertyCategory category,
 	const char* name, const struct KylaProperty* value);
 
 int kylaGetProperty (struct KylaInstaller* installer,
+	KylaPropertyCategory category,
 	const char* name, struct KylaProperty** output);
 
 typedef void (*KylaProgressCallback)(const int stageCount, const int stageProgress, const char* stageDescription);
