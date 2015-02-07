@@ -9,27 +9,27 @@ ADD_CUSTOM_COMMAND(
 	OUTPUT
 		${CMAKE_CURRENT_BINARY_DIR}/build-db-structure.h
 	COMMAND
-		txttoheader build_db_structure ${niven_installation_manager_SOURCE_DIR}/sql/build-db-structure.sql > ${CMAKE_CURRENT_BINARY_DIR}/build-db-structure.h
+		txttoheader build_db_structure ${kyla_SOURCE_DIR}/sql/build-db-structure.sql > ${CMAKE_CURRENT_BINARY_DIR}/build-db-structure.h
 	DEPENDS
-		${niven_installation_manager_SOURCE_DIR}/sql/build-db-structure.sql
+		${kyla_SOURCE_DIR}/sql/build-db-structure.sql
 	)
 
 ADD_CUSTOM_COMMAND(
 	OUTPUT
 		${CMAKE_CURRENT_BINARY_DIR}/install-db-structure.h
 	COMMAND
-		txttoheader install_db_structure ${niven_installation_manager_SOURCE_DIR}/sql/install-db-structure.sql > ${CMAKE_CURRENT_BINARY_DIR}/install-db-structure.h
+		txttoheader install_db_structure ${kyla_SOURCE_DIR}/sql/install-db-structure.sql > ${CMAKE_CURRENT_BINARY_DIR}/install-db-structure.h
 	DEPENDS
-		${niven_installation_manager_SOURCE_DIR}/sql/install-db-structure.sql
+		${kyla_SOURCE_DIR}/sql/install-db-structure.sql
 	)
 
 ADD_CUSTOM_COMMAND(
 	OUTPUT
 		${CMAKE_CURRENT_BINARY_DIR}/install-db-indices.h
 	COMMAND
-		txttoheader install_db_indices ${niven_installation_manager_SOURCE_DIR}/sql/install-db-indices.sql > ${CMAKE_CURRENT_BINARY_DIR}/install-db-indices.h
+		txttoheader install_db_indices ${kyla_SOURCE_DIR}/sql/install-db-indices.sql > ${CMAKE_CURRENT_BINARY_DIR}/install-db-indices.h
 	DEPENDS
-		${niven_installation_manager_SOURCE_DIR}/sql/install-db-indices.sql
+		${kyla_SOURCE_DIR}/sql/install-db-indices.sql
 	)
 
 SET(SOURCES

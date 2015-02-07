@@ -15,7 +15,6 @@
 #include <unordered_set>
 #include <memory>
 
-#include <openssl/evp.h>
 #include <zlib.h>
 
 #include <boost/uuid/uuid.hpp>
@@ -165,8 +164,8 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 	std::vector<unsigned char> compressed (compressBound(fileChunkSize));
 
 	// Prepare hash
-	EVP_MD_CTX* fileCtx = EVP_MD_CTX_create ();
-	EVP_MD_CTX* chunkCtx = EVP_MD_CTX_create ();
+	kyla::StreamHasher fileHasher;
+	kyla::StreamHasher chunkHasher;
 
 	boost::uuids::random_generator uuidGen;
 
@@ -205,7 +204,7 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 
 		std::vector<ChunkInfo> chunks;
 
-		EVP_DigestInit_ex (fileCtx, EVP_sha512 (), nullptr);
+		fileHasher.Initialize ();
 		int chunkNumber = 0;
 		std::int64_t contentObjectSize = 0;
 		std::int64_t contentObjectCompressedSize = 0;
@@ -215,7 +214,7 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 			const std::int64_t chunkSize = input.gcount ();
 			contentObjectSize += chunkSize;
 
-			EVP_DigestUpdate(fileCtx, buffer.data (), chunkSize);
+			fileHasher.Update (buffer.data (), chunkSize);
 
 			uLongf compressedSize = compressed.size ();
 			// TODO handle compression failure
@@ -239,9 +238,8 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 
 			contentObjectCompressedSize += compressedSize;
 
-			EVP_DigestInit_ex (chunkCtx, EVP_sha512 (), nullptr);
-			EVP_DigestUpdate(chunkCtx, compressed.data (), compressedSize);
-			EVP_DigestFinal_ex (chunkCtx, pdc.hash, nullptr);
+			auto chunkHash = kyla::ComputeHash (compressed.data (), compressedSize);
+			::memcpy (pdc.hash, chunkHash.hash, sizeof (pdc.hash));
 
 			boost::filesystem::ofstream chunkOutput (
 				temporaryDirectory / chunkName, std::ios::binary);
@@ -263,14 +261,12 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 
 		totalSize += contentObjectSize;
 
-		kyla::Hash fileHash;
-
 		if (contentObjectSize == 0) {
 			// Don't create a content object when the file is empty
 			continue;
 		}
 
-		EVP_DigestFinal_ex (fileCtx, fileHash.hash, nullptr);
+		const auto fileHash = fileHasher.Finalize ();
 
 		spdlog::get ("log")->debug() << sourcePath << " -> " << ToString (fileHash);
 
@@ -312,9 +308,6 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 	sqlite3_finalize (insertContentObjectStatement);
 	sqlite3_finalize (insertChunkStatement);
 	sqlite3_finalize (selectContentObjectIdStatement);
-
-	EVP_MD_CTX_destroy (fileCtx);
-	EVP_MD_CTX_destroy (chunkCtx);
 
 	SAFE_SQLITE (sqlite3_exec (buildDatabase, "COMMIT TRANSACTION;",
 		nullptr, nullptr, nullptr));
