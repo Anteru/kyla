@@ -13,11 +13,12 @@ def _IdString (s):
 		return s
 
 class InstallationBuilder:
-	def __init__ (self, productName, productVersion, productId = uuid.uuid4 ()):
+	def __init__ (self, productName, productVersion, productId = uuid.uuid4 (), persistentId = uuid.uuid4 ()):
 		self._productNode = etree.Element ('Product')
 		self._productNode.set ('Name', productName)
 		self._productNode.set ('Version', productVersion)
 		self._productNode.set ('Id', _IdString (productId))
+		self._productNode.set ('PersistentId', _IdString (persistentId))
 		self._features = []
 		self._sourcePackagesEmbedded = False
 		self._sourcePackages = []
@@ -35,10 +36,10 @@ class InstallationBuilder:
 		self._sourcePackages.append (node)
 
 	class FeatureBuilder:
-		def __init__ (self, name, id):
+		def __init__ (self, name, featureId):
 			self._element = etree.Element ('Feature')
 			self._element.set ('Name', name)
-			self._element.set ('Id', id)
+			self._element.set ('Id', _IdString (featureId))
 			self._sourcePackage = None
 
 		def SetSourcePackage (self, sourcePackage):
@@ -58,8 +59,8 @@ class InstallationBuilder:
 					f.set ('SourcePackage', self._sourcePackage)
 			return self._element
 
-	def AddFeature (self, name, id = 'Feature_{}'.format (str (uuid.uuid4 ()).upper ())):
-		fb = self.FeatureBuilder (name, id)
+	def AddFeature (self, name, featureId = uuid.uuid4 ()):
+		fb = self.FeatureBuilder (name, featureId)
 		self._features.append (fb)
 		return fb
 
@@ -83,7 +84,7 @@ class InstallationBuilder:
 
 		root = Preprocess (root)
 
-		decl = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+		decl = '<?xml version="1.0" encoding="UTF-8"?>'
 		return decl + etree.tostring (root, encoding='utf-8').decode ('utf-8')
 
 def Preprocess (xmlDocument, baseDirectory = os.getcwd ()):

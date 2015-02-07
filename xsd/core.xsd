@@ -14,6 +14,9 @@
     <xs:restriction base="xs:token">
       <xs:enumeration value="none"/>
       <xs:enumeration value="zip"/>
+      <xs:enumeration value="lz4"/>
+      <xs:enumeration value="lzham"/>
+      <xs:enumeration value="lzma"/>
     </xs:restriction>
   </xs:simpleType>
   <xs:simpleType name="UUID">
