@@ -70,17 +70,20 @@ int main (int argc, char* argv [])
 	kylaSelectFeatures (installer, selectedFeatures.size (), selectedFeatures.data ());
 	kylaDeleteFeatures (features);
 
-	KylaProperty* targetDirectoryProperty = kylaCreateStringProperty (installationDirectory.c_str ());
+	KylaProperty* targetDirectoryProperty;
+	kylaCreateStringProperty (installationDirectory.c_str (), &targetDirectoryProperty);
 	kylaSetProperty (installer, KylaPropertyCategoryInstallation,
 		"TargetDirectory", targetDirectoryProperty);
 	kylaDeleteProperty (targetDirectoryProperty);
 
-	KylaProperty* stagingDirectoryProperty = kylaCreateStringProperty (stagingDirectory.c_str ());
+	KylaProperty* stagingDirectoryProperty;
+	kylaCreateStringProperty (stagingDirectory.c_str (), &stagingDirectoryProperty);
 	kylaSetProperty (installer, KylaPropertyCategoryInstallation,
 		"StagingDirectory", stagingDirectoryProperty);
 	kylaDeleteProperty (stagingDirectoryProperty);
 
-	KylaProperty* sourcePackageDirectoryProperty = kylaCreateStringProperty (packageDirectory.c_str ());
+	KylaProperty* sourcePackageDirectoryProperty;
+	kylaCreateStringProperty (packageDirectory.c_str (), &sourcePackageDirectoryProperty);
 	kylaSetProperty (installer, KylaPropertyCategoryInstallation,
 		"SourcePackageDirectory", sourcePackageDirectoryProperty);
 	kylaDeleteProperty (sourcePackageDirectoryProperty);

@@ -23,18 +23,6 @@
 
 namespace kyla {
 ////////////////////////////////////////////////////////////////////////////////
-void InstallationEnvironment::SelectFeatures(const std::vector<int>& ids)
-{
-	selectedFeatures_ = ids;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-const std::vector<int>& InstallationEnvironment::GetSelectedFeatures () const
-{
-	return selectedFeatures_;
-}
-
-////////////////////////////////////////////////////////////////////////////////
 void InstallationEnvironment::SetProperty (const PropertyCategory category,
 	const std::string& name, const Property& value)
 {
@@ -80,9 +68,8 @@ const Property& InstallationEnvironment::GetProperty (const PropertyCategory cat
 	case PropertyCategory::Internal:
 		return internalProperties_.find (name)->second;
 
-	/// TODO Handle environment properties here
 	default:
-		return Property ();
+		throw std::runtime_error ("Unsupported property");
 	}
 }
 
@@ -142,7 +129,8 @@ std::string GetFilesForSelectedFeaturesQueryString (
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void Installer::Install (sqlite3* db, InstallationEnvironment env)
+void Installer::InstallProduct (sqlite3* db, InstallationEnvironment env,
+	const std::vector<int>& selectedFeatureIds)
 {
 	const char* logFilename = nullptr;
 	if (env.HasProperty (PropertyCategory::Internal, "LogFilename")) {
@@ -172,8 +160,6 @@ void Installer::Install (sqlite3* db, InstallationEnvironment env)
 
 	boost::filesystem::create_directories (targetDirectory);
 	boost::filesystem::create_directories (stagingDirectory);
-
-	const auto selectedFeatureIds = env.GetSelectedFeatures();
 
 	sqlite3_stmt* selectRequiredSourcePackagesStatement = nullptr;
 	sqlite3_prepare_v2 (db,

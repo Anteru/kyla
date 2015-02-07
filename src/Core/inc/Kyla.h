@@ -1,6 +1,8 @@
 #ifndef KYLA_PUBLIC_API_H
 #define KYLA_PUBLIC_API_H
 
+#include <stdint.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -11,9 +13,13 @@ struct KylaFeatures;
 struct KylaFeature
 {
 	int id;
+	int parentId; /* -1 if no parent */
+
 	const char* name;
 	const char* description;
-	int parentId; /* -1 if no parent */
+
+	/** Required disk space for this feature alone, excluding any children */
+	int64_t	requiredDiskSpace;
 };
 
 enum KylaResult
@@ -39,9 +45,9 @@ enum KylaPropertyCategory
 
 struct KylaProperty;
 
-KylaProperty* kylaCreateStringProperty (const char* s);
-KylaProperty* kylaCreateIntProperty (const int value);
-KylaProperty* kylaCreateBinaryProperty (const void* d, const int size);
+int kylaCreateStringProperty (const char* s, KylaProperty** result);
+int kylaCreateIntProperty (const int value, KylaProperty** result);
+int kylaCreateBinaryProperty (const void* d, const int size, KylaProperty** result);
 
 int kylaPropertyGetStringValue (const struct KylaProperty* property, const char** value);
 int kylaPropertyGetIntValue (const struct KylaProperty* property, int* value);
