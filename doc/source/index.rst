@@ -9,6 +9,7 @@ Contents:
     :maxdepth: 2
 
     installer-file-format
+    todo
 
 Features
 ========
