@@ -28,6 +28,11 @@ struct File
 		SeekImpl (offset);
 	}
 
+	std::int64_t Tell () const
+	{
+		return TellImpl ();
+	}
+
 	void* Map (const std::int64_t offset, const std::int64_t size)
 	{
 		MapImpl (offset, size);
@@ -58,6 +63,7 @@ private:
 	virtual std::int64_t ReadImpl (void* buffer, const std::int64_t size) = 0;
 
 	virtual void SeekImpl (const std::int64_t offset) = 0;
+	virtual std::int64_t TellImpl () const = 0;
 	virtual void* MapImpl (const std::int64_t offset, const std::int64_t size) = 0;
 	virtual void* UnmapImpl (void* p) = 0;
 

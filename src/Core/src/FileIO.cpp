@@ -83,6 +83,11 @@ struct LinuxFile final : public File
 		return s.st_size;
 	}
 
+	std::int64_t TellImpl () const
+	{
+		return ::lseek (fd_, 0, SEEK_CUR);
+	}
+
 private:
 	int fd_ = -1;
 	std::unordered_map<const void*, std::int64_t> mappings_;

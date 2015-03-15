@@ -6,6 +6,11 @@
 
 namespace kyla {
 ////////////////////////////////////////////////////////////////////////////////
+StreamCompressor::StreamCompressor ()
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
 void StreamCompressor::Initialize (std::function<void (const void* data, const std::int64_t)> writeCallback)
 {
 	InitializeImpl (writeCallback);
@@ -111,7 +116,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 ZipStreamCompressor::ZipStreamCompressor ()
-	: impl_ (new Impl)
+: impl_ (new Impl)
 {
 }
 
@@ -147,5 +152,17 @@ void ZipStreamCompressor::CompressImpl (const void* data, const std::int64_t siz
 	uLongf destLen = buffer.size ();
 	compress (buffer.data (), &destLen, static_cast<const Bytef*> (data), size);
 	buffer.resize (destLen);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+std::unique_ptr<StreamCompressor> CreateStreamCompressor (CompressionMode compression)
+{
+	switch (compression) {
+	case CompressionMode::Zip:
+		return std::unique_ptr<StreamCompressor> (new ZipStreamCompressor);
+
+	case CompressionMode::Uncompressed:
+		return std::unique_ptr<StreamCompressor> (new PassthroughStreamCompressor);
+	}
 }
 }

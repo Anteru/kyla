@@ -57,24 +57,35 @@ void InstallPackageWriter::Add (const char* name,
 namespace {
 void HashCompressBlockCopy (File& input, File& output,
 	CompressionMode compressionMode,
-	Hash* result, std::int64_t* uncompressedSize, std::int64_t* compressedSize)
+	Hash& result, std::int64_t& uncompressedSize, std::int64_t& compressedSize)
 {
 	std::vector<std::uint8_t> buffer (4 << 20);
 
 	StreamHasher hasher;
 	hasher.Initialize ();
 
+	auto compressor = CreateStreamCompressor (compressionMode);
+	compressor->Initialize ([&](const void* data, const std::int64_t size) -> void {
+		compressedSize += size;
+		output.Write (data, size);
+	});
+
 	for (;;) {
 		const auto bytesRead = input.Read (buffer.data (), buffer.size ());
 
 		hasher.Update (buffer.data (), bytesRead);
+		uncompressedSize += bytesRead;
+
+		compressor->Update (buffer.data (), bytesRead);
 
 		if (bytesRead < buffer.size ()) {
 			break;
 		}
 	}
 
-	*result = hasher.Finalize ();
+	// This will flush the output and write the correct compressed size
+	compressor->Finalize ();
+	result = hasher.Finalize ();
 }
 }
 
@@ -98,8 +109,26 @@ void InstallPackageWriter::Finalize ()
 	std::vector<InstallPackageIndexEntry> index;
 
 	for (const auto& entry : impl_->pendingEntries) {
-		// Block copy with hash and compression
+		InstallPackageIndexEntry indexEntry;
+		::memset (&indexEntry, 0, sizeof (indexEntry));
+		indexEntry.offset = impl_->fileHandle->Tell ();
+
+		Hash hash;
+		HashCompressBlockCopy (
+			*OpenFile (entry.source.c_str (), FileOpenMode::Read),
+			*impl_->fileHandle, entry.compressionMode,
+			hash, indexEntry.uncompressedSize, indexEntry.compressedSize);
+		::memcpy (indexEntry.hash, hash.hash, sizeof (indexEntry.hash));
+
+		assert (entry.name.size () <= sizeof (indexEntry.name));
+		::memcpy (indexEntry.name, entry.name.c_str (), entry.name.size ());
+
+		index.push_back (indexEntry);
 	}
+
+	impl_->fileHandle->Seek (header.indexOffset);
+	impl_->fileHandle->Write (index.data (),
+		sizeof (InstallPackageIndexEntry) * index.size ());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

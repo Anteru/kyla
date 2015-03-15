@@ -788,7 +788,7 @@ public:
 		sqlite3_close (installationDatabase);
 	}
 
-	bool WriteInstallationDatabase (const boost::filesystem::path& outputFile) const
+	void WriteInstallationDatabase (const boost::filesystem::path& outputFile) const
 	{
 		sqlite3* targetDb;
 		sqlite3_open (outputFile.c_str (), &targetDb);
@@ -1094,6 +1094,10 @@ int main (int argc, char* argv[])
 		"ANALYZE;", nullptr, nullptr, nullptr);
 
 	gc.WriteInstallationDatabase (gc.targetDirectory / (outputFile.string () + ".kydb"));
+
+	// Assemble the install package
+	// Add the db compressed
+	// Add all source packages (uncompressed)
 
 	boost::filesystem::remove_all (gc.temporaryDirectory);
 }

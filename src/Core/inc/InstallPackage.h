@@ -10,6 +10,7 @@ struct InstallPackageHeader
 	std::int32_t	version;
 	std::int32_t	indexEntryCount;
 	std::int64_t	indexOffset;
+	std::uint8_t	reserved [256];
 };
 
 struct InstallPackageIndexEntry
