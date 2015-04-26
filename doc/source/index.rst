@@ -11,14 +11,35 @@ Contents:
     installer-file-format
     todo
 
-Features
-========
+Project goals
+=============
 
-* Support for installation packages with 100.000 and more files
-* Support for files larger than 4 GiB
-* End-to-end validation of all files
-* Duplicated files are automatically de-duplicated
+* Support for installation packages with 100.000 and more files. For instance, installing Boost or Qt should be possible.
+* Support for files larger than 4 GiB.
+* End-to-end validation of all files (checksums from creation to deployment and automatic repair.)
+* Duplicated files are automatically de-duplicated.
 * Compressed installation media with precise media sizes. Large files are automatically split across multiple packages if needed.
+* Optional end-to-end encryption (through user-specified callback or built-in machinery)
+* The installer should overlap download, decompression and decryption to minimize setup time.
+* Installation scripting via Lua (enabling/disabling features)
+* Provide a simple, C installation library and build UI on top. Clients should be able to easily integrate the installer into a custom UX.
+* Simple installer creation from an existing file/folder structure.
+
+Non-goals
+=========
+
+* No driver installation, service installation or other Windows-specific features covered by MSI already
+* No installer chaining (i.e. no MSM merge modules or "`Burn <http://wixtoolset.org/documentation/manual/v3/howtos/redistributables_and_install_checks/install_dotnet.html>`_") -- though possible by build on top of the client library
+* No support for individual patch installation/deinstallation, application can only move forward in version numbers
+* No built-in UI (as is provided by MSI)
+
+Post 1.0 goals
+==============
+
+* Usage of `BITS <http://en.wikipedia.org/wiki/Background_Intelligent_Transfer_Service>`_
+* Custom server side software
+* Patch creation
+* Linux/Mac OS X support
 
 Terms
 =====
@@ -63,7 +84,7 @@ The installation consists of the following steps:
 
 #. User selects which features to install
 #. The files associated with the features are identified
-#. The content objects required are identified
+#. The required content objects are identified
 #. The source packages which contain the required content objects are identified
 #. All source packages are processed. A source package can be streamed, and each content object can be decompressed/validated/reassembled in parallel.
 #. Each content object is checked whether it is in the list of requested content objects, if so, it is decompressed to the *staging directory*. Content objects have unique file names (their hash), so no collisions can occur here.
