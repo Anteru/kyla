@@ -1,5 +1,5 @@
-#ifndef KYLA_COMMON_FILEIO_H
-#define KYLA_COMMON_FILEIO_H
+#ifndef KYLA_CORE_INTERNAL_FILEIO_H
+#define KYLA_CORE_INTERNAL_FILEIO_H
 
 #include <cstdint>
 #include <memory>
@@ -85,4 +85,3 @@ std::unique_ptr<File> CreateFile (const char* path);
 }
 
 #endif // FILEIO_H
-

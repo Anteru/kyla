@@ -1,6 +1,8 @@
 PROJECT(kyla_core)
 
 SET(HEADERS
+	inc/sql/Database.h
+
 	inc/Compression.h
 	inc/FileIO.h
     inc/Hash.h
@@ -16,6 +18,8 @@ SET(HEADERS
 	inc/SourcePackageWriter.h)
 
 SET(SOURCES
+	src/sql/Database.cpp
+
 	src/Compression.cpp
 	src/FileIO.cpp
     src/Hash.cpp

@@ -6,7 +6,7 @@ SET(SOURCES
 FIND_PACKAGE(OpenSSL)
 INCLUDE_DIRECTORIES(${OPENSSL_INCLUDE_DIR})
 
-FIND_PACKAGE(Boost 1.55.0 REQUIRED QUIET COMPONENTS program_options filesystem system log thread)
+FIND_PACKAGE(Boost 1.55.0 REQUIRED QUIET COMPONENTS program_options filesystem system thread)
 
 ADD_EXECUTABLE(kyla.Validator ${SOURCES})
 TARGET_LINK_LIBRARIES(kyla.Validator
