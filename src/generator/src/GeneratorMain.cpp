@@ -32,12 +32,6 @@
 
 #include "sql/Database.h"
 
-#define SAFE_SQLITE_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_OK) { spdlog::get ("log")->error () << file << ":" << line << " " << sqlite3_errstr(r_); exit (1); } } while (0)
-#define SAFE_SQLITE_INSERT_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_DONE) { spdlog::get ("log")->error () << file << ":" << line << " " << sqlite3_errstr(r_); exit (1); } } while (0)
-
-#define SAFE_SQLITE(expr) SAFE_SQLITE_INTERNAL(expr, __FILE__, __LINE__)
-#define SAFE_SQLITE_INSERT(expr) SAFE_SQLITE_INSERT_INTERNAL(expr, __FILE__, __LINE__)
-
 std::unordered_set<std::string> GetUniqueSourcePaths (const pugi::xml_node& product)
 {
 	std::unordered_set<std::string> result;
@@ -418,7 +412,7 @@ std::vector<SourcePackageInfo> WriteUserPackages (
 				// non-zero content object
 				if (contentObjectsInPackage.find (contentObjectId) == contentObjectsInPackage.end ()) {
 					spdlog::get ("log")->trace () << "'" << sourcePath
-						<< "' references " << contentObjectId;
+						<< "' references content object " << contentObjectId;
 
 					// Write the chunks into this package
 					// Order by rowid, so we get a sequential write into the output
@@ -441,7 +435,7 @@ std::vector<SourcePackageInfo> WriteUserPackages (
 					contentObjectsInPackage.insert (contentObjectIdHash.id);
 				} else {
 					spdlog::get ("log")->trace () << "'" << sourcePath
-						<< "' references " << contentObjectId
+						<< "' references content object " << contentObjectId
 						<< " (already in package, skipped)";
 				}
 			}
@@ -694,9 +688,9 @@ public:
 
 	void SetupBuildDatabase (const boost::filesystem::path& temporaryDirectory)
 	{
-		spdlog::get ("log")->trace () << "Build database: '" << (temporaryDirectory / "build.sqlite").c_str () << "'";
+		spdlog::get ("log")->trace () << "Build database: '" << (temporaryDirectory / "build.db").c_str () << "'";
 		buildDatabase = kyla::Sql::Database::Create (
-					(temporaryDirectory / "build.sqlite").c_str ());
+					(temporaryDirectory / "build.db").c_str ());
 		buildDatabase.Execute (build_db_structure);
 	}
 
@@ -885,6 +879,7 @@ int main (int argc, char* argv[])
 
     po::options_description desc ("Configuration");
     desc.add_options ()
+		("log-level", po::value<int> ()->default_value (2))
 		("source-directory", po::value<std::string> ()->default_value ("."))
 		("target-directory", po::value<std::string> ()->default_value ("."))
 		("temp-directory", po::value<std::string> ()->default_value (
@@ -915,7 +910,7 @@ int main (int argc, char* argv[])
     }
 
 	auto log = spdlog::stdout_logger_mt ("log");
-	log->set_level (spdlog::level::trace);
+	log->set_level (static_cast<spdlog::level::level_enum> (vm ["log-level"].as<int> ()));
 
 	const auto inputFile = vm ["input-file"].as<std::string> ();
 
