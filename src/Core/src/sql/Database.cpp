@@ -36,6 +36,11 @@ public:
 			SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr));
 	}
 
+	void Create ()
+	{
+		K_S(sqlite3_open (":memory:", &db_));
+	}
+
 	void Close ()
 	{
 		if (db_) {
@@ -49,6 +54,11 @@ public:
 		if (db_) {
 			sqlite3_close (db_);
 		}
+	}
+
+	void TransactionBegin ()
+	{
+		K_S(sqlite3_exec (db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr));
 	}
 
 	void TransactionCommit ()
@@ -68,7 +78,108 @@ public:
 		*result = static_cast<void*> (stmt);
 	}
 
+	void StatementBind (void* statement, const int index,
+		const std::int64_t value)
+	{
+		K_S (sqlite3_bind_int64(static_cast<sqlite3_stmt*>(statement), index,
+			value));
+	}
+
+	void StatementBind (void* statement, const int index,
+		const char* value, const ValueBinding binding)
+	{
+		K_S (sqlite3_bind_text(static_cast<sqlite3_stmt*>(statement), index,
+			value, -1, SQLiteValueBinding (binding)));
+	}
+
+	void StatementBind (void* statement, const int index,
+		const Null&)
+	{
+		K_S (sqlite3_bind_null (static_cast<sqlite3_stmt*>(statement), index));
+	}
+
+	void StatementBind (void* statement, const int index,
+		const std::size_t size, const void* data,
+		const ValueBinding binding)
+	{
+		K_S (sqlite3_bind_blob (static_cast<sqlite3_stmt*>(statement), index,
+			data, size, SQLiteValueBinding (binding)));
+	}
+
+	bool StatementStep (void* statement)
+	{
+		auto r = sqlite3_step (static_cast<sqlite3_stmt*> (statement));
+
+		if (r == SQLITE_ROW) {
+			return true;
+		} else if (r == SQLITE_DONE) {
+			return false;
+		} else {
+			///@TODO Handle error
+		}
+	}
+
+	void StatementReset (void* statement)
+	{
+		K_S (sqlite3_reset (static_cast<sqlite3_stmt*> (statement)));
+	}
+
+	void StatementFinalize (void* statement)
+	{
+		///@TODO This should not throw because it's called from destructur
+		K_S (sqlite3_finalize (static_cast<sqlite3_stmt*> (statement)));
+	}
+
+	std::int64_t StatementGetInt64 (void* statement, const int column)
+	{
+		return sqlite3_column_int64(static_cast<sqlite3_stmt*> (statement), column);
+	}
+
+	const char* StatementGetText (void* statement, const int column)
+	{
+		return reinterpret_cast<const  char*> (
+			sqlite3_column_text(static_cast<sqlite3_stmt*> (statement), column));
+	}
+
+	const void* StatementGetBlob (void* statement, const int column)
+	{
+		return sqlite3_column_blob (static_cast<sqlite3_stmt*> (statement), column);
+	}
+
+	bool Execute (const char* statement)
+	{
+		K_S (sqlite3_exec (db_, statement, nullptr, nullptr, nullptr));
+		return true;
+	}
+
+	void SaveCopyTo (const char* filename)
+	{
+		sqlite3* targetDb;
+		sqlite3_open (filename, &targetDb);
+		auto backup = sqlite3_backup_init(targetDb, "main",
+			db_, "main");
+		sqlite3_backup_step (backup, -1);
+		sqlite3_backup_finish (backup);
+		sqlite3_close (targetDb);
+	}
+
+	int GetLastRowId ()
+	{
+		return sqlite3_last_insert_rowid (db_);
+	}
+
 private:
+	// Returns a function pointer to a void (void*) function
+	static void(*SQLiteValueBinding(const ValueBinding binding))(void*)
+	{
+		switch (binding) {
+		case ValueBinding::Copy:
+			return SQLITE_TRANSIENT;
+		case ValueBinding::Reference:
+			return SQLITE_STATIC;
+		}
+	}
+
 	sqlite3* db_ = nullptr;
 };
 
@@ -92,6 +203,12 @@ Database& Database::operator =(Database&& other)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+void Database::SaveCopyTo(const char* filename) const
+{
+	impl_->SaveCopyTo (filename);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 Database Database::Open (const char* name)
 {
 	return Open (name, OpenMode::Read);
@@ -101,7 +218,7 @@ Database Database::Open (const char* name)
 Database Database::Open (const char* name, const OpenMode openMode)
 {
 	Database db;
-	db.Open (name, openMode);
+	db.impl_->Open (name, openMode);
 	return std::move (db);
 }
 
@@ -109,7 +226,15 @@ Database Database::Open (const char* name, const OpenMode openMode)
 Database Database::Create (const char* name)
 {
 	Database db;
-	db.Create (name);
+	db.impl_->Create (name);
+	return std::move (db);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+Database Database::Create ()
+{
+	Database db;
+	db.impl_->Create ();
 	return std::move (db);
 }
 
@@ -120,9 +245,16 @@ void Database::Close ()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+bool Database::Execute (const char* statement)
+{
+	return impl_->Execute (statement);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 Transaction::Transaction (Database::Impl* impl)
 : impl_ (impl)
 {
+	impl_->TransactionBegin ();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -155,9 +287,125 @@ Statement::Statement (Database::Impl* impl, const char* statement)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+Statement::~Statement ()
+{
+	if (p_) {
+		impl_->StatementFinalize (p_);
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+Statement::Statement (Statement&& other)
+	: impl_ (other.impl_)
+	, p_ (other.p_)
+{
+	other.p_ = nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+Statement& Statement::operator=(Statement&& other)
+{
+	impl_ = other.impl_;
+	p_ = other.p_;
+
+	other.p_ = nullptr;
+
+	return *this;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 bool Statement::Step ()
 {
-	return sqlite3_step (static_cast<sqlite3_stmt*> (p_));
+	return impl_->StatementStep (p_);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void Statement::Reset ()
+{
+	return impl_->StatementReset (p_);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void Statement::Bind (const int index, const std::int64_t value)
+{
+		impl_->StatementBind (static_cast<sqlite3_stmt*> (p_), index, value);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void Statement::Bind (const int index, const char* value,
+	const ValueBinding binding)
+{
+		impl_->StatementBind (static_cast<sqlite3_stmt*> (p_), index, value, binding);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void Statement::Bind (const int index, const Null&)
+{
+	impl_->StatementBind (static_cast<sqlite3_stmt*> (p_), index, Null());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void Statement::Bind (const int index, const std::size_t size,
+	const void* data, const ValueBinding binding)
+{
+	impl_->StatementBind (static_cast<sqlite3_stmt*> (p_), index, size, data, binding);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+std::int64_t Statement::GetInt64 (const int index) const
+{
+	return impl_->StatementGetInt64 (p_, index);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+const char* Statement::GetText (const int index) const
+{
+	return impl_->StatementGetText (p_, index);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+const void* Statement::GetBlob (const int index) const
+{
+	return impl_->StatementGetBlob (p_, index);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+Transaction Database::BeginTransaction(TransactionType type)
+{
+	return Transaction (impl_.get ());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+Statement Database::Prepare (const char* statement)
+{
+	return Statement (impl_.get (), statement);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+int Database::GetLastRowId()
+{
+	return impl_->GetLastRowId ();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+Transaction::Transaction (Transaction&& other)
+	: impl_ (other.impl_)
+{
+	other.impl_ = nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+Transaction& Transaction::operator=(Transaction&& other)
+{
+	impl_ = other.impl_;
+	other.impl_ = nullptr;
+
+	return *this;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+Database::~Database ()
+{
 }
 }
 }

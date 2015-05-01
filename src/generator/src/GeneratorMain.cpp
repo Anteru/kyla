@@ -9,7 +9,6 @@
 #include <string>
 
 #include <pugixml.hpp>
-#include <sqlite3.h>
 
 #include <unordered_map>
 #include <unordered_set>
@@ -30,6 +29,8 @@
 #include "install-db-indices.h"
 
 #include "SourcePackageWriter.h"
+
+#include "sql/Database.h"
 
 #define SAFE_SQLITE_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_OK) { spdlog::get ("log")->error () << file << ":" << line << " " << sqlite3_errstr(r_); exit (1); } } while (0)
 #define SAFE_SQLITE_INSERT_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_DONE) { spdlog::get ("log")->error () << file << ":" << line << " " << sqlite3_errstr(r_); exit (1); } } while (0)
@@ -63,14 +64,11 @@ std::unordered_set<std::string> GetUniqueSourcePaths (const pugi::xml_node& prod
 void AssignFilesToFeaturesPackages (const pugi::xml_node& product,
 	const std::unordered_map<std::string, std::int64_t>& sourcePackageIds,
 	const std::unordered_map<std::string, std::int64_t>& featureIds,
-	sqlite3* buildDatabase)
+	kyla::Sql::Database& buildDatabase)
 {
-	sqlite3_exec (buildDatabase, "BEGIN TRANSACTION;",
-		nullptr, nullptr, nullptr);
-	sqlite3_stmt* insertFilesStatement;
-	SAFE_SQLITE (sqlite3_prepare_v2 (buildDatabase,
-		"INSERT INTO files (SourcePath, TargetPath, FeatureId, SourcePackageId) VALUES (?, ?, ?, ?);",
-		-1, &insertFilesStatement, nullptr));
+	auto transaction = buildDatabase.BeginTransaction ();
+	auto insertFilesStatement = buildDatabase.Prepare (
+		"INSERT INTO files (SourcePath, TargetPath, FeatureId, SourcePackageId) VALUES (?, ?, ?, ?);");
 
 	int inputFileCount = 0;
 
@@ -81,7 +79,7 @@ void AssignFilesToFeaturesPackages (const pugi::xml_node& product,
 		fileFeatureId = featureIds.find (
 				feature.attribute ("Id").value ())->second;
 
-		SAFE_SQLITE (sqlite3_bind_int64 (insertFilesStatement, 3, fileFeatureId));
+		insertFilesStatement.Bind (3, fileFeatureId);
 
 		for (const auto& file : feature.children ("File")) {
 			// Embed directly
@@ -91,38 +89,32 @@ void AssignFilesToFeaturesPackages (const pugi::xml_node& product,
 					file.attribute ("SourcePackage").value ())->second;
 			}
 
-			SAFE_SQLITE (sqlite3_bind_text (insertFilesStatement, 1,
-				file.attribute ("Source").value (), -1, SQLITE_TRANSIENT));
+			insertFilesStatement.Bind (1,
+				file.attribute ("Source").value ());
 
 			if (file.attribute ("Target")) {
-				SAFE_SQLITE (sqlite3_bind_text (insertFilesStatement, 2,
-					file.attribute ("Target").value (), -1, SQLITE_TRANSIENT));
+				insertFilesStatement.Bind (2, file.attribute ("Target").value ());
 			} else {
-				SAFE_SQLITE (sqlite3_bind_text (insertFilesStatement, 2,
-					file.attribute ("Source").value (), -1, SQLITE_TRANSIENT));
+				insertFilesStatement.Bind (2, file.attribute ("Source").value ());
 			}
 
 			if (fileSourcePackageId == -1) {
-				SAFE_SQLITE (sqlite3_bind_null (insertFilesStatement, 4));
+				insertFilesStatement.Bind (4, kyla::Sql::Null ());
 			} else {
-				SAFE_SQLITE (sqlite3_bind_int64 (insertFilesStatement, 4,
-					fileSourcePackageId));
+				insertFilesStatement.Bind (4, fileSourcePackageId);
 			}
 
-			sqlite3_step (insertFilesStatement);
-			sqlite3_reset (insertFilesStatement);
+			insertFilesStatement.Step ();
+			insertFilesStatement.Reset ();
 
 			++inputFileCount;
 		}
 	}
 
-	SAFE_SQLITE (sqlite3_finalize (insertFilesStatement));
-
 	spdlog::get ("log")->info () << "Found " << inputFileCount
 		<< " files";
 
-	sqlite3_exec (buildDatabase, "COMMIT TRANSACTION;",
-		nullptr, nullptr, nullptr);
+	transaction.Commit ();
 }
 
 struct ContentObjectIdHash
@@ -147,14 +139,12 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 	const std::unordered_set<std::string>& sourcePaths,
 	const boost::filesystem::path& sourceDirectory,
 	const boost::filesystem::path& temporaryDirectory,
-	sqlite3* buildDatabase,
-	sqlite3* installationDatabase,
+	kyla::Sql::Database& buildDatabase,
+	kyla::Sql::Database& installationDatabase,
 	const std::int64_t fileChunkSize = 1 << 24 /* 16 MiB */)
 {
-	sqlite3_exec (buildDatabase, "BEGIN TRANSACTION;",
-		nullptr, nullptr, nullptr);
-	sqlite3_exec (installationDatabase, "BEGIN TRANSACTION;",
-		nullptr, nullptr, nullptr);
+	auto buildTransaction = buildDatabase.BeginTransaction();
+	auto installationTransaction = installationDatabase.BeginTransaction();
 
 	std::unordered_map<std::string, ContentObjectIdHash> pathToContentObject;
 
@@ -169,20 +159,14 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 
 	boost::uuids::random_generator uuidGen;
 
-	sqlite3_stmt* insertContentObjectStatement;
-	sqlite3_prepare_v2 (installationDatabase,
-		"INSERT INTO content_objects (Size, Hash, ChunkCount) VALUES (?, ?, ?)",
-		-1, &insertContentObjectStatement, nullptr);
+	auto insertContentObjectStatement = installationDatabase.Prepare (
+		"INSERT INTO content_objects (Size, Hash, ChunkCount) VALUES (?, ?, ?)");
 
-	sqlite3_stmt* insertChunkStatement;
-	sqlite3_prepare_v2 (buildDatabase,
-		"INSERT INTO chunks (ContentObjectId, Path, Size) VALUES (?, ?, ?)",
-		-1, &insertChunkStatement, nullptr);
+	auto insertChunkStatement = buildDatabase.Prepare (
+		"INSERT INTO chunks (ContentObjectId, Path, Size) VALUES (?, ?, ?)");
 
-	sqlite3_stmt* selectContentObjectIdStatement = nullptr;
-	SAFE_SQLITE (sqlite3_prepare_v2 (installationDatabase,
-		"SELECT Id FROM content_objects WHERE Hash=?", -1,
-		&selectContentObjectIdStatement, nullptr));
+	auto selectContentObjectIdStatement = installationDatabase.Prepare (
+		"SELECT Id FROM content_objects WHERE Hash=?");
 
 	spdlog::get ("log")->info () << "Processing " << sourcePaths.size () << " files";
 
@@ -270,60 +254,49 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 
 		spdlog::get ("log")->debug() << sourcePath << " -> " << ToString (fileHash);
 
-		sqlite3_bind_blob (selectContentObjectIdStatement, 1,
-			fileHash.hash, sizeof (fileHash.hash), nullptr);
+		selectContentObjectIdStatement.Bind (1, sizeof (fileHash.hash),
+			fileHash.hash);
 
-		if (sqlite3_step (selectContentObjectIdStatement) != SQLITE_ROW) {
-			sqlite3_bind_int64 (insertContentObjectStatement, 1, contentObjectSize);
-			sqlite3_bind_blob (insertContentObjectStatement, 2,
-				fileHash.hash, sizeof (fileHash.hash), nullptr);
-			sqlite3_bind_int64 (insertContentObjectStatement, 3, chunkNumber);
-			SAFE_SQLITE_INSERT (sqlite3_step (insertContentObjectStatement));
-			SAFE_SQLITE (sqlite3_reset (insertContentObjectStatement));
+		if (! selectContentObjectIdStatement.Step ()) {
+			insertContentObjectStatement.Bind (1, contentObjectSize);
+			insertContentObjectStatement.Bind (2, sizeof (fileHash.hash),
+				fileHash.hash);
+			insertContentObjectStatement.Bind (3, chunkNumber);
+			insertContentObjectStatement.Step ();
+			insertContentObjectStatement.Reset ();
 
-			const auto contentObjectId = sqlite3_last_insert_rowid (installationDatabase);
+			const auto contentObjectId = installationDatabase.GetLastRowId ();
 
 			pathToContentObject [sourcePath] = {contentObjectId, fileHash};
 
 			for (const auto chunk : chunks) {
-				SAFE_SQLITE (sqlite3_bind_int64 (insertChunkStatement, 1, contentObjectId));
-				SAFE_SQLITE (sqlite3_bind_text (insertChunkStatement, 2,
-					absolute (temporaryDirectory / chunk.name).c_str (), -1, SQLITE_TRANSIENT));
-				SAFE_SQLITE (sqlite3_bind_int64 (insertChunkStatement, 3, chunk.size));
-				SAFE_SQLITE_INSERT (sqlite3_step (insertChunkStatement));
-				SAFE_SQLITE (sqlite3_reset (insertChunkStatement));
+				insertChunkStatement.Bind (1, contentObjectId);
+				insertChunkStatement.Bind (2,
+					absolute (temporaryDirectory / chunk.name).c_str ());
+				insertChunkStatement.Bind (3, chunk.size);
+				insertChunkStatement.Step ();
+				insertChunkStatement.Reset ();
 			}
 
 			totalCompressedSize += contentObjectCompressedSize;
 		} else {
 			// We have two files with the same hash
 			pathToContentObject [sourcePath] = {
-				sqlite3_column_int64 (selectContentObjectIdStatement, 0),
+				selectContentObjectIdStatement.GetInt64 (0),
 				fileHash};
 		}
 
-		SAFE_SQLITE (sqlite3_reset (selectContentObjectIdStatement));
+		selectContentObjectIdStatement.Reset ();
 	}
 
-	sqlite3_finalize (insertContentObjectStatement);
-	sqlite3_finalize (insertChunkStatement);
-	sqlite3_finalize (selectContentObjectIdStatement);
+	buildTransaction.Commit ();
+	installationTransaction.Commit();
 
-	SAFE_SQLITE (sqlite3_exec (buildDatabase, "COMMIT TRANSACTION;",
-		nullptr, nullptr, nullptr));
-	SAFE_SQLITE (sqlite3_exec (installationDatabase, "COMMIT TRANSACTION;",
-		nullptr, nullptr, nullptr));
+	auto selectContentObjectCountStatement = installationDatabase.Prepare (
+		"SELECT COUNT() FROM content_objects;");
+	selectContentObjectCountStatement.Step ();
 
-	sqlite3_stmt* selectContentObjectCountStatement = nullptr;
-	sqlite3_prepare_v2 (installationDatabase,
-		"SELECT COUNT() FROM content_objects;", -1,
-		&selectContentObjectCountStatement, nullptr);
-	sqlite3_step (selectContentObjectCountStatement);
-
-	const auto contentObjectCount = sqlite3_column_int64 (
-		selectContentObjectCountStatement, 0);
-
-	sqlite3_finalize (selectContentObjectCountStatement);
+	const auto contentObjectCount = selectContentObjectCountStatement.GetInt64 (0);
 
 	spdlog::get ("log")->info () << "Created " << contentObjectCount
 								 << " content objects";
@@ -335,25 +308,19 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void InsertStorageMappingEntries (sqlite3* installationDatabase,
+void InsertStorageMappingEntries (kyla::Sql::Database& installationDatabase,
 	const std::int64_t sourcePackageId,
 	const std::unordered_set<std::int64_t>& contentObjectIds)
 {
-	sqlite3_stmt* insertIntoStorageMappingStatement;
-	sqlite3_prepare_v2 (installationDatabase,
-		"INSERT INTO storage_mapping (ContentObjectId, SourcePackageId) VALUES (?, ?)",
-		-1, &insertIntoStorageMappingStatement, nullptr);
+	auto insertIntoStorageMappingStatement = installationDatabase.Prepare (
+		"INSERT INTO storage_mapping (ContentObjectId, SourcePackageId) VALUES (?, ?)");
 
 	for (const auto contentObjectId : contentObjectIds) {
-		sqlite3_bind_int64 (insertIntoStorageMappingStatement, 1,
-			contentObjectId);
-		sqlite3_bind_int64 (insertIntoStorageMappingStatement, 2,
-			sourcePackageId);
-		SAFE_SQLITE_INSERT (sqlite3_step (insertIntoStorageMappingStatement));
-		sqlite3_reset (insertIntoStorageMappingStatement);
+		insertIntoStorageMappingStatement.BindArguments (
+			contentObjectId, sourcePackageId);
+		insertIntoStorageMappingStatement.Step ();
+		insertIntoStorageMappingStatement.Reset();
 	}
-
-	sqlite3_finalize (insertIntoStorageMappingStatement);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -401,40 +368,31 @@ struct SourcePackageInfo
 
 ////////////////////////////////////////////////////////////////////////////////
 std::vector<SourcePackageInfo> WriteUserPackages (
-	sqlite3* buildDatabase,
-	sqlite3* installationDatabase,
+	kyla::Sql::Database& buildDatabase,
+	kyla::Sql::Database& installationDatabase,
 	const std::unordered_map<std::string, ContentObjectIdHash>& pathToContentObject,
 	const SourcePackageNameTemplate& packageNameTemplate,
 	const boost::filesystem::path& targetDirectory)
 {
 	std::vector<SourcePackageInfo> result;
 
-	sqlite3_stmt* insertIntoFilesStatement = nullptr;
-	SAFE_SQLITE (sqlite3_prepare_v2 (installationDatabase,
-		"INSERT INTO files (Path, ContentObjectId, FeatureId) VALUES (?, ?, ?);",
-		-1, &insertIntoFilesStatement, nullptr));
-	assert (insertIntoFilesStatement);
+	auto insertIntoFilesStatement = installationDatabase.Prepare (
+		"INSERT INTO files (Path, ContentObjectId, FeatureId) VALUES (?, ?, ?);");
 
 	// First, we assemble all user-requested source packages
-	sqlite3_stmt* selectSourcePackageIdsStatement = nullptr;
-	SAFE_SQLITE (sqlite3_prepare_v2 (installationDatabase,
-		"SELECT Id, Name, Uuid FROM source_packages;", -1,
-		&selectSourcePackageIdsStatement, nullptr));
-	assert (selectSourcePackageIdsStatement);
+	auto selectSourcePackageIdsStatement = installationDatabase.Prepare (
+		"SELECT Id, Name, Uuid FROM source_packages;");
 
-	while (sqlite3_step (selectSourcePackageIdsStatement) == SQLITE_ROW) {
-		const std::int64_t sourcePackageId = sqlite3_column_int64 (
-			selectSourcePackageIdsStatement, 0);
+	while (selectSourcePackageIdsStatement.Step ()) {
+		const std::int64_t sourcePackageId =
+			selectSourcePackageIdsStatement.GetInt64 (0);
 
 		spdlog::get ("log")->trace () << "Processing source package " << sourcePackageId;
 
 		// Find all files in this package, and then all chunks
-		sqlite3_stmt* selectFilesForPackageStatement = nullptr;
-		sqlite3_prepare_v2 (buildDatabase,
-			"SELECT SourcePath, TargetPath, FeatureId FROM files WHERE SourcePackageId=?;",
-			-1, &selectFilesForPackageStatement, nullptr);
-		assert (selectFilesForPackageStatement);
-		sqlite3_bind_int64 (selectFilesForPackageStatement, 1, sourcePackageId);
+		auto selectFilesForPackageStatement = buildDatabase.Prepare (
+			"SELECT SourcePath, TargetPath, FeatureId FROM files WHERE SourcePackageId=?;");
+		selectFilesForPackageStatement.Bind (1, sourcePackageId);
 
 		// contentObject (Hash) -> list of chunks that will go into this package
 		std::unordered_map<kyla::Hash, std::vector<std::string>, kyla::HashHash, kyla::HashEqual>
@@ -445,9 +403,8 @@ std::vector<SourcePackageInfo> WriteUserPackages (
 		std::unordered_set<std::int64_t> contentObjectsInPackage;
 
 		// For each file that goes into this package
-		while (sqlite3_step (selectFilesForPackageStatement) == SQLITE_ROW) {
-			const std::string sourcePath =
-				reinterpret_cast<const char*> (sqlite3_column_text (selectFilesForPackageStatement, 0));
+		while (selectFilesForPackageStatement.Step ()) {
+			const std::string sourcePath = selectFilesForPackageStatement.GetText (0);
 			std::int64_t contentObjectId = -1;
 
 			// May be NULL in case it's an empty file
@@ -464,24 +421,20 @@ std::vector<SourcePackageInfo> WriteUserPackages (
 						<< "' references " << contentObjectId;
 
 					// Write the chunks into this package
-					sqlite3_stmt* selectChunksForContentObject;
 					// Order by rowid, so we get a sequential write into the output
 					// file
-					sqlite3_prepare_v2 (buildDatabase,
-						"SELECT Path FROM chunks WHERE ContentObjectId=? ORDER BY rowid ASC",
-						-1, &selectChunksForContentObject, nullptr);
-					sqlite3_bind_int64 (selectChunksForContentObject, 1, contentObjectId);
+					auto selectChunksForContentObject = buildDatabase.Prepare (
+						"SELECT Path FROM chunks WHERE ContentObjectId=? ORDER BY rowid ASC");
+					selectChunksForContentObject.Bind (1, contentObjectId);
 
 					std::vector<std::string> chunksForContentObject;
 
-					while (sqlite3_step (selectChunksForContentObject) == SQLITE_ROW) {
+					while (selectChunksForContentObject.Step ()) {
 						chunksForContentObject.emplace_back (
-							reinterpret_cast<const char*> (
-								sqlite3_column_text (selectChunksForContentObject, 0)));
+							selectChunksForContentObject.GetText (0));
 					}
 
-					sqlite3_reset (selectChunksForContentObject);
-					sqlite3_finalize (selectChunksForContentObject);
+					selectChunksForContentObject.Reset ();
 
 					contentObjectsAndChunksInPackage [contentObjectIdHash.hash]
 						= std::move (chunksForContentObject);
@@ -494,32 +447,28 @@ std::vector<SourcePackageInfo> WriteUserPackages (
 			}
 
 			// We can now write the file entry
-			sqlite3_bind_text (insertIntoFilesStatement, 1,
-				reinterpret_cast<const char*> (
-					sqlite3_column_text (selectFilesForPackageStatement, 1)),
-				-1, SQLITE_TRANSIENT);
+			insertIntoFilesStatement.Bind (1,
+				selectFilesForPackageStatement.GetText (1));
 
 			if (contentObjectId != -1) {
-				SAFE_SQLITE (sqlite3_bind_int64 (insertIntoFilesStatement, 2,
-					contentObjectId));
+				insertIntoFilesStatement.Bind (2, contentObjectId);
 			} else {
-				SAFE_SQLITE (sqlite3_bind_null (insertIntoFilesStatement, 2));
+				insertIntoFilesStatement.Bind (2, kyla::Sql::Null ());
 			}
 
-			SAFE_SQLITE (sqlite3_bind_int64 (insertIntoFilesStatement, 3,
-				sqlite3_column_int64 (selectFilesForPackageStatement, 2)));
-			SAFE_SQLITE_INSERT (sqlite3_step (insertIntoFilesStatement));
-			SAFE_SQLITE (sqlite3_reset (insertIntoFilesStatement));
+			insertIntoFilesStatement.Bind (3,
+				selectFilesForPackageStatement.GetInt64 (2));
+			insertIntoFilesStatement.Step ();
+			insertIntoFilesStatement.Reset ();
 		}
 
-		sqlite3_reset (selectFilesForPackageStatement);
-		sqlite3_finalize (selectFilesForPackageStatement);
+		selectFilesForPackageStatement.Reset ();
 
 		InsertStorageMappingEntries (installationDatabase,
 			sourcePackageId, contentObjectsInPackage);
 
 		// Write the package
-		const auto packageUuid = sqlite3_column_blob (selectSourcePackageIdsStatement, 2);
+		const auto packageUuid = selectSourcePackageIdsStatement.GetBlob (2);
 		kyla::SourcePackageWriter spw;
 		spw.Open (targetDirectory / (packageNameTemplate (sourcePackageId)),
 			packageUuid);
@@ -539,46 +488,37 @@ std::vector<SourcePackageInfo> WriteUserPackages (
 
 		result.push_back(sourcePackageInfo);
 		spdlog::get ("log")->info () << "Created package "
-			<< reinterpret_cast<const char*> (sqlite3_column_text (
-				selectSourcePackageIdsStatement, 1));
+			<< selectSourcePackageIdsStatement.GetText (1);
 	}
-
-	sqlite3_finalize (selectSourcePackageIdsStatement);
-	sqlite3_finalize (insertIntoFilesStatement);
 
 	return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-std::int64_t CreateGeneratedPackage (sqlite3* installationDatabase,
+std::int64_t CreateGeneratedPackage (kyla::Sql::Database& installationDatabase,
 	boost::uuids::uuid& packageUuid)
 {
-	sqlite3_stmt* insertSourcePackageStatement;
-	sqlite3_prepare_v2 (installationDatabase,
-		"INSERT INTO source_packages (Name, Filename, Uuid, Hash) VALUES (?, ?, ?, ?);", -1,
-		&insertSourcePackageStatement, nullptr);
+	auto insertSourcePackageStatement = installationDatabase.Prepare (
+		"INSERT INTO source_packages (Name, Filename, Uuid, Hash) VALUES (?, ?, ?, ?);");
 
 	const std::string packageName = std::string ("Generated_")
 		+ kyla::ToString (packageUuid.data);
 
-	sqlite3_bind_text (insertSourcePackageStatement, 1,
-		packageName.c_str (), -1, SQLITE_TRANSIENT);
+	insertSourcePackageStatement.Bind (1, packageName.c_str ());
 
 	// Dummy filename and hash, will be fixed up later
-	sqlite3_bind_text (insertSourcePackageStatement, 2,
-		packageName.c_str (), -1, SQLITE_TRANSIENT);
+	insertSourcePackageStatement.Bind (2,
+		packageName.c_str ());
 
-	sqlite3_bind_blob (insertSourcePackageStatement, 3,
-		packageUuid.data, 16, SQLITE_TRANSIENT);
-	sqlite3_bind_blob (insertSourcePackageStatement, 4,
-		packageName.c_str (), packageName.size (), SQLITE_TRANSIENT);
+	insertSourcePackageStatement.Bind (3, 16, packageUuid.data);
+	insertSourcePackageStatement.Bind (4, packageName.size (),
+		packageName.c_str ());
 
-	SAFE_SQLITE_INSERT (sqlite3_step (insertSourcePackageStatement));
+	insertSourcePackageStatement.Step ();
 
-	const auto currentPackageId = sqlite3_last_insert_rowid (installationDatabase);
+	const auto currentPackageId = installationDatabase.GetLastRowId ();
 
-	sqlite3_reset (insertSourcePackageStatement);
-	sqlite3_finalize (insertSourcePackageStatement);
+	insertSourcePackageStatement.Reset ();
 
 	spdlog::get ("log")->info () << "Created package " << packageName;
 
@@ -587,8 +527,8 @@ std::int64_t CreateGeneratedPackage (sqlite3* installationDatabase,
 
 ////////////////////////////////////////////////////////////////////////////////
 std::vector<SourcePackageInfo> WriteGeneratedPackages (
-	sqlite3* buildDatabase,
-	sqlite3* installationDatabase,
+	kyla::Sql::Database& buildDatabase,
+	kyla::Sql::Database& installationDatabase,
 	const std::unordered_map<std::string, ContentObjectIdHash>& pathToContentObject,
 	const boost::filesystem::path& targetDirectory,
 	const SourcePackageNameTemplate& packageNameTemplate,
@@ -596,27 +536,19 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 {
 	std::vector<SourcePackageInfo> result;
 
-	sqlite3_stmt* insertIntoFilesStatement = nullptr;
-	SAFE_SQLITE (sqlite3_prepare_v2 (installationDatabase,
-		"INSERT INTO files (Path, ContentObjectId, FeatureId) VALUES (?, ?, ?);",
-		-1, &insertIntoFilesStatement, nullptr));
-	assert (insertIntoFilesStatement);
+	auto insertIntoFilesStatement = installationDatabase.Prepare (
+		"INSERT INTO files (Path, ContentObjectId, FeatureId) VALUES (?, ?, ?);");
 
 	// Here we handle all files sent to the "default" package
 	// This is very similar to the loop above, but we will create packages on
 	// demand once the package size becomes too large
-	sqlite3_stmt* selectFilesForDefaultPackageStatement;
-	sqlite3_prepare_v2 (buildDatabase,
-		"SELECT SourcePath, TargetPath, FeatureId FROM files WHERE SourcePackageId IS NULL;",
-		-1, &selectFilesForDefaultPackageStatement, nullptr);
+	auto selectFilesForDefaultPackageStatement = buildDatabase.Prepare (
+		"SELECT SourcePath, TargetPath, FeatureId FROM files WHERE SourcePackageId IS NULL;");
 
-	sqlite3_stmt* selectChunksForContentObject = nullptr;
 	// Order by rowid, so we get a sequential write into the output
 	// file
-	sqlite3_prepare_v2 (buildDatabase,
-		"SELECT Path, Size FROM chunks WHERE ContentObjectId=? ORDER BY rowid ASC",
-		-1, &selectChunksForContentObject, nullptr);
-	assert (selectChunksForContentObject);
+	auto selectChunksForContentObject = buildDatabase.Prepare(
+		"SELECT Path, Size FROM chunks WHERE ContentObjectId=? ORDER BY rowid ASC");
 
 	boost::uuids::random_generator uuidGen;
 
@@ -627,9 +559,9 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 	// Same reasong as in WriteUserPackages, we need to handle files which
 	// reference the same content object
 	std::unordered_set<std::int64_t> contentObjectsInCurrentPackage;
-	while (sqlite3_step (selectFilesForDefaultPackageStatement) == SQLITE_ROW) {
+	while (selectFilesForDefaultPackageStatement.Step ()) {
 		const std::string sourcePath =
-			reinterpret_cast<const char*> (sqlite3_column_text (selectFilesForDefaultPackageStatement, 0));
+			selectFilesForDefaultPackageStatement.GetText (0);
 
 		std::int64_t contentObjectId = -1;
 		// May be NULL in case it's an empty file
@@ -641,9 +573,9 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 				// We have found a new content object
 				spdlog::get ("log")->trace () << "'" << sourcePath << "' references " << contentObjectId;
 
-				sqlite3_bind_int64 (selectChunksForContentObject, 1, contentObjectId);
+				selectChunksForContentObject.Bind (1, contentObjectId);
 
-				while (sqlite3_step (selectChunksForContentObject) == SQLITE_ROW) {
+				while (selectChunksForContentObject.Step ()) {
 					// Open current package if needed, start inserting
 					if (! spw.IsOpen ()) {
 						// Add a new source package
@@ -657,12 +589,11 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 
 					// Insert the chunk right away, increment current size, if
 					// package is full, finalize, and reset size
-					const std::string chunkPath = reinterpret_cast<const char*> (
-						sqlite3_column_text (selectChunksForContentObject, 0));
+					const std::string chunkPath = selectChunksForContentObject.GetText (0);
 					spw.Add (contentObjectIdHash.hash, chunkPath);
 
-					dataInCurrentPackage += sqlite3_column_int64 (
-						selectChunksForContentObject, 1);
+					dataInCurrentPackage +=
+						selectChunksForContentObject.GetInt64 (1);
 					contentObjectsInCurrentPackage.insert (contentObjectIdHash.id);
 
 					if (dataInCurrentPackage >= targetPackageSize) {
@@ -679,7 +610,7 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 					}
 				}
 
-				sqlite3_reset (selectChunksForContentObject);
+				selectChunksForContentObject.Reset ();
 			} else {
 				spdlog::get ("log")->trace () << "'" << sourcePath
 					<< "' references " << contentObjectId
@@ -688,22 +619,19 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 		}
 
 		// We can now write the file entry
-		sqlite3_bind_text (insertIntoFilesStatement, 1,
-			reinterpret_cast<const char*> (
-				sqlite3_column_text (selectFilesForDefaultPackageStatement, 1)),
-			-1, SQLITE_TRANSIENT);
+		insertIntoFilesStatement.Bind (1,
+			selectFilesForDefaultPackageStatement.GetText (1));
 
 		if (contentObjectId != -1) {
-			sqlite3_bind_int64 (insertIntoFilesStatement, 2,
-				contentObjectId);
+			insertIntoFilesStatement.Bind (2, contentObjectId);
 		} else {
-			sqlite3_bind_null (insertIntoFilesStatement, 2);
+			insertIntoFilesStatement.Bind (2, kyla::Sql::Null ());
 		}
 
-		sqlite3_bind_int64 (insertIntoFilesStatement, 3,
-			sqlite3_column_int64 (selectFilesForDefaultPackageStatement, 2));
-		SAFE_SQLITE_INSERT (sqlite3_step (insertIntoFilesStatement));
-		sqlite3_reset (insertIntoFilesStatement);
+		insertIntoFilesStatement.Bind (3,
+			selectFilesForDefaultPackageStatement.GetInt64 (2));
+		insertIntoFilesStatement.Step ();
+		insertIntoFilesStatement.Reset ();
 	}
 
 	// Flush if needed
@@ -717,24 +645,19 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 		result.push_back (sourcePackageInfo);
 	}
 
-	sqlite3_finalize (selectFilesForDefaultPackageStatement);
-	sqlite3_finalize (insertIntoFilesStatement);
-	sqlite3_finalize (selectChunksForContentObject);
-
 	return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 std::vector<SourcePackageInfo> WritePackages (
-	sqlite3* buildDatabase,
-	sqlite3* installationDatabase,
+	kyla::Sql::Database& buildDatabase,
+	kyla::Sql::Database& installationDatabase,
 	const boost::filesystem::path& targetDirectory,
 	const pugi::xml_node& productNode,
 	const std::unordered_map<std::string, ContentObjectIdHash> pathToContentObject,
 	const std::int64_t targetPackageSize = 1ll << 30 /* 1 GiB */)
 {
-	sqlite3_exec (installationDatabase, "BEGIN TRANSACTION;",
-		nullptr, nullptr, nullptr);
+	auto transaction = installationDatabase.BeginTransaction();
 
 	std::vector<SourcePackageInfo> result;
 
@@ -754,8 +677,7 @@ std::vector<SourcePackageInfo> WritePackages (
 	result.insert (result.end (),
 		defaultPackages.begin (), defaultPackages.end ());
 
-	sqlite3_exec (installationDatabase, "COMMIT TRANSACTION;",
-		nullptr, nullptr, nullptr);
+	transaction.Commit ();
 
 	return result;
 }
@@ -765,45 +687,34 @@ struct GeneratorContext
 public:
 	GeneratorContext ()
 	{
-		sqlite3_open (":memory:", &installationDatabase);
+		installationDatabase = kyla::Sql::Database::Create ();
 
-		sqlite3_exec (installationDatabase,
-			"PRAGMA foreign_keys = ON;", nullptr, nullptr, nullptr);
-		sqlite3_exec (installationDatabase, install_db_structure,
-			nullptr, nullptr, nullptr);
+		installationDatabase.Execute (install_db_structure);
 	}
 
 	void SetupBuildDatabase (const boost::filesystem::path& temporaryDirectory)
 	{
 		spdlog::get ("log")->trace () << "Build database: '" << (temporaryDirectory / "build.sqlite").c_str () << "'";
-		SAFE_SQLITE (sqlite3_open ((temporaryDirectory / "build.sqlite").c_str (),
-			&buildDatabase));
-		SAFE_SQLITE (sqlite3_exec (buildDatabase, build_db_structure,
-			nullptr, nullptr, nullptr));
+		buildDatabase = kyla::Sql::Database::Create (
+					(temporaryDirectory / "build.sqlite").c_str ());
+		buildDatabase.Execute (build_db_structure);
 	}
 
 	~GeneratorContext ()
 	{
-		sqlite3_close (buildDatabase);
-		sqlite3_close (installationDatabase);
 	}
 
 	void WriteInstallationDatabase (const boost::filesystem::path& outputFile) const
 	{
-		sqlite3* targetDb;
-		sqlite3_open (outputFile.c_str (), &targetDb);
-		auto backup = sqlite3_backup_init(targetDb, "main",
-			installationDatabase, "main");
-		sqlite3_backup_step (backup, -1);
-		sqlite3_backup_finish (backup);
+		installationDatabase.SaveCopyTo (outputFile.c_str ());
 
 		spdlog::get ("log")->info () << "Wrote installation database "
 			<< outputFile.string ();
 	}
 
 	pugi::xml_node	productNode;
-	sqlite3*		installationDatabase;
-	sqlite3*		buildDatabase;
+	kyla::Sql::Database		installationDatabase;
+	kyla::Sql::Database		buildDatabase;
 	boost::filesystem::path sourceDirectory;
 	boost::filesystem::path	temporaryDirectory;
 	boost::filesystem::path targetDirectory;
@@ -815,8 +726,7 @@ Returns a mapping of feature id string to the feature id in the database.
 */
 std::unordered_map<std::string, std::int64_t> CreateFeatures (GeneratorContext& gc)
 {
-	sqlite3_exec (gc.installationDatabase, "BEGIN TRANSACTION;",
-		nullptr, nullptr, nullptr);
+	auto transaction = gc.installationDatabase.BeginTransaction ();
 
 	// TODO Validate that there is a feature element
 	// TODO Validate that at least one feature is present
@@ -826,32 +736,28 @@ std::unordered_map<std::string, std::int64_t> CreateFeatures (GeneratorContext& 
 
 	std::unordered_map<std::string, std::int64_t> result;
 
-	sqlite3_stmt* insertFeatureStatement;
-	sqlite3_prepare_v2 (gc.installationDatabase,
-		"INSERT INTO features (Name, UIName, UIDescription) VALUES (?, ?, ?)", -1, &insertFeatureStatement,
-		nullptr);
+	auto insertFeatureStatement = gc.installationDatabase.Prepare (
+		"INSERT INTO features (Name, UIName, UIDescription) VALUES (?, ?, ?)");
 
 	int featureCount = 0;
 	for (const auto feature : gc.productNode.child ("Features").children ()) {
 		const auto featureId = feature.attribute ("Id").value ();
-		sqlite3_bind_text (insertFeatureStatement, 1, featureId,
-			-1, SQLITE_TRANSIENT);
+		insertFeatureStatement.Bind (1, featureId);
 
 		const auto featureName = feature.attribute ("Name").value ();
-		sqlite3_bind_text (insertFeatureStatement, 2, featureName,
-			-1, SQLITE_TRANSIENT);
+		insertFeatureStatement.Bind (2, featureName);
 
 		if (feature.attribute ("Description")) {
-			sqlite3_bind_text (insertFeatureStatement, 3,
-				feature.attribute ("Description").value (), -1, SQLITE_TRANSIENT);
+			insertFeatureStatement.Bind (3,
+				feature.attribute ("Description").value ());
 		} else {
-			sqlite3_bind_null (insertFeatureStatement, 3);
+			insertFeatureStatement.Bind (3, kyla::Sql::Null ());
 		}
 
-		SAFE_SQLITE_INSERT (sqlite3_step (insertFeatureStatement));
-		sqlite3_reset (insertFeatureStatement);
+		insertFeatureStatement.Step ();
+		insertFeatureStatement.Reset ();
 
-		const auto lastRowId = sqlite3_last_insert_rowid (gc.installationDatabase);
+		const auto lastRowId = gc.installationDatabase.GetLastRowId ();
 		result [featureId] = lastRowId;
 
 		spdlog::get ("log")->trace () << "Feature '" << featureId
@@ -859,12 +765,9 @@ std::unordered_map<std::string, std::int64_t> CreateFeatures (GeneratorContext& 
 		++featureCount;
 	}
 
-	sqlite3_finalize (insertFeatureStatement);
-
 	spdlog::get ("log")->info () << "Created " << featureCount << " feature(s)";
 
-	sqlite3_exec (gc.installationDatabase, "COMMIT TRANSACTION;",
-		nullptr, nullptr, nullptr);
+	transaction.Commit ();
 
 	return result;
 }
@@ -875,8 +778,7 @@ Returns a mapping of source package id string to the source package id in the da
 std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorContext& gc,
 	boost::uuids::random_generator& uuidGen)
 {
-	sqlite3_exec (gc.installationDatabase, "BEGIN TRANSACTION;",
-		nullptr, nullptr, nullptr);
+	auto transaction = gc.installationDatabase.BeginTransaction();
 
 	// TODO Validate the source package ID is not empty
 	// TODO Validate all source package IDs are unique
@@ -884,29 +786,26 @@ std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorCon
 
 	std::unordered_map<std::string, std::int64_t> result;
 
-	sqlite3_stmt* insertSourcePackageStatement;
-	sqlite3_prepare_v2 (gc.installationDatabase,
-		"INSERT INTO source_packages (Name, Filename, Uuid, Hash) VALUES (?, ?, ?, ?)", -1, &insertSourcePackageStatement,
-		nullptr);
+	auto insertSourcePackageStatement = gc.installationDatabase.Prepare (
+		"INSERT INTO source_packages (Name, Filename, Uuid, Hash) VALUES (?, ?, ?, ?)");
 
 	int sourcePackageCount = 0;
 	for (const auto sourcePackage : gc.productNode.child ("SourcePackages").children ()) {
 		const auto sourcePackageId = sourcePackage.attribute ("Id").value ();
-		sqlite3_bind_text (insertSourcePackageStatement, 1,
-			sourcePackageId, -1, SQLITE_TRANSIENT);
+		insertSourcePackageStatement.Bind (1, sourcePackageId);
 
 		const auto packageUuid = uuidGen ();
-		sqlite3_bind_text (insertSourcePackageStatement, 2,
-			kyla::ToString (packageUuid.data).c_str (), -1, SQLITE_TRANSIENT);
-		sqlite3_bind_blob (insertSourcePackageStatement, 3,
-			packageUuid.data, packageUuid.size (), SQLITE_TRANSIENT);
-		sqlite3_bind_blob (insertSourcePackageStatement, 4,
-			packageUuid.data, packageUuid.size (), SQLITE_TRANSIENT);
+		insertSourcePackageStatement.Bind (2,
+			kyla::ToString (packageUuid.data).c_str ());
+		insertSourcePackageStatement.Bind (3, packageUuid.size (),
+			packageUuid.data);
+		insertSourcePackageStatement.Bind (4, packageUuid.size (),
+			packageUuid.data);
 
-		SAFE_SQLITE_INSERT (sqlite3_step (insertSourcePackageStatement));
-		sqlite3_reset (insertSourcePackageStatement);
+		insertSourcePackageStatement.Step ();
+		insertSourcePackageStatement.Reset ();
 
-		const auto lastRowId = sqlite3_last_insert_rowid (gc.installationDatabase);
+		const auto lastRowId = gc.installationDatabase.GetLastRowId ();
 		result [sourcePackageId] = lastRowId;
 
 		spdlog::get ("log")->trace () << "Source package '" << sourcePackageId
@@ -914,85 +813,67 @@ std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorCon
 		++sourcePackageCount;
 	}
 
-	sqlite3_finalize (insertSourcePackageStatement);
-
 	spdlog::get ("log")->info () << "Created " << sourcePackageCount << " source package(s)";
 
-	sqlite3_exec (gc.installationDatabase, "COMMIT TRANSACTION;",
-		nullptr, nullptr, nullptr);
+	transaction.Commit ();
 	return result;
 }
 
 /*
 Write global properties
 */
-void WriteProperties (sqlite3* installationDatabase,
+void WriteProperties (kyla::Sql::Database& installationDatabase,
 	const pugi::xml_node& productNode)
 {
-	sqlite3_exec (installationDatabase, "BEGIN TRANSACTION;",
-		nullptr, nullptr, nullptr);
+	auto transaction = installationDatabase.BeginTransaction ();
 
 	spdlog::get ("log")->trace () << "Populating properties table";
 
-	sqlite3_stmt* insertPropertiesStatement = nullptr;
-	sqlite3_prepare_v2 (installationDatabase,
-		"INSERT INTO properties (Name, Value) VALUES (?, ?)", -1, &insertPropertiesStatement,
-		nullptr);
+	auto insertPropertiesStatement = installationDatabase.Prepare (
+		"INSERT INTO properties (Name, Value) VALUES (?, ?)");
 
-	sqlite3_bind_text (insertPropertiesStatement, 1,
-		"ProductName", -1, nullptr);
-	sqlite3_bind_text (insertPropertiesStatement, 2,
-		productNode.attribute ("Name").value (), -1, SQLITE_TRANSIENT);
-	sqlite3_step (insertPropertiesStatement);
-	sqlite3_reset (insertPropertiesStatement);
+	insertPropertiesStatement.BindArguments (
+		"ProductName", productNode.attribute ("Name").value ());
 
-	sqlite3_bind_text (insertPropertiesStatement, 1,
-		"ProductVersion", -1, nullptr);
-	sqlite3_bind_text (insertPropertiesStatement, 2,
-		productNode.attribute ("Version").value (), -1, SQLITE_TRANSIENT);
-	sqlite3_step (insertPropertiesStatement);
-	sqlite3_reset (insertPropertiesStatement);
+	insertPropertiesStatement.Step ();
+	insertPropertiesStatement.Reset ();
 
-	sqlite3_finalize (insertPropertiesStatement);
+	insertPropertiesStatement.BindArguments ("ProductVersion",
+		productNode.attribute ("Version").value ());
 
-	sqlite3_exec (installationDatabase, "COMMIT TRANSACTION;",
-		nullptr, nullptr, nullptr);
+	insertPropertiesStatement.Step ();
+	insertPropertiesStatement.Reset ();
+
+	transaction.Commit ();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 void FinalizeSourcePackageNames (const SourcePackageNameTemplate& nameTemplate,
 	const std::vector<SourcePackageInfo>& infos,
-	sqlite3* installationDatabase)
+	kyla::Sql::Database& installationDatabase)
 {
-	sqlite3_exec (installationDatabase, "BEGIN TRANSACTION;",
-		nullptr, nullptr, nullptr);
+	auto transaction = installationDatabase.BeginTransaction ();
 
-	sqlite3_stmt* updateSourcePackageFilenameStatement;
-	sqlite3_prepare_v2 (installationDatabase,
-		"UPDATE source_packages SET Filename=?,Hash=? WHERE Id=?;", -1,
-		&updateSourcePackageFilenameStatement, nullptr);
+	auto updateSourcePackageFilenameStatement = installationDatabase.Prepare(
+		"UPDATE source_packages SET Filename=?,Hash=? WHERE Id=?;");
 
 	for (const auto& info : infos) {
 		const auto sourcePackageId = info.id;
 
-		sqlite3_bind_int64 (updateSourcePackageFilenameStatement, 3,
-			sourcePackageId);
+		updateSourcePackageFilenameStatement.Bind (3, sourcePackageId);
 		const auto packageName = nameTemplate (sourcePackageId);
 		spdlog::get ("log")->debug () << "Package "
 			<< sourcePackageId << " stored in file " << packageName;
 
-		sqlite3_bind_text (updateSourcePackageFilenameStatement, 1,
-			packageName.c_str (), -1, SQLITE_TRANSIENT);
-		sqlite3_bind_blob (updateSourcePackageFilenameStatement, 2,
-			info.hash.hash, sizeof (info.hash.hash), SQLITE_TRANSIENT);
-		SAFE_SQLITE_INSERT (sqlite3_step (updateSourcePackageFilenameStatement));
-		sqlite3_reset (updateSourcePackageFilenameStatement);
+		updateSourcePackageFilenameStatement.Bind (1, packageName.c_str ());
+		updateSourcePackageFilenameStatement.Bind (2, sizeof (info.hash.hash),
+			info.hash.hash);
+
+		updateSourcePackageFilenameStatement.Step ();
+		updateSourcePackageFilenameStatement.Reset ();
 	}
 
-	sqlite3_finalize (updateSourcePackageFilenameStatement);
-
-	sqlite3_exec (installationDatabase, "COMMIT TRANSACTION;",
-		nullptr, nullptr, nullptr);
+	transaction.Commit ();
 }
 
 int main (int argc, char* argv[])
@@ -1034,6 +915,7 @@ int main (int argc, char* argv[])
     }
 
 	auto log = spdlog::stdout_logger_mt ("log");
+	log->set_level (spdlog::level::trace);
 
 	const auto inputFile = vm ["input-file"].as<std::string> ();
 
@@ -1081,17 +963,16 @@ int main (int argc, char* argv[])
 	WriteProperties (gc.installationDatabase, gc.productNode);
 
 	// Create indices
-	sqlite3_exec (gc.installationDatabase,
-		install_db_indices, nullptr, nullptr, nullptr);
+	gc.installationDatabase.Execute (
+		install_db_indices);
 
 	// Set the reference counts
-	sqlite3_exec (gc.installationDatabase,
-		"UPDATE content_objects SET ReferenceCount = (SELECT COUNT() FROM files WHERE files.ContentObjectId=content_objects.Id);",
-		nullptr, nullptr, nullptr);
+	gc.installationDatabase.Execute (
+		"UPDATE content_objects SET ReferenceCount = (SELECT COUNT() FROM files WHERE files.ContentObjectId=content_objects.Id);");
 
 	// Help the query optimizer
-	sqlite3_exec (gc.installationDatabase,
-		"ANALYZE;", nullptr, nullptr, nullptr);
+	gc.installationDatabase.Execute (
+		"ANALYZE;");
 
 	gc.WriteInstallationDatabase (gc.targetDirectory / (outputFile.string () + ".kydb"));
 

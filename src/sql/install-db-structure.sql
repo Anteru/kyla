@@ -1,3 +1,5 @@
+PRAGMA foreign_keys = ON;
+
 CREATE TABLE content_objects (Id INTEGER PRIMARY KEY NOT NULL,
     Hash BLOB NOT NULL UNIQUE,
     Size INTEGER NOT NULL,
