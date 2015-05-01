@@ -117,6 +117,115 @@ struct ContentObjectIdHash
 	kyla::Hash hash;
 };
 
+class FileChunker
+{
+public:
+	struct ChunkInfo
+	{
+		std::string name;
+		std::int64_t size;
+	};
+
+	FileChunker (const boost::filesystem::path& temporaryDirectory)
+	: temporaryDirectory_ (temporaryDirectory)
+	{
+		readBuffer_.resize (fileChunkSize_);
+		compressionBuffer_.resize (compressBound(fileChunkSize_));
+	}
+
+	struct ChunkResult
+	{
+		std::vector<ChunkInfo> chunks;
+		std::int64_t inputSize;
+		std::int64_t compressedSize;
+		int chunkCount;
+		kyla::Hash inputHash;
+	};
+
+	ChunkResult ChunkFile (const boost::filesystem::path& fullSourcePath)
+	{
+		// TODO handle read errors
+		// TODO handle empty files
+		boost::filesystem::ifstream input (fullSourcePath, std::ios::binary);
+
+		std::vector<ChunkInfo> chunks;
+
+		hasher_.Initialize ();
+		int chunkCount = 0;
+		std::int64_t contentObjectCompressedSize = 0;
+		std::int64_t inputSize = 0;
+
+		for (;;) {
+			input.read (reinterpret_cast<char*> (readBuffer_.data ()), fileChunkSize_);
+			const std::int64_t bytesRead = input.gcount ();
+			inputSize += bytesRead;
+
+			hasher_.Update (readBuffer_.data (), bytesRead);
+
+			uLongf compressedSize = compressionBuffer_.size ();
+			// TODO handle compression failure
+			compress2 (reinterpret_cast<Bytef*> (compressionBuffer_.data ()),
+				&compressedSize,
+				readBuffer_.data (), bytesRead, Z_BEST_COMPRESSION);
+
+			const auto chunkName = kyla::ToString (uuidGen_ ().data);
+
+			const ChunkInfo chunkInfo {chunkName,
+				static_cast<std::int64_t> (compressedSize)};
+			chunks.push_back (chunkInfo);
+
+			kyla::SourcePackageChunk pdc;
+			::memset (&pdc, 0, sizeof (pdc));
+
+			pdc.compressedSize = compressedSize;
+			pdc.size = bytesRead;
+			pdc.offset = fileChunkSize_ * chunkCount;
+			pdc.compressionMode = kyla::CompressionMode::Zip;
+
+			contentObjectCompressedSize += compressedSize;
+
+			auto chunkHash = kyla::ComputeHash (compressionBuffer_.data (), compressedSize);
+			::memcpy (pdc.hash, chunkHash.hash, sizeof (pdc.hash));
+
+			boost::filesystem::ofstream chunkOutput (
+				temporaryDirectory_ / chunkName, std::ios::binary);
+			chunkOutput.write (reinterpret_cast<const char*> (&pdc), sizeof (pdc));
+			chunkOutput.write (reinterpret_cast<char*> (compressionBuffer_.data ()),
+				compressedSize);
+
+			spdlog::get ("log")->trace () << "Wrote chunk '" << chunkName
+				<< "' for file '" << fullSourcePath.c_str () << "' (uncompressed: "
+				<< bytesRead << ", compressed: " << compressedSize << ")";
+
+			++chunkCount;
+
+			// Compress data
+			if (input.gcount () < fileChunkSize_) {
+				break;
+			}
+		}
+
+		const auto hash = hasher_.Finalize ();
+
+		ChunkResult result;
+		result.chunkCount = chunkCount;
+		result.chunks = chunks;
+		result.inputHash = hash;
+		result.inputSize = inputSize;
+		result.compressedSize = contentObjectCompressedSize;
+
+		return result;
+	}
+
+private:
+	kyla::StreamHasher				hasher_;
+	boost::filesystem::path			temporaryDirectory_;
+	std::vector<unsigned char>		readBuffer_;
+	std::vector<unsigned char>		compressionBuffer_;
+	boost::uuids::random_generator	uuidGen_;
+	std::int64_t					fileChunkSize_ = 1 << 24;
+};
+
 /**
 For every unique source file, create the file chunks and update the build
 database accordingly.
@@ -134,8 +243,7 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 	const boost::filesystem::path& sourceDirectory,
 	const boost::filesystem::path& temporaryDirectory,
 	kyla::Sql::Database& buildDatabase,
-	kyla::Sql::Database& installationDatabase,
-	const std::int64_t fileChunkSize = 1 << 24 /* 16 MiB */)
+	kyla::Sql::Database& installationDatabase)
 {
 	auto buildTransaction = buildDatabase.BeginTransaction();
 	auto installationTransaction = installationDatabase.BeginTransaction();
@@ -144,14 +252,7 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 
 	// Read every unique source path in chunks, update hash, compress, compute
 	// hash, write to temporary directory
-	std::vector<unsigned char> buffer (fileChunkSize);
-	std::vector<unsigned char> compressed (compressBound(fileChunkSize));
-
-	// Prepare hash
-	kyla::StreamHasher fileHasher;
-	kyla::StreamHasher chunkHasher;
-
-	boost::uuids::random_generator uuidGen;
+	FileChunker chunker (temporaryDirectory);
 
 	auto insertContentObjectStatement = installationDatabase.Prepare (
 		"INSERT INTO content_objects (Size, Hash, ChunkCount) VALUES (?, ?, ?)");
@@ -170,100 +271,33 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 	for (const auto sourcePath : sourcePaths) {
 		const auto fullSourcePath = sourceDirectory / sourcePath;
 
-		// TODO handle read errors
-		// TODO handle empty files
-		boost::filesystem::ifstream input (fullSourcePath, std::ios::binary);
+		const auto chunkResult = chunker.ChunkFile (fullSourcePath);
 
-		struct ChunkInfo
-		{
-			std::string name;
-			std::int64_t size;
-		};
-
-		std::vector<ChunkInfo> chunks;
-
-		fileHasher.Initialize ();
-		int chunkNumber = 0;
-		std::int64_t contentObjectSize = 0;
-		std::int64_t contentObjectCompressedSize = 0;
-
-		for (;;) {
-			input.read (reinterpret_cast<char*> (buffer.data ()), fileChunkSize);
-			const std::int64_t chunkSize = input.gcount ();
-			contentObjectSize += chunkSize;
-
-			fileHasher.Update (buffer.data (), chunkSize);
-
-			uLongf compressedSize = compressed.size ();
-			// TODO handle compression failure
-			compress2 (reinterpret_cast<Bytef*> (compressed.data ()),
-				&compressedSize,
-				buffer.data (), chunkSize, Z_BEST_COMPRESSION);
-
-			const auto chunkName = kyla::ToString (uuidGen ().data);
-
-			const ChunkInfo chunkInfo {chunkName,
-				static_cast<std::int64_t> (compressedSize)};
-			chunks.push_back (chunkInfo);
-
-			kyla::SourcePackageChunk pdc;
-			::memset (&pdc, 0, sizeof (pdc));
-
-			pdc.compressedSize = compressedSize;
-			pdc.size = chunkSize;
-			pdc.offset = fileChunkSize * chunkNumber;
-			pdc.compressionMode = kyla::CompressionMode::Zip;
-
-			contentObjectCompressedSize += compressedSize;
-
-			auto chunkHash = kyla::ComputeHash (compressed.data (), compressedSize);
-			::memcpy (pdc.hash, chunkHash.hash, sizeof (pdc.hash));
-
-			boost::filesystem::ofstream chunkOutput (
-				temporaryDirectory / chunkName, std::ios::binary);
-			chunkOutput.write (reinterpret_cast<const char*> (&pdc), sizeof (pdc));
-			chunkOutput.write (reinterpret_cast<char*> (compressed.data ()),
-				compressedSize);
-
-			spdlog::get ("log")->trace () << "Wrote chunk '" << chunkName
-				<< "' for file '" << sourcePath << "' (uncompressed: "
-				<< chunkSize << ", compressed: " << compressedSize << ")";
-
-			++chunkNumber;
-
-			// Compress data
-			if (input.gcount () < fileChunkSize) {
-				break;
-			}
-		}
-
-		totalSize += contentObjectSize;
-
-		if (contentObjectSize == 0) {
-			// Don't create a content object when the file is empty
+		// Empty file, don't create a content object for it
+		if (chunkResult.inputSize == 0) {
 			continue;
 		}
 
-		const auto fileHash = fileHasher.Finalize ();
+		totalSize += chunkResult.inputSize;
 
-		spdlog::get ("log")->debug() << sourcePath << " -> " << ToString (fileHash);
+		spdlog::get ("log")->debug() << sourcePath << " -> " << ToString (chunkResult.inputHash);
 
-		selectContentObjectIdStatement.Bind (1, sizeof (fileHash.hash),
-			fileHash.hash);
+		selectContentObjectIdStatement.Bind (1, sizeof (chunkResult.inputHash.hash),
+			chunkResult.inputHash.hash);
 
 		if (! selectContentObjectIdStatement.Step ()) {
-			insertContentObjectStatement.Bind (1, contentObjectSize);
-			insertContentObjectStatement.Bind (2, sizeof (fileHash.hash),
-				fileHash.hash);
-			insertContentObjectStatement.Bind (3, chunkNumber);
+			insertContentObjectStatement.Bind (1, chunkResult.inputSize);
+			insertContentObjectStatement.Bind (2, sizeof (chunkResult.inputHash.hash),
+				chunkResult.inputHash.hash);
+			insertContentObjectStatement.Bind (3, chunkResult.chunkCount);
 			insertContentObjectStatement.Step ();
 			insertContentObjectStatement.Reset ();
 
 			const auto contentObjectId = installationDatabase.GetLastRowId ();
 
-			pathToContentObject [sourcePath] = {contentObjectId, fileHash};
+			pathToContentObject [sourcePath] = {contentObjectId, chunkResult.inputHash};
 
-			for (const auto chunk : chunks) {
+			for (const auto chunk : chunkResult.chunks) {
 				insertChunkStatement.Bind (1, contentObjectId);
 				insertChunkStatement.Bind (2,
 					absolute (temporaryDirectory / chunk.name).c_str ());
@@ -272,12 +306,12 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 				insertChunkStatement.Reset ();
 			}
 
-			totalCompressedSize += contentObjectCompressedSize;
+			totalCompressedSize += chunkResult.compressedSize;
 		} else {
 			// We have two files with the same hash
 			pathToContentObject [sourcePath] = {
 				selectContentObjectIdStatement.GetInt64 (0),
-				fileHash};
+				chunkResult.inputHash};
 		}
 
 		selectContentObjectIdStatement.Reset ();
@@ -498,11 +532,10 @@ std::int64_t CreateGeneratedPackage (kyla::Sql::Database& installationDatabase,
 	const std::string packageName = std::string ("Generated_")
 		+ kyla::ToString (packageUuid.data);
 
-	insertSourcePackageStatement.Bind (1, packageName.c_str ());
+	insertSourcePackageStatement.Bind (1, packageName);
 
 	// Dummy filename and hash, will be fixed up later
-	insertSourcePackageStatement.Bind (2,
-		packageName.c_str ());
+	insertSourcePackageStatement.Bind (2, packageName);
 
 	insertSourcePackageStatement.Bind (3, 16, packageUuid.data);
 	insertSourcePackageStatement.Bind (4, packageName.size (),
@@ -789,8 +822,7 @@ std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorCon
 		insertSourcePackageStatement.Bind (1, sourcePackageId);
 
 		const auto packageUuid = uuidGen ();
-		insertSourcePackageStatement.Bind (2,
-			kyla::ToString (packageUuid.data).c_str ());
+		insertSourcePackageStatement.Bind (2, kyla::ToString (packageUuid.data));
 		insertSourcePackageStatement.Bind (3, packageUuid.size (),
 			packageUuid.data);
 		insertSourcePackageStatement.Bind (4, packageUuid.size (),
@@ -859,7 +891,7 @@ void FinalizeSourcePackageNames (const SourcePackageNameTemplate& nameTemplate,
 		spdlog::get ("log")->debug () << "Package "
 			<< sourcePackageId << " stored in file " << packageName;
 
-		updateSourcePackageFilenameStatement.Bind (1, packageName.c_str ());
+		updateSourcePackageFilenameStatement.Bind (1, packageName);
 		updateSourcePackageFilenameStatement.Bind (2, sizeof (info.hash.hash),
 			info.hash.hash);
 

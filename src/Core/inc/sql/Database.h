@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <cstdint>
+#include <string>
 
 namespace kyla {
 namespace Sql {
@@ -101,6 +102,7 @@ public:
 	~Statement ();
 
 	void Bind (const int index, const std::int64_t value);
+	void Bind (const int index, const std::string& value);
 	void Bind (const int index, const char* value,
 		const ValueBinding binding = ValueBinding::Copy);
 	void Bind (const int index, const Null&);

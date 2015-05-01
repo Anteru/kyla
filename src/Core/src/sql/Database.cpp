@@ -339,6 +339,12 @@ void Statement::Bind (const int index, const char* value,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+void Statement::Bind (const int index, const std::string& value)
+{
+	Bind (index, value.c_str ());
+}
+
+////////////////////////////////////////////////////////////////////////////////
 void Statement::Bind (const int index, const Null&)
 {
 	impl_->StatementBind (static_cast<sqlite3_stmt*> (p_), index, Null());
