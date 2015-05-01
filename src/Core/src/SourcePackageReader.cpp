@@ -9,7 +9,7 @@
 
 namespace kyla {
 ////////////////////////////////////////////////////////////////////////////////
-void SourcePackageReader::Store (const std::function<bool (const Hash&)>& filter,
+void SourcePackageReader::Store (const std::function<bool (const SHA512Digest&)>& filter,
 	const boost::filesystem::path& directory, Log& log)
 {
 	StoreImpl (filter, directory, log);
@@ -24,7 +24,7 @@ public:
 	{
 	}
 
-	void Store (const std::function<bool (const Hash &)>& filter,
+	void Store (const std::function<bool (const SHA512Digest&)>& filter,
 		const boost::filesystem::path& directory,
 		Log& log)
 	{
@@ -37,15 +37,15 @@ public:
 
 		std::vector<unsigned char> buffer;
 		for (const auto& entry : index) {
-			Hash hash;
-			static_assert (sizeof (hash.hash) == sizeof (entry.hash), "Hash size mismatch!");
-			::memcpy (hash.hash, entry.hash, sizeof (entry.hash));
+			SHA512Digest digest;
+			static_assert (sizeof (digest.bytes) == sizeof (entry.sha512digest), "Hash size mismatch!");
+			::memcpy (digest.bytes, entry.sha512digest, sizeof (entry.sha512digest));
 
-			if (filter (hash)) {
+			if (filter (digest)) {
 				input_->Seek (entry.offset);
 
-				log.Debug () << "Extracing content object " << ToString (hash) << " to "
-					<< absolute (directory / ToString (hash)).c_str ();
+				log.Debug () << "Extracing content object " << ToString (digest) << " to "
+					<< absolute (directory / ToString (digest)).c_str ();
 
 				SourcePackageChunk chunkEntry;
 				input_->Read (&chunkEntry, sizeof (chunkEntry));
@@ -57,7 +57,7 @@ public:
 
 					input_->Read (buffer.data (), chunkEntry.compressedSize);
 
-					const auto targetPath = directory / ToString (hash);
+					const auto targetPath = directory / ToString (digest);
 
 					auto targetFile = kyla::CreateFile (targetPath.c_str ());
 
@@ -96,7 +96,7 @@ FileSourcePackageReader::~FileSourcePackageReader ()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void FileSourcePackageReader::StoreImpl (const std::function<bool (const Hash &)>& filter,
+void FileSourcePackageReader::StoreImpl (const std::function<bool (const SHA512Digest&)>& filter,
 	const boost::filesystem::path& directory, Log& log)
 {
 	impl_->Store (filter, directory, log);

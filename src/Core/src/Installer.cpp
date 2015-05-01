@@ -181,29 +181,29 @@ void Installer::InstallProduct (sqlite3* db, InstallationEnvironment env,
 		GetContentObjectHashesChunkCountForSelectedFeaturesQueryString (selectedFeatureIds).c_str (),
 		-1, &selectRequiredContentObjectsStatement, nullptr);
 
-	std::unordered_map<kyla::Hash, int, kyla::HashHash, kyla::HashEqual> requiredContentObjects;
+	std::unordered_map<kyla::SHA512Digest, int, kyla::HashDigestHash, kyla::HashDigestEqual> requiredContentObjects;
 	while (sqlite3_step (selectRequiredContentObjectsStatement) == SQLITE_ROW) {
-		kyla::Hash hash;
+		kyla::SHA512Digest digest;
 
-		const auto hashSize = sqlite3_column_int64 (selectRequiredContentObjectsStatement, 3);
+		const auto digestSize = sqlite3_column_int64 (selectRequiredContentObjectsStatement, 3);
 
-		if (hashSize != sizeof (hash.hash)) {
-			log.Error () << "Hash size mismatch, skipping content object";
+		if (digestSize != sizeof (digest.bytes)) {
+			log.Error () << "Hash digest size mismatch, skipping content object";
 			continue;
 		}
 
-		::memcpy (hash.hash,
+		::memcpy (digest.bytes,
 			sqlite3_column_blob (selectRequiredContentObjectsStatement, 0),
-			sizeof (hash.hash));
+			sizeof (digest.bytes));
 
 		int chunkCount = sqlite3_column_int (selectRequiredContentObjectsStatement, 1);
 		const auto size = sqlite3_column_int64 (selectRequiredContentObjectsStatement, 2);
-		requiredContentObjects [hash] = chunkCount;
+		requiredContentObjects [digest] = chunkCount;
 
 		kyla::CreateFile (
-			(stagingDirectory / ToString (hash)).c_str ())->SetSize (size);
+			(stagingDirectory / ToString (digest)).c_str ())->SetSize (size);
 
-		log.Trace () << "Content object " << ToString (hash) << " allocated (" << size << " bytes)";
+		log.Trace () << "Content object " << ToString (digest) << " allocated (" << size << " bytes)";
 	}
 
 	log.Info () << "Requested " << requiredContentObjects.size () << " content objects";
@@ -218,8 +218,8 @@ void Installer::InstallProduct (sqlite3* db, InstallationEnvironment env,
 
 		log.Info () << "Processing source package " << sourcePackageFilename;
 
-		reader.Store ([&requiredContentObjects](const kyla::Hash& hash) -> bool {
-			return requiredContentObjects.find (hash) != requiredContentObjects.end ();
+		reader.Store ([&requiredContentObjects](const kyla::SHA512Digest& digest) -> bool {
+			return requiredContentObjects.find (digest) != requiredContentObjects.end ();
 		}, stagingDirectory, log);
 
 		log.Info () << "Processed source package " << sourcePackageFilename;
@@ -268,22 +268,23 @@ void Installer::InstallProduct (sqlite3* db, InstallationEnvironment env,
 
 			kyla::CreateFile (targetPath.c_str ());
 		} else {
-			kyla::Hash hash;
+			kyla::SHA512Digest digest;
 
-			const auto hashSize = sqlite3_column_int64 (selectFilesStatement, 2);
+			const auto digestSize = sqlite3_column_int64 (selectFilesStatement, 2);
 
-			if (hashSize != sizeof (hash.hash)) {
+			if (digestSize != sizeof (digest.bytes)) {
 				log.Error () << "Hash size mismatch, skipping file";
 				continue;
 			}
 
-			::memcpy (hash.hash, sqlite3_column_blob (selectFilesStatement, 1),
-				sizeof (hash.hash));
+			::memcpy (digest.bytes, sqlite3_column_blob (selectFilesStatement, 1),
+				sizeof (digest.bytes));
 
-			log.Debug () << "Copying " << (stagingDirectory / ToString (hash)).string () << " to " << absolute (targetPath).string ();
+			log.Debug () << "Copying " << (stagingDirectory / ToString (digest)).string ()
+						 << " to " << absolute (targetPath).string ();
 
 			// Make this smarter, i.e. move first time, and on second time, copy
-			boost::filesystem::copy_file (stagingDirectory / ToString (hash),
+			boost::filesystem::copy_file (stagingDirectory / ToString (digest),
 				targetPath);
 		}
 	}

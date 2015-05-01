@@ -77,21 +77,21 @@ int main (int argc, char* argv[])
 				  << packagePath.filename () << " (" << i++ << "/"
 				  << sourcePackageCount << "): ";
 
-		kyla::Hash expectedHash;
-		const auto hashSize = sqlite3_column_int64 (
+		kyla::SHA512Digest expectedDigest;
+		const auto digestSize = sqlite3_column_int64 (
 			selectSourcePackagesStatement, 2);
 
-		if (hashSize != sizeof (expectedHash.hash)) {
-			std::cout << "ERROR, hash size mismatch";
+		if (digestSize != sizeof (expectedDigest.bytes)) {
+			std::cout << "ERROR, hash digest size mismatch";
 			continue;
 		}
 
-		::memcpy (expectedHash.hash,
+		::memcpy (expectedDigest.bytes,
 			sqlite3_column_blob (selectSourcePackagesStatement, 0),
-			sizeof (expectedHash.hash));
+			sizeof (expectedDigest.bytes));
 
-		const auto actualHash = kyla::ComputeHash (packagePath);
-		if (! kyla::HashEqual() (expectedHash, actualHash)) {
+		const auto actualDigest = kyla::ComputeSHA512 (packagePath);
+		if (! kyla::HashDigestEqual() (expectedDigest, actualDigest)) {
 			std::cout << "ERROR, hash mismatch\n";
 		} else {
 			std::cout << "OK\n";

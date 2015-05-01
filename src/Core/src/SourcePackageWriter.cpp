@@ -9,10 +9,10 @@ namespace kyla {
 struct SourcePackageWriter::Impl
 {
 public:
-	std::unordered_map<Hash, std::vector<boost::filesystem::path>, HashHash, HashEqual> hashChunkMap;
+	std::unordered_map<SHA512Digest, std::vector<boost::filesystem::path>, HashDigestHash, HashDigestEqual> hashChunkMap;
 	boost::filesystem::path filename;
 
-	std::uint8_t packageUuid [16];
+	byte packageUuid [16];
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -34,10 +34,10 @@ void SourcePackageWriter::Open (const boost::filesystem::path& filename, const v
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void SourcePackageWriter::Add (const Hash& hash,
+void SourcePackageWriter::Add (const SHA512Digest& digest,
 	const boost::filesystem::path& chunkPath)
 {
-	impl_->hashChunkMap [hash].push_back (chunkPath);
+	impl_->hashChunkMap [digest].push_back (chunkPath);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -62,7 +62,7 @@ std::int64_t BlockCopy (const boost::filesystem::path& file, kyla::File& out,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-Hash SourcePackageWriter::Finalize()
+SHA512Digest SourcePackageWriter::Finalize()
 {
 	auto output = CreateFile (impl_->filename.c_str ());
 
@@ -97,7 +97,7 @@ Hash SourcePackageWriter::Finalize()
 	for (const auto& hashChunks : impl_->hashChunkMap) {
 		for (const auto& chunk : hashChunks.second) {
 			SourcePackageIndexEntry indexEntry;
-			::memcpy (indexEntry.hash, hashChunks.first.hash, sizeof (hashChunks.first.hash));
+			::memcpy (indexEntry.sha512digest, hashChunks.first.bytes, sizeof (hashChunks.first.bytes));
 			indexEntry.offset = offset;
 
 			offset += BlockCopy (chunk, *output, buffer);
@@ -114,7 +114,7 @@ Hash SourcePackageWriter::Finalize()
 	// We have to read again, as we can't make a fully streaming update due to
 	// our delayed index write. Hopefully, the file is still in the disk cache,
 	// so this should be quick
-	return ComputeHash (impl_->filename, buffer);
+	return ComputeSHA512 (impl_->filename, buffer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

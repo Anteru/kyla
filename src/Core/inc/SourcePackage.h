@@ -1,7 +1,7 @@
 #ifndef KYLA_CORE_INTERNAL_SOURCEPACKAGE_H
 #define KYLA_CORE_INTERNAL_SOURCEPACKAGE_H
 
-#include <cstdint>
+#include "Types.h"
 #include "Compression.h"
 
 namespace kyla {
@@ -15,28 +15,28 @@ A source package consists of:
 struct SourcePackageHeader
 {
 	unsigned char	id [8];
-	std::uint8_t	packageId [16];
-	std::int32_t	version;
-	std::int32_t	indexEntryCount;
-	std::int64_t	indexOffset;
+	uint8	packageId [16];
+	int32	version;
+	int32	indexEntryCount;
+	int64	indexOffset;
 };
 
 struct SourcePackageIndexEntry
 {
-	std::uint8_t hash [64];
-	std::int64_t offset;		// Absolute offset within the source package
+	byte sha512digest [64];
+	int64 offset;		// Absolute offset within the source package
 								// to the entry
 };
 
 struct SourcePackageChunk
 {
-	std::uint8_t hash [64];
-	std::int64_t offset;				// Offset into the target file
-	std::int64_t size;					// Size of the uncompressed data
+	byte sha512digest [64];
+	int64 offset;				// Offset into the target file
+	int64 size;					// Size of the uncompressed data
 
-	std::int64_t compressedSize;		// Size of this package chunk
+	int64 compressedSize;		// Size of this package chunk
 	CompressionMode compressionMode;
-	std::uint8_t reserved [7];
+	uint8 reserved [7];
 };
 }
 

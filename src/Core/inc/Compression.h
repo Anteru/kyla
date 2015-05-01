@@ -16,6 +16,18 @@ enum class CompressionMode : std::uint8_t
 	LZHAM
 };
 
+struct BlockCompressor
+{
+public:
+	virtual ~BlockCompressor ();
+	BlockCompressor ();
+
+	BlockCompressor (const BlockCompressor&) = delete;
+	BlockCompressor& operator= (const BlockCompressor&) = delete;
+
+
+};
+
 struct StreamCompressor
 {
 public:

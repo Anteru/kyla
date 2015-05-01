@@ -1,21 +1,21 @@
 #ifndef KYLA_CORE_INTERNAL_INSTALLPACKAGE_H
 #define KYLA_CORE_INTERNAL_INSTALLPACKAGE_H
 
-#include <cstdint>
+#include "Types.h"
 
 namespace kyla {
 struct InstallPackageHeader
 {
 	unsigned char	id [8];
-	std::int32_t	version;
-	std::int32_t	indexEntryCount;
-	std::int64_t	indexOffset;
-	std::uint8_t	reserved [256];
+	int32	version;
+	int32	indexEntryCount;
+	int64	indexOffset;
+	uint8	reserved [256];
 };
 
 struct InstallPackageIndexEntry
 {
-	std::uint8_t	hash [64];
+	byte	sha512digest [64];
 
 	/*
 	One of:
@@ -25,11 +25,11 @@ struct InstallPackageIndexEntry
 	*/
 	char			name [64];
 
-	std::int64_t	offset;
-	std::int64_t	compressedSize;
-	std::int64_t	uncompressedSize;
+	int64	offset;
+	int64	compressedSize;
+	int64	uncompressedSize;
 	CompressionMode	compressionMode;
-	std::uint8_t	reserved [7];
+	uint8	reserved [7];
 };
 }
 

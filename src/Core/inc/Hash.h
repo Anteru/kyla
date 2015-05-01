@@ -7,64 +7,95 @@
 #include <string>
 #include <boost/filesystem.hpp>
 
+#include "ArrayAdapter.h"
+#include "ArrayRef.h"
+#include "Types.h"
+
 namespace kyla {
-template <int size>
-struct THash
+template <int Size>
+struct HashDigest
 {
-    uint8_t hash [size];
+	byte bytes [Size];
 };
 
-struct HashEqual
+template <int Size>
+struct ArrayAdapter<HashDigest<Size>>
 {
-	template <int size>
-	bool operator () (const THash<size>& a, const THash<size>& b) const
+	static const byte* GetDataPointer (const HashDigest<Size>& s)
 	{
-		return ::memcmp (a.hash, b.hash, size) == 0;
+		return s.bytes;
+	}
+
+	static byte* GetDataPointer (HashDigest<Size>& s)
+	{
+		return s.bytes;
+	}
+
+	static std::size_t GetSize (const HashDigest<Size>&)
+	{
+		return Size;
+	}
+
+	static std::size_t GetCount (const HashDigest<Size>&)
+	{
+		return Size;
+	}
+
+	typedef byte Type;
+};
+
+struct HashDigestEqual
+{
+	template <int Size>
+	bool operator () (const HashDigest<Size>& a, const HashDigest<Size>& b) const
+	{
+		return ::memcmp (a.bytes, b.bytes, Size) == 0;
 	}
 };
 
-struct HashHash
+struct HashDigestHash
 {
-	template <int size>
-	std::size_t operator () (const THash<size>& a) const
+	template <int Size>
+	std::size_t operator () (const HashDigest<Size>& a) const
 	{
-		return boost::hash_range (a.hash, a.hash + size);
+		return boost::hash_range (a.bytes, a.bytes + Size);
 	}
 };
 
 /*
 The default hash in Kyla is a 64-byte SHA512.
 */
-typedef THash<64> Hash;
+typedef HashDigest<64> SHA512Digest;
 
-class StreamHasher final
+class SHA512StreamHasher final
 {
 public:
-	StreamHasher ();
-	~StreamHasher ();
+	SHA512StreamHasher ();
+	~SHA512StreamHasher ();
 
-	StreamHasher (const StreamHasher&) = delete;
-	StreamHasher& operator= (const StreamHasher&) = delete;
+	SHA512StreamHasher (const SHA512StreamHasher&) = delete;
+	SHA512StreamHasher& operator= (const SHA512StreamHasher&) = delete;
 
 	void Initialize ();
-	void Update (const void* data, const std::int64_t size);
-	Hash Finalize ();
+	void Update (const ArrayRef<>& data);
+	SHA512Digest Finalize();
 
 private:
 	struct Impl;
 	std::unique_ptr<Impl> impl_;
 };
 
-Hash ComputeHash (const void* data, const std::int64_t size);
-Hash ComputeHash (const boost::filesystem::path& p);
-Hash ComputeHash (const boost::filesystem::path& p, std::vector<unsigned char>& buffer);
+SHA512Digest ComputeSHA512 (const ArrayRef<>& data);
+SHA512Digest ComputeSHA512 (const boost::filesystem::path& p);
+SHA512Digest ComputeSHA512 (const boost::filesystem::path& p,
+	std::vector<byte>& fileReadBuffer);
 
-template <int size>
-std::string ToString (const std::uint8_t (&hash) [size])
+template <int Size>
+std::string ToString (const byte (&hash) [Size])
 {
 	// TODO Use a 6bit mapping to 0-9a-zA-Z_- to get more compact hash names
 
-	char result [size*2] = { 0 };
+	char result [Size*2] = { 0 };
 	char* p = result;
 
 	static const char* byteToChar = "0123456789abcdef";
@@ -76,13 +107,13 @@ std::string ToString (const std::uint8_t (&hash) [size])
 		p += 2;
 	}
 
-	return std::string (result, result + size*2);
+	return std::string (result, result + Size*2);
 }
 
-template <int size>
-std::string ToString (const THash<size>& hash)
+template <int Size>
+std::string ToString (const HashDigest<Size>& hash)
 {
-	return ToString (hash.hash);
+	return ToString (hash.bytes);
 }
 }
 

@@ -57,11 +57,12 @@ void InstallPackageWriter::Add (const char* name,
 namespace {
 void HashCompressBlockCopy (File& input, File& output,
 	CompressionMode compressionMode,
-	Hash& result, std::int64_t& uncompressedSize, std::int64_t& compressedSize)
+	SHA512Digest& result,
+	int64& uncompressedSize, int64& compressedSize)
 {
-	std::vector<std::uint8_t> buffer (4 << 20);
+	std::vector<byte> buffer (4 << 20);
 
-	StreamHasher hasher;
+	SHA512StreamHasher hasher;
 	hasher.Initialize ();
 
 	auto compressor = CreateStreamCompressor (compressionMode);
@@ -73,7 +74,7 @@ void HashCompressBlockCopy (File& input, File& output,
 	for (;;) {
 		const auto bytesRead = input.Read (buffer.data (), buffer.size ());
 
-		hasher.Update (buffer.data (), bytesRead);
+		hasher.Update (ArrayRef<byte> (buffer.data (), bytesRead));
 		uncompressedSize += bytesRead;
 
 		compressor->Update (buffer.data (), bytesRead);
@@ -113,12 +114,12 @@ void InstallPackageWriter::Finalize ()
 		::memset (&indexEntry, 0, sizeof (indexEntry));
 		indexEntry.offset = impl_->fileHandle->Tell ();
 
-		Hash hash;
+		SHA512Digest digest;
 		HashCompressBlockCopy (
 			*OpenFile (entry.source.c_str (), FileOpenMode::Read),
 			*impl_->fileHandle, entry.compressionMode,
-			hash, indexEntry.uncompressedSize, indexEntry.compressedSize);
-		::memcpy (indexEntry.hash, hash.hash, sizeof (indexEntry.hash));
+			digest, indexEntry.uncompressedSize, indexEntry.compressedSize);
+		::memcpy (indexEntry.sha512digest, digest.bytes, sizeof (indexEntry.sha512digest));
 
 		assert (entry.name.size () <= sizeof (indexEntry.name));
 		::memcpy (indexEntry.name, entry.name.c_str (), entry.name.size ());

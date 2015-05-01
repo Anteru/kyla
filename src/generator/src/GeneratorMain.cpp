@@ -111,10 +111,10 @@ void AssignFilesToFeaturesPackages (const pugi::xml_node& product,
 	transaction.Commit ();
 }
 
-struct ContentObjectIdHash
+struct ContentObjectIdHashDigest
 {
 	std::int64_t id;
-	kyla::Hash hash;
+	kyla::SHA512Digest digest;
 };
 
 class FileChunker
@@ -139,7 +139,7 @@ public:
 		std::int64_t inputSize;
 		std::int64_t compressedSize;
 		int chunkCount;
-		kyla::Hash inputHash;
+		kyla::SHA512Digest inputDigest;
 	};
 
 	ChunkResult ChunkFile (const boost::filesystem::path& fullSourcePath)
@@ -160,7 +160,7 @@ public:
 			const std::int64_t bytesRead = input.gcount ();
 			inputSize += bytesRead;
 
-			hasher_.Update (readBuffer_.data (), bytesRead);
+			hasher_.Update (kyla::ArrayRef<kyla::byte> (readBuffer_.data (), bytesRead));
 
 			uLongf compressedSize = compressionBuffer_.size ();
 			// TODO handle compression failure
@@ -184,8 +184,9 @@ public:
 
 			contentObjectCompressedSize += compressedSize;
 
-			auto chunkHash = kyla::ComputeHash (compressionBuffer_.data (), compressedSize);
-			::memcpy (pdc.hash, chunkHash.hash, sizeof (pdc.hash));
+			const auto chunkDigest = kyla::ComputeSHA512 (
+				kyla::ArrayRef<kyla::byte> (compressionBuffer_.data (), compressedSize));
+			::memcpy (pdc.sha512digest, chunkDigest.bytes, sizeof (pdc.sha512digest));
 
 			boost::filesystem::ofstream chunkOutput (
 				temporaryDirectory_ / chunkName, std::ios::binary);
@@ -205,12 +206,10 @@ public:
 			}
 		}
 
-		const auto hash = hasher_.Finalize ();
-
 		ChunkResult result;
 		result.chunkCount = chunkCount;
 		result.chunks = chunks;
-		result.inputHash = hash;
+		result.inputDigest = hasher_.Finalize ();
 		result.inputSize = inputSize;
 		result.compressedSize = contentObjectCompressedSize;
 
@@ -218,12 +217,12 @@ public:
 	}
 
 private:
-	kyla::StreamHasher				hasher_;
+	kyla::SHA512StreamHasher		hasher_;
 	boost::filesystem::path			temporaryDirectory_;
-	std::vector<unsigned char>		readBuffer_;
-	std::vector<unsigned char>		compressionBuffer_;
+	std::vector<kyla::byte>			readBuffer_;
+	std::vector<kyla::byte>			compressionBuffer_;
 	boost::uuids::random_generator	uuidGen_;
-	std::int64_t					fileChunkSize_ = 1 << 24;
+	kyla::int64						fileChunkSize_ = 1 << 24;
 };
 
 /**
@@ -238,7 +237,7 @@ After this function has run:
 
 Returns a list of file-path to content object ids, as stored in the database
 */
-std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
+std::unordered_map<std::string, ContentObjectIdHashDigest> PrepareFiles (
 	const std::unordered_set<std::string>& sourcePaths,
 	const boost::filesystem::path& sourceDirectory,
 	const boost::filesystem::path& temporaryDirectory,
@@ -248,7 +247,7 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 	auto buildTransaction = buildDatabase.BeginTransaction();
 	auto installationTransaction = installationDatabase.BeginTransaction();
 
-	std::unordered_map<std::string, ContentObjectIdHash> pathToContentObject;
+	std::unordered_map<std::string, ContentObjectIdHashDigest> pathToContentObject;
 
 	// Read every unique source path in chunks, update hash, compress, compute
 	// hash, write to temporary directory
@@ -280,22 +279,21 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 
 		totalSize += chunkResult.inputSize;
 
-		spdlog::get ("log")->debug() << sourcePath << " -> " << ToString (chunkResult.inputHash);
+		spdlog::get ("log")->debug() << sourcePath << " -> " << ToString (chunkResult.inputDigest);
 
-		selectContentObjectIdStatement.Bind (1, sizeof (chunkResult.inputHash.hash),
-			chunkResult.inputHash.hash);
+		selectContentObjectIdStatement.Bind (1, chunkResult.inputDigest);
 
 		if (! selectContentObjectIdStatement.Step ()) {
-			insertContentObjectStatement.Bind (1, chunkResult.inputSize);
-			insertContentObjectStatement.Bind (2, sizeof (chunkResult.inputHash.hash),
-				chunkResult.inputHash.hash);
-			insertContentObjectStatement.Bind (3, chunkResult.chunkCount);
+			insertContentObjectStatement.BindArguments (
+				chunkResult.inputSize,
+				chunkResult.inputDigest,
+				chunkResult.chunkCount);
 			insertContentObjectStatement.Step ();
 			insertContentObjectStatement.Reset ();
 
 			const auto contentObjectId = installationDatabase.GetLastRowId ();
 
-			pathToContentObject [sourcePath] = {contentObjectId, chunkResult.inputHash};
+			pathToContentObject [sourcePath] = {contentObjectId, chunkResult.inputDigest};
 
 			for (const auto chunk : chunkResult.chunks) {
 				insertChunkStatement.Bind (1, contentObjectId);
@@ -311,7 +309,7 @@ std::unordered_map<std::string, ContentObjectIdHash> PrepareFiles (
 			// We have two files with the same hash
 			pathToContentObject [sourcePath] = {
 				selectContentObjectIdStatement.GetInt64 (0),
-				chunkResult.inputHash};
+				chunkResult.inputDigest};
 		}
 
 		selectContentObjectIdStatement.Reset ();
@@ -390,15 +388,15 @@ SourcePackageNameTemplate GetSourcePackageNameTemplate (const pugi::xml_node& pr
 
 struct SourcePackageInfo
 {
-	std::int64_t	id;
-	kyla::Hash		hash;
+	std::int64_t		id;
+	kyla::SHA512Digest	sha512digest;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
 std::vector<SourcePackageInfo> WriteUserPackages (
 	kyla::Sql::Database& buildDatabase,
 	kyla::Sql::Database& installationDatabase,
-	const std::unordered_map<std::string, ContentObjectIdHash>& pathToContentObject,
+	const std::unordered_map<std::string, ContentObjectIdHashDigest>& pathToContentObject,
 	const SourcePackageNameTemplate& packageNameTemplate,
 	const boost::filesystem::path& targetDirectory)
 {
@@ -423,7 +421,7 @@ std::vector<SourcePackageInfo> WriteUserPackages (
 		selectFilesForPackageStatement.Bind (1, sourcePackageId);
 
 		// contentObject (Hash) -> list of chunks that will go into this package
-		std::unordered_map<kyla::Hash, std::vector<std::string>, kyla::HashHash, kyla::HashEqual>
+		std::unordered_map<kyla::SHA512Digest, std::vector<std::string>, kyla::HashDigestHash, kyla::HashDigestEqual>
 				contentObjectsAndChunksInPackage;
 
 		// We need to handle duplicates in case multiple files reference the
@@ -464,7 +462,7 @@ std::vector<SourcePackageInfo> WriteUserPackages (
 
 					selectChunksForContentObject.Reset ();
 
-					contentObjectsAndChunksInPackage [contentObjectIdHash.hash]
+					contentObjectsAndChunksInPackage [contentObjectIdHash.digest]
 						= std::move (chunksForContentObject);
 					contentObjectsInPackage.insert (contentObjectIdHash.id);
 				} else {
@@ -537,9 +535,9 @@ std::int64_t CreateGeneratedPackage (kyla::Sql::Database& installationDatabase,
 	// Dummy filename and hash, will be fixed up later
 	insertSourcePackageStatement.Bind (2, packageName);
 
-	insertSourcePackageStatement.Bind (3, 16, packageUuid.data);
-	insertSourcePackageStatement.Bind (4, packageName.size (),
-		packageName.c_str ());
+	insertSourcePackageStatement.Bind (3, packageUuid.data);
+	insertSourcePackageStatement.Bind (4,
+		kyla::ArrayRef<> (packageName.c_str (), packageName.size ()));
 
 	insertSourcePackageStatement.Step ();
 
@@ -556,7 +554,7 @@ std::int64_t CreateGeneratedPackage (kyla::Sql::Database& installationDatabase,
 std::vector<SourcePackageInfo> WriteGeneratedPackages (
 	kyla::Sql::Database& buildDatabase,
 	kyla::Sql::Database& installationDatabase,
-	const std::unordered_map<std::string, ContentObjectIdHash>& pathToContentObject,
+	const std::unordered_map<std::string, ContentObjectIdHashDigest>& pathToContentObject,
 	const boost::filesystem::path& targetDirectory,
 	const SourcePackageNameTemplate& packageNameTemplate,
 	const std::int64_t targetPackageSize)
@@ -617,7 +615,7 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 					// Insert the chunk right away, increment current size, if
 					// package is full, finalize, and reset size
 					const std::string chunkPath = selectChunksForContentObject.GetText (0);
-					spw.Add (contentObjectIdHash.hash, chunkPath);
+					spw.Add (contentObjectIdHash.digest, chunkPath);
 
 					dataInCurrentPackage +=
 						selectChunksForContentObject.GetInt64 (1);
@@ -681,7 +679,7 @@ std::vector<SourcePackageInfo> WritePackages (
 	kyla::Sql::Database& installationDatabase,
 	const boost::filesystem::path& targetDirectory,
 	const pugi::xml_node& productNode,
-	const std::unordered_map<std::string, ContentObjectIdHash> pathToContentObject,
+	const std::unordered_map<std::string, ContentObjectIdHashDigest> pathToContentObject,
 	const std::int64_t targetPackageSize = 1ll << 30 /* 1 GiB */)
 {
 	auto transaction = installationDatabase.BeginTransaction();
@@ -823,10 +821,8 @@ std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorCon
 
 		const auto packageUuid = uuidGen ();
 		insertSourcePackageStatement.Bind (2, kyla::ToString (packageUuid.data));
-		insertSourcePackageStatement.Bind (3, packageUuid.size (),
-			packageUuid.data);
-		insertSourcePackageStatement.Bind (4, packageUuid.size (),
-			packageUuid.data);
+		insertSourcePackageStatement.Bind (3, packageUuid.data);
+		insertSourcePackageStatement.Bind (4, packageUuid.data);
 
 		insertSourcePackageStatement.Step ();
 		insertSourcePackageStatement.Reset ();
@@ -891,9 +887,8 @@ void FinalizeSourcePackageNames (const SourcePackageNameTemplate& nameTemplate,
 		spdlog::get ("log")->debug () << "Package "
 			<< sourcePackageId << " stored in file " << packageName;
 
-		updateSourcePackageFilenameStatement.Bind (1, packageName);
-		updateSourcePackageFilenameStatement.Bind (2, sizeof (info.hash.hash),
-			info.hash.hash);
+		updateSourcePackageFilenameStatement.BindArguments (
+			packageName, info.sha512digest);
 
 		updateSourcePackageFilenameStatement.Step ();
 		updateSourcePackageFilenameStatement.Reset ();

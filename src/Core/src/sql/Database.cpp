@@ -351,10 +351,11 @@ void Statement::Bind (const int index, const Null&)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void Statement::Bind (const int index, const std::size_t size,
-	const void* data, const ValueBinding binding)
+void Statement::Bind (const int index,
+	const ArrayRef<>& data, const ValueBinding binding)
 {
-	impl_->StatementBind (static_cast<sqlite3_stmt*> (p_), index, size, data, binding);
+	impl_->StatementBind (static_cast<sqlite3_stmt*> (p_), index,
+		data.GetSize (), data.GetData (), binding);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

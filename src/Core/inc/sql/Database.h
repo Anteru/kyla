@@ -4,6 +4,7 @@
 #include <memory>
 #include <cstdint>
 #include <string>
+#include "../ArrayRef.h"
 
 namespace kyla {
 namespace Sql {
@@ -106,8 +107,7 @@ public:
 	void Bind (const int index, const char* value,
 		const ValueBinding binding = ValueBinding::Copy);
 	void Bind (const int index, const Null&);
-	void Bind (const int index, const std::size_t size,
-		const void* data,
+	void Bind (const int index, const ArrayRef<>& data,
 		const ValueBinding binding = ValueBinding::Copy);
 
 	template <typename ... Args>

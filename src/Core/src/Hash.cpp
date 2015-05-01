@@ -8,37 +8,39 @@
 
 namespace kyla {
 ////////////////////////////////////////////////////////////////////////////////
-Hash ComputeHash (const void* data, const std::int64_t size)
+SHA512Digest ComputeSHA512 (const ArrayRef<>& data)
 {
-    Hash result;
+	SHA512Digest result;
 
-    SHA512 (static_cast<const unsigned char*> (data), size,
-        reinterpret_cast<unsigned char*> (result.hash));
+	SHA512 (static_cast<const unsigned char*> (data.GetData()), data.GetSize (),
+        reinterpret_cast<unsigned char*> (result.bytes));
 
     return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-Hash ComputeHash (const boost::filesystem::path& p)
+SHA512Digest ComputeSHA512 (const boost::filesystem::path& p)
 {
 	std::vector<unsigned char> buffer (4 << 20 /* 4 MiB */);
-	return ComputeHash (p, buffer);
+	return ComputeSHA512 (p, buffer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-Hash ComputeHash (const boost::filesystem::path& p, std::vector<unsigned char>& buffer)
+SHA512Digest ComputeSHA512(const boost::filesystem::path& p,
+	std::vector<byte>& fileReadBuffer)
 {
 	auto input = kyla::OpenFile (p.c_str (), kyla::FileOpenMode::Read);
 
-	StreamHasher hasher;
+	SHA512StreamHasher hasher;
 	hasher.Initialize ();
 
 	for (;;) {
-		const auto bytesRead = input->Read (buffer.data (), buffer.size ());
+		const auto bytesRead = input->Read (fileReadBuffer.data (),
+			fileReadBuffer.size ());
 
-		hasher.Update (buffer.data (), bytesRead);
+		hasher.Update (ArrayRef<byte> (fileReadBuffer.data (), bytesRead));
 
-		if (bytesRead < buffer.size ()) {
+		if (bytesRead < fileReadBuffer.size ()) {
 			break;
 		}
 	}
@@ -46,7 +48,7 @@ Hash ComputeHash (const boost::filesystem::path& p, std::vector<unsigned char>& 
 	return hasher.Finalize ();
 }
 
-struct StreamHasher::Impl
+struct SHA512StreamHasher::Impl
 {
 public:
 	Impl ()
@@ -69,10 +71,10 @@ public:
 		EVP_DigestUpdate (ctx_, p, size);
 	}
 
-	Hash Finalize ()
+	SHA512Digest Finalize ()
 	{
-		Hash result;
-		EVP_DigestFinal_ex (ctx_, result.hash, nullptr);
+		SHA512Digest result;
+		EVP_DigestFinal_ex (ctx_, result.bytes, nullptr);
 		return result;
 	}
 
@@ -81,30 +83,30 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-StreamHasher::StreamHasher ()
+SHA512StreamHasher::SHA512StreamHasher ()
 : impl_ (new Impl)
 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-StreamHasher::~StreamHasher ()
+SHA512StreamHasher::~SHA512StreamHasher ()
 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void StreamHasher::Initialize ()
+void SHA512StreamHasher::Initialize ()
 {
 	impl_->Initialize ();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void StreamHasher::Update (const void* data, const std::int64_t size)
+void SHA512StreamHasher::Update (const ArrayRef<>& data)
 {
-	impl_->Update (data, size);
+	impl_->Update (data.GetData (), data.GetSize ());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-Hash StreamHasher::Finalize ()
+SHA512Digest SHA512StreamHasher::Finalize ()
 {
 	return impl_->Finalize ();
 }
