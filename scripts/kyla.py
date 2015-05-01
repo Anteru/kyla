@@ -45,13 +45,13 @@ class InstallationBuilder:
 		def SetSourcePackage (self, sourcePackage):
 			self._sourcePackage = sourcePackage
 
-		def AddFilesFromDirectory (self, baseDirectory):
+		def AddFilesFromDirectory (self, baseDirectory, prefix=''):
 			for directory, _, entry in os.walk (baseDirectory):
 				directory = directory [len (baseDirectory) + 1:]
 				if entry:
 					for e in entry:
 						fileElement = etree.SubElement (self._element, 'File')
-						fileElement.set ('Source', os.path.join (directory, e))
+						fileElement.set ('Source', os.path.join (prefix, directory, e))
 
 		def Finalize (self):
 			if self._sourcePackage:
@@ -59,7 +59,9 @@ class InstallationBuilder:
 					f.set ('SourcePackage', self._sourcePackage)
 			return self._element
 
-	def AddFeature (self, name, featureId = uuid.uuid4 ()):
+	def AddFeature (self, name, featureId = None):
+		if featureId is None:
+			featureId = uuid.uuid4 ()
 		fb = self.FeatureBuilder (name, featureId)
 		self._features.append (fb)
 		return fb

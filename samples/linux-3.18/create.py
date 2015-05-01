@@ -17,7 +17,8 @@ srcData = {
 for k,v in srcData.items ():
 	feature = builder.AddFeature (k)
 	feature.SetSourcePackage ('SourcePackage_{}'.format (k))
-	feature.AddFilesFromDirectory (os.path.join (os.getcwd (), 'data', v))
+	feature.AddFilesFromDirectory (
+		os.path.join (os.getcwd (), 'data', v), v)
 	builder.AddSourcePackage ('SourcePackage_{}'.format (k))
 
 doc = builder.Finalize ()
