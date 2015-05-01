@@ -3,7 +3,14 @@
 #include <spdlog.h>
 #include <sqlite3.h>
 
-#define SAFE_SQLITE_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_OK) { spdlog::get ("log")->error () << file << ":" << line << " " << sqlite3_errstr(r_); exit (1); } } while (0)
+namespace {
+void OnSQLiteError (const int errorCode)
+{
+	spdlog::get ("log")->error () << sqlite3_errstr(errorCode); exit (1);
+}
+}
+
+#define SAFE_SQLITE_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_OK) { OnSQLiteError (r_); } } while (0)
 #define SAFE_SQLITE_INSERT_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_DONE) { spdlog::get ("log")->error () << file << ":" << line << " " << sqlite3_errstr(r_); exit (1); } } while (0)
 
 #define K_S(expr) SAFE_SQLITE_INTERNAL(expr, __FILE__, __LINE__)

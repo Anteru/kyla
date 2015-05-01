@@ -14,8 +14,6 @@
 #include <unordered_set>
 #include <memory>
 
-#include <zlib.h>
-
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid_io.hpp>
@@ -129,8 +127,9 @@ public:
 	FileChunker (const boost::filesystem::path& temporaryDirectory)
 	: temporaryDirectory_ (temporaryDirectory)
 	{
+		compressor_ = kyla::CreateBlockCompressor (kyla::CompressionMode::Zip);
 		readBuffer_.resize (fileChunkSize_);
-		compressionBuffer_.resize (compressBound(fileChunkSize_));
+		compressionBuffer_.resize (compressor_->GetCompressionBound (fileChunkSize_));
 	}
 
 	struct ChunkResult
@@ -148,6 +147,12 @@ public:
 		// TODO handle empty files
 		boost::filesystem::ifstream input (fullSourcePath, std::ios::binary);
 
+		if (!input) {
+			spdlog::get ("log")->error () << "Could not open file: '"
+									 << fullSourcePath.c_str () << "'";
+			exit (1);
+		}
+
 		std::vector<ChunkInfo> chunks;
 
 		hasher_.Initialize ();
@@ -162,16 +167,13 @@ public:
 
 			hasher_.Update (kyla::ArrayRef<kyla::byte> (readBuffer_.data (), bytesRead));
 
-			uLongf compressedSize = compressionBuffer_.size ();
-			// TODO handle compression failure
-			compress2 (reinterpret_cast<Bytef*> (compressionBuffer_.data ()),
-				&compressedSize,
-				readBuffer_.data (), bytesRead, Z_BEST_COMPRESSION);
+			const auto compressedSize = compressor_->Compress (
+				kyla::ArrayRef<kyla::byte> (readBuffer_.data (), bytesRead),
+				compressionBuffer_);
 
 			const auto chunkName = kyla::ToString (uuidGen_ ().data);
 
-			const ChunkInfo chunkInfo {chunkName,
-				static_cast<std::int64_t> (compressedSize)};
+			const ChunkInfo chunkInfo {chunkName, compressedSize};
 			chunks.push_back (chunkInfo);
 
 			kyla::SourcePackageChunk pdc;
@@ -217,6 +219,7 @@ public:
 	}
 
 private:
+	std::unique_ptr<kyla::BlockCompressor>			compressor_;
 	kyla::SHA512StreamHasher		hasher_;
 	boost::filesystem::path			temporaryDirectory_;
 	std::vector<kyla::byte>			readBuffer_;

@@ -6,6 +6,8 @@
 #include <memory>
 #include <vector>
 
+#include "ArrayRef.h"
+
 namespace kyla {
 enum class CompressionMode : std::uint8_t
 {
@@ -19,20 +21,26 @@ enum class CompressionMode : std::uint8_t
 struct BlockCompressor
 {
 public:
-	virtual ~BlockCompressor ();
 	BlockCompressor ();
+	virtual ~BlockCompressor ();
 
 	BlockCompressor (const BlockCompressor&) = delete;
 	BlockCompressor& operator= (const BlockCompressor&) = delete;
 
+	int GetCompressionBound (const int inputSize) const;
+	int Compress (const ArrayRef<>& input, const MutableArrayRef<>& output);
 
+private:
+	virtual int GetCompressionBoundImpl (const int inputSize) const = 0;
+	virtual int CompressImpl (const ArrayRef<>& input,
+		const MutableArrayRef<>& output) const = 0;
 };
 
 struct StreamCompressor
 {
 public:
-	virtual ~StreamCompressor ();
 	StreamCompressor ();
+	virtual ~StreamCompressor ();
 
 	void Initialize (std::function<void (const void* data, const std::int64_t)> writeCallback);
 	void Update (const void* data, const std::int64_t size);
@@ -51,43 +59,8 @@ private:
 		std::vector<std::uint8_t>& buffer);
 };
 
-class ZipStreamCompressor final : public StreamCompressor
-{
-public:
-	ZipStreamCompressor ();
-	~ZipStreamCompressor ();
-
-private:
-	void InitializeImpl (std::function<void (const void* data, const std::int64_t)> writeCallback) override;
-	void UpdateImpl (const void* data, const std::int64_t size) override;
-	void FinalizeImpl () override;
-	void CompressImpl (const void* data, const std::int64_t size,
-		std::vector<std::uint8_t>& buffer) override;
-
-	struct Impl;
-	std::unique_ptr<Impl> impl_;
-};
-
-class PassthroughStreamCompressor final : public StreamCompressor
-{
-	void InitializeImpl (std::function<void (const void *, const std::int64_t)> writeCallback) override
-	{
-		writeCallback_ = writeCallback;
-	}
-
-	void UpdateImpl (const void *data, const std::int64_t size) override
-	{
-		writeCallback_ (data, size);
-	}
-
-	void FinalizeImpl () override
-	{
-	}
-
-	std::function<void (const void* data, const std::int64_t)> writeCallback_;
-};
-
 std::unique_ptr<StreamCompressor> CreateStreamCompressor (CompressionMode compression);
+std::unique_ptr<BlockCompressor> CreateBlockCompressor (CompressionMode compression);
 }
 
 #endif

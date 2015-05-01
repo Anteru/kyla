@@ -5,8 +5,115 @@
 #include <vector>
 
 namespace kyla {
+struct NullBlockCompressor final : public BlockCompressor
+{
+	int GetCompressionBoundImpl (const int inputSize) const override;
+	int CompressImpl (const ArrayRef<>& input,
+		const MutableArrayRef<>& output) const override;
+};
+
+struct ZipBlockCompressor final : public BlockCompressor
+{
+	int GetCompressionBoundImpl (const int inputSize) const override;
+	int CompressImpl (const ArrayRef<>& input,
+		const MutableArrayRef<>& output) const override;
+};
+
+class ZipStreamCompressor final : public StreamCompressor
+{
+public:
+	ZipStreamCompressor ();
+	~ZipStreamCompressor ();
+
+private:
+	void InitializeImpl (std::function<void (const void* data, const std::int64_t)> writeCallback) override;
+	void UpdateImpl (const void* data, const std::int64_t size) override;
+	void FinalizeImpl () override;
+	void CompressImpl (const void* data, const std::int64_t size,
+		std::vector<std::uint8_t>& buffer) override;
+
+	struct Impl;
+	std::unique_ptr<Impl> impl_;
+};
+
+class PassthroughStreamCompressor final : public StreamCompressor
+{
+	void InitializeImpl (std::function<void (const void *, const std::int64_t)> writeCallback) override
+	{
+		writeCallback_ = writeCallback;
+	}
+
+	void UpdateImpl (const void *data, const std::int64_t size) override
+	{
+		writeCallback_ (data, size);
+	}
+
+	void FinalizeImpl () override
+	{
+	}
+
+	std::function<void (const void* data, const std::int64_t)> writeCallback_;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+BlockCompressor::BlockCompressor ()
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+BlockCompressor::~BlockCompressor ()
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+int BlockCompressor::GetCompressionBound (const int inputSize) const
+{
+	return GetCompressionBoundImpl (inputSize);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+int BlockCompressor::Compress (const ArrayRef<>& input,
+	const MutableArrayRef<>& output)
+{
+	return CompressImpl (input, output);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+int ZipBlockCompressor::GetCompressionBoundImpl (const int inputSize) const
+{
+	return ::compressBound (inputSize);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+int ZipBlockCompressor::CompressImpl (const ArrayRef<>& input,
+	const MutableArrayRef<>& output) const
+{
+	::uLongf compressedSize = output.GetSize ();
+	::compress (static_cast<::Bytef*> (output.GetData()), &compressedSize,
+			static_cast<const ::Bytef*> (input.GetData ()), input.GetSize ());
+	return compressedSize;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+int NullBlockCompressor::GetCompressionBoundImpl (const int inputSize) const
+{
+	return inputSize;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+int NullBlockCompressor::CompressImpl (const ArrayRef<>& input,
+	const MutableArrayRef<>& output) const
+{
+	::memcpy (output.GetData (), input.GetData (), input.GetSize ());
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 StreamCompressor::StreamCompressor ()
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+StreamCompressor::~StreamCompressor ()
 {
 }
 
@@ -150,7 +257,8 @@ void ZipStreamCompressor::CompressImpl (const void* data, const std::int64_t siz
 	buffer.resize (::compressBound (size));
 
 	uLongf destLen = buffer.size ();
-	compress (buffer.data (), &destLen, static_cast<const Bytef*> (data), size);
+	compress2 (buffer.data (), &destLen,
+		static_cast<const Bytef*> (data), size, Z_BEST_COMPRESSION);
 	buffer.resize (destLen);
 }
 
@@ -163,6 +271,18 @@ std::unique_ptr<StreamCompressor> CreateStreamCompressor (CompressionMode compre
 
 	case CompressionMode::Uncompressed:
 		return std::unique_ptr<StreamCompressor> (new PassthroughStreamCompressor);
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+std::unique_ptr<BlockCompressor> CreateBlockCompressor (CompressionMode compression)
+{
+	switch (compression) {
+	case CompressionMode::Zip:
+		return std::unique_ptr<BlockCompressor> (new ZipBlockCompressor);
+
+	case CompressionMode::Uncompressed:
+		return std::unique_ptr<BlockCompressor> (new NullBlockCompressor);
 	}
 }
 }
