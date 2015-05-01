@@ -73,6 +73,7 @@ public:
 	{
 		Hash result;
 		EVP_DigestFinal_ex (ctx_, result.hash, nullptr);
+		return result;
 	}
 
 private:
