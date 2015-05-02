@@ -1,5 +1,3 @@
-#include <sqlite3.h>
-#include <openssl/evp.h>
 #include <boost/program_options.hpp>
 #include <string>
 #include <sstream>
@@ -20,6 +18,8 @@
 #include "SourcePackageReader.h"
 
 #include "Installer.h"
+
+#include "sql/Database.h"
 
 namespace kyla {
 ////////////////////////////////////////////////////////////////////////////////
@@ -129,7 +129,7 @@ std::string GetFilesForSelectedFeaturesQueryString (
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void Installer::InstallProduct (sqlite3* db, InstallationEnvironment env,
+void Installer::InstallProduct (Sql::Database& db, InstallationEnvironment env,
 	const std::vector<int>& selectedFeatureIds)
 {
 	const char* logFilename = nullptr;
@@ -161,31 +161,25 @@ void Installer::InstallProduct (sqlite3* db, InstallationEnvironment env,
 	boost::filesystem::create_directories (targetDirectory);
 	boost::filesystem::create_directories (stagingDirectory);
 
-	sqlite3_stmt* selectRequiredSourcePackagesStatement = nullptr;
-	sqlite3_prepare_v2 (db,
-		GetSourcePackagesForSelectedFeaturesQueryString (selectedFeatureIds).c_str (),
-		-1, &selectRequiredSourcePackagesStatement, nullptr);
+	auto selectRequiredSourcePackagesStatement  = db.Prepare (
+		GetSourcePackagesForSelectedFeaturesQueryString (selectedFeatureIds));
 
 	std::vector<std::string> requiredSourcePackageFilenames;
-	while (sqlite3_step (selectRequiredSourcePackagesStatement) == SQLITE_ROW) {
+	while (selectRequiredSourcePackagesStatement.Step ()) {
 		const std::string packageFilename =
-			reinterpret_cast<const char*> (sqlite3_column_text (selectRequiredSourcePackagesStatement, 0));
+			selectRequiredSourcePackagesStatement.GetText (0);
 		log.Debug () << "Requesting package " << packageFilename;
 		requiredSourcePackageFilenames.push_back (packageFilename);
 	}
 
-	sqlite3_finalize (selectRequiredSourcePackagesStatement);
-
-	sqlite3_stmt* selectRequiredContentObjectsStatement = nullptr;
-	sqlite3_prepare_v2 (db,
-		GetContentObjectHashesChunkCountForSelectedFeaturesQueryString (selectedFeatureIds).c_str (),
-		-1, &selectRequiredContentObjectsStatement, nullptr);
+	auto selectRequiredContentObjectsStatement = db.Prepare (
+		GetContentObjectHashesChunkCountForSelectedFeaturesQueryString (selectedFeatureIds));
 
 	std::unordered_map<kyla::SHA512Digest, int, kyla::HashDigestHash, kyla::HashDigestEqual> requiredContentObjects;
-	while (sqlite3_step (selectRequiredContentObjectsStatement) == SQLITE_ROW) {
+	while (selectRequiredContentObjectsStatement.Step ()) {
 		kyla::SHA512Digest digest;
 
-		const auto digestSize = sqlite3_column_int64 (selectRequiredContentObjectsStatement, 3);
+		const auto digestSize = selectRequiredContentObjectsStatement.GetInt64 (3);
 
 		if (digestSize != sizeof (digest.bytes)) {
 			log.Error () << "Hash digest size mismatch, skipping content object";
@@ -193,11 +187,11 @@ void Installer::InstallProduct (sqlite3* db, InstallationEnvironment env,
 		}
 
 		::memcpy (digest.bytes,
-			sqlite3_column_blob (selectRequiredContentObjectsStatement, 0),
+			selectRequiredContentObjectsStatement.GetBlob (0),
 			sizeof (digest.bytes));
 
-		int chunkCount = sqlite3_column_int (selectRequiredContentObjectsStatement, 1);
-		const auto size = sqlite3_column_int64 (selectRequiredContentObjectsStatement, 2);
+		const auto chunkCount = selectRequiredContentObjectsStatement.GetInt64 (1);
+		const auto size = selectRequiredContentObjectsStatement.GetInt64 (2);
 		requiredContentObjects [digest] = chunkCount;
 
 		kyla::CreateFile (
@@ -207,8 +201,6 @@ void Installer::InstallProduct (sqlite3* db, InstallationEnvironment env,
 	}
 
 	log.Info () << "Requested " << requiredContentObjects.size () << " content objects";
-
-	sqlite3_finalize (selectRequiredContentObjectsStatement);
 
 	// Process all source packages into the staging directory, only extracting
 	// the requested content objects
@@ -227,18 +219,15 @@ void Installer::InstallProduct (sqlite3* db, InstallationEnvironment env,
 
 	// Once done, we walk once more over the file list and just copy the
 	// content object to its target location
-	sqlite3_stmt* selectFilesStatement = nullptr;
-	sqlite3_prepare_v2 (db,
-		GetFilesForSelectedFeaturesQueryString (selectedFeatureIds).c_str (),
-		-1, &selectFilesStatement, nullptr);
+	auto selectFilesStatement = db.Prepare (
+		GetFilesForSelectedFeaturesQueryString (selectedFeatureIds));
 
 	// Find unique directory paths first
 	std::set<std::string> directories;
 
-	while (sqlite3_step (selectFilesStatement) == SQLITE_ROW) {
+	while (selectFilesStatement.Step ()) {
 		const auto targetPath =
-			targetDirectory / (reinterpret_cast<const char*> (
-				sqlite3_column_text (selectFilesStatement, 0)));
+			targetDirectory / selectFilesStatement.GetText (0);
 
 		directories.insert (targetPath.parent_path ().string ());
 	}
@@ -252,32 +241,32 @@ void Installer::InstallProduct (sqlite3* db, InstallationEnvironment env,
 		}
 	}
 
-	sqlite3_reset (selectFilesStatement);
+	// Run again now that the directories have been created
+	selectFilesStatement.Reset ();
 
 	log.Info () << "Created directories";
 	log.Info () << "Deploying files";
 
-	while (sqlite3_step (selectFilesStatement) == SQLITE_ROW) {
+	while (selectFilesStatement.Step ()) {
 		const auto targetPath =
-			targetDirectory / (reinterpret_cast<const char*> (
-				sqlite3_column_text (selectFilesStatement, 0)));
+			targetDirectory / selectFilesStatement.GetText (0);
 
 		// If null, we need to create an empty file there
-		if (sqlite3_column_type (selectFilesStatement, 1) == SQLITE_NULL) {
+		if (selectFilesStatement.GetColumnType (1) == Sql::Type::Null) {
 			log.Debug () << "Creating empty file " << targetPath.string ();
 
 			kyla::CreateFile (targetPath.c_str ());
 		} else {
 			kyla::SHA512Digest digest;
 
-			const auto digestSize = sqlite3_column_int64 (selectFilesStatement, 2);
+			const auto digestSize = selectFilesStatement.GetInt64 (2);
 
 			if (digestSize != sizeof (digest.bytes)) {
 				log.Error () << "Hash size mismatch, skipping file";
 				continue;
 			}
 
-			::memcpy (digest.bytes, sqlite3_column_blob (selectFilesStatement, 1),
+			::memcpy (digest.bytes, selectFilesStatement.GetBlob (1),
 				sizeof (digest.bytes));
 
 			log.Debug () << "Copying " << (stagingDirectory / ToString (digest)).string ()
@@ -290,8 +279,5 @@ void Installer::InstallProduct (sqlite3* db, InstallationEnvironment env,
 	}
 
 	log.Info () << "Done";
-	sqlite3_finalize (selectFilesStatement);
-
-	sqlite3_close (db);
 }
 }

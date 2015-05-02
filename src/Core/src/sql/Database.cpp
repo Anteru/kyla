@@ -153,6 +153,23 @@ public:
 		return sqlite3_column_blob (static_cast<sqlite3_stmt*> (statement), column);
 	}
 
+	const Type StatementGetColumnType (void* statement, const int column)
+	{
+		const auto t = sqlite3_column_type (static_cast<sqlite3_stmt*> (statement), column);
+		switch (t) {
+		case SQLITE_NULL:
+			return Type::Null;
+		case SQLITE_INTEGER:
+			return Type::Int64;
+		case SQLITE_TEXT:
+			return Type::Text;
+		case SQLITE_BLOB:
+			return Type::Blob;
+		}
+
+		///@TODO Handle error
+	}
+
 	bool Execute (const char* statement)
 	{
 		K_S (sqlite3_exec (db_, statement, nullptr, nullptr, nullptr));
@@ -384,6 +401,12 @@ const void* Statement::GetBlob (const int index) const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+Type Statement::GetColumnType (const int index) const
+{
+	return impl_->StatementGetColumnType (p_, index);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 Transaction Database::BeginTransaction(TransactionType type)
 {
 	return Transaction (impl_.get ());
@@ -393,6 +416,12 @@ Transaction Database::BeginTransaction(TransactionType type)
 Statement Database::Prepare (const char* statement)
 {
 	return Statement (impl_.get (), statement);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+Statement Database::Prepare (const std::string& statement)
+{
+	return Prepare (statement.c_str ());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

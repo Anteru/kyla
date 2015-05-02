@@ -47,6 +47,7 @@ public:
 	Transaction BeginTransaction (TransactionType type = TransactionType::Immediate);
 
 	Statement Prepare (const char* statement);
+	Statement Prepare (const std::string& statement);
 
 	bool Execute (const char* statement);
 
@@ -90,6 +91,14 @@ struct Null
 {
 };
 
+enum class Type
+{
+	Null,
+	Int64,
+	Text,
+	Blob
+};
+
 class Statement
 {
 public:
@@ -120,6 +129,8 @@ public:
 	std::int64_t GetInt64 (const int column) const;
 	const char* GetText (const int column) const;
 	const void* GetBlob (const int column) const;
+
+	Type GetColumnType (const int column) const;
 
 	bool Step ();
 	void Reset ();

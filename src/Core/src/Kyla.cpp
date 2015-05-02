@@ -10,6 +10,8 @@
 
 #include <memory>
 
+#include "sql/Database.h"
+
 #define KYLA_C_API_BEGIN() try {
 #define KYLA_C_API_END() } catch (...) { return KylaError; }
 
@@ -72,27 +74,23 @@ public:
 class KylaFeatures final
 {
 public:
-	KylaFeatures (sqlite3* db)
+	KylaFeatures (kyla::Sql::Database& db)
 	{
-		sqlite3_stmt* selectFeaturesStatement;
-		sqlite3_prepare_v2 (db,
-			"SELECT Id, Name, UIName, UIDescription, ParentId FROM features;", -1,
-			&selectFeaturesStatement, nullptr);
+		auto selectFeaturesStatement = db.Prepare (
+			"SELECT Id, Name, UIName, UIDescription, ParentId FROM features;");
 
-		while (sqlite3_step (selectFeaturesStatement) == SQLITE_ROW) {
+		while (selectFeaturesStatement.Step ()) {
 			KylaFeature* kf = new KylaFeature;
-			kf->id = sqlite3_column_int (selectFeaturesStatement, 0);
+			kf->id = selectFeaturesStatement.GetInt64 (0);
 
-			const std::string featureName = reinterpret_cast<const char*> (
-				sqlite3_column_text (selectFeaturesStatement, 2));
+			const std::string featureName = selectFeaturesStatement.GetText (2);
 			auto name = stringPool_.Alloc (featureName.size ());
 			::memcpy (name, featureName.data (), featureName.size ());
 			kf->name = name;
 
 			// Description may be null
-			if (sqlite3_column_text (selectFeaturesStatement, 3)) {
-				const std::string featureDescription = reinterpret_cast<const char*> (
-					sqlite3_column_text (selectFeaturesStatement, 3));
+			if (selectFeaturesStatement.GetText (3)) {
+				const std::string featureDescription = selectFeaturesStatement.GetText (3);
 				auto description = stringPool_.Alloc (featureDescription.size ());
 				::memcpy (description, featureDescription.data (), featureDescription.size ());
 				kf->description = description;
@@ -100,17 +98,14 @@ public:
 				kf->description = nullptr;
 			}
 
-			if (sqlite3_column_type (selectFeaturesStatement, 4) == SQLITE_NULL) {
+			if (selectFeaturesStatement.GetColumnType (4) == kyla::Sql::Type::Null) {
 				kf->parentId = -1;
 			} else {
-				kf->parentId = sqlite3_column_int (selectFeaturesStatement, 4);
+				kf->parentId = selectFeaturesStatement.GetInt64 (4);
 			}
 
 			features.push_back(kf);
 		}
-
-		sqlite3_finalize (selectFeaturesStatement);
-
 	}
 
 	~KylaFeatures ()
@@ -137,12 +132,11 @@ struct KylaInstaller
 {
 	KylaInstaller (const char* path)
 	{
-		sqlite3_open (path, &db_);
+		db_ = kyla::Sql::Database::Open (path);
 	}
 
 	~KylaInstaller ()
 	{
-		sqlite3_close (db_);
 	}
 
 	void SetProperty (kyla::PropertyCategory category, const std::string& name,
@@ -176,7 +170,7 @@ struct KylaInstaller
 		installer.InstallProduct (db_, environment_, selectedFeatures_);
 	}
 
-	sqlite3* GetInstallationDatabase ()
+	kyla::Sql::Database& GetInstallationDatabase ()
 	{
 		return db_;
 	}
@@ -187,9 +181,9 @@ struct KylaInstaller
 	}
 
 private:
-	kyla::InstallationEnvironment environment_;
+	kyla::InstallationEnvironment	environment_;
 	std::vector<int>				selectedFeatures_;
-	sqlite3* db_;
+	kyla::Sql::Database				db_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

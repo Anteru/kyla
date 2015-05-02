@@ -4,11 +4,12 @@
 #include <vector>
 #include <unordered_map>
 
-#include <sqlite3.h>
-
 #include "Property.h"
 
 namespace kyla {
+namespace Sql {
+class Database;
+}
 enum class PropertyCategory
 {
 	Installation,
@@ -33,7 +34,7 @@ private:
 class Installer
 {
 public:
-	void InstallProduct (sqlite3* installationDatabase,
+	void InstallProduct (Sql::Database& installationDatabase,
 		InstallationEnvironment environment,
 		const std::vector<int>& selectedFeatures);
 };
