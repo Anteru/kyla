@@ -7,6 +7,8 @@ SET(HEADERS
 	inc/ArrayRef.h
 
 	inc/Compression.h
+	inc/Config.h
+	inc/Exception.h
 	inc/FileIO.h
     inc/Hash.h
 	inc/Installer.h
@@ -19,12 +21,15 @@ SET(HEADERS
     inc/SourcePackage.h
 	inc/SourcePackageReader.h
 	inc/SourcePackageWriter.h
-	inc/Types.h)
+	inc/StringRef.h
+	inc/Types.h
+	inc/Uuid.h)
 
 SET(SOURCES
 	src/sql/Database.cpp
 
 	src/Compression.cpp
+	src/Exception.cpp
 	src/FileIO.cpp
     src/Hash.cpp
 	src/Installer.cpp
@@ -34,7 +39,9 @@ SET(SOURCES
 	src/Property.cpp
     src/SourcePackage.cpp
 	src/SourcePackageReader.cpp
-	src/SourcePackageWriter.cpp)
+	src/SourcePackageWriter.cpp
+	src/StringRef.cpp
+	src/Uuid.cpp)
 
 FIND_PACKAGE(OpenSSL)
 FIND_PACKAGE(ZLIB)

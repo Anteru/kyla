@@ -14,9 +14,7 @@
 #include <unordered_set>
 #include <memory>
 
-#include <boost/uuid/uuid.hpp>
-#include <boost/uuid/random_generator.hpp>
-#include <boost/uuid/uuid_io.hpp>
+#include "Uuid.h"
 
 #include <assert.h>
 
@@ -171,7 +169,7 @@ public:
 				kyla::ArrayRef<kyla::byte> (readBuffer_.data (), bytesRead),
 				compressionBuffer_);
 
-			const auto chunkName = kyla::ToString (uuidGen_ ().data);
+			const auto chunkName = kyla::Uuid::CreateRandom().ToString();
 
 			const ChunkInfo chunkInfo {chunkName, compressedSize};
 			chunks.push_back (chunkInfo);
@@ -224,7 +222,6 @@ private:
 	boost::filesystem::path			temporaryDirectory_;
 	std::vector<kyla::byte>			readBuffer_;
 	std::vector<kyla::byte>			compressionBuffer_;
-	boost::uuids::random_generator	uuidGen_;
 	kyla::int64						fileChunkSize_ = 1 << 24;
 };
 
@@ -525,20 +522,20 @@ std::vector<SourcePackageInfo> WriteUserPackages (
 
 ////////////////////////////////////////////////////////////////////////////////
 std::int64_t CreateGeneratedPackage (kyla::Sql::Database& installationDatabase,
-	boost::uuids::uuid& packageUuid)
+	const kyla::Uuid& packageUuid)
 {
 	auto insertSourcePackageStatement = installationDatabase.Prepare (
 		"INSERT INTO source_packages (Name, Filename, Uuid, Hash) VALUES (?, ?, ?, ?);");
 
 	const std::string packageName = std::string ("Generated_")
-		+ kyla::ToString (packageUuid.data);
+		+ packageUuid.ToString ();
 
 	insertSourcePackageStatement.Bind (1, packageName);
 
 	// Dummy filename and hash, will be fixed up later
 	insertSourcePackageStatement.Bind (2, packageName);
 
-	insertSourcePackageStatement.Bind (3, packageUuid.data);
+	insertSourcePackageStatement.Bind (3, kyla::ArrayRef<> (packageUuid));
 	insertSourcePackageStatement.Bind (4,
 		kyla::ArrayRef<> (packageName.c_str (), packageName.size ()));
 
@@ -578,8 +575,6 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 	auto selectChunksForContentObject = buildDatabase.Prepare(
 		"SELECT Path, Size FROM chunks WHERE ContentObjectId=? ORDER BY rowid ASC");
 
-	boost::uuids::random_generator uuidGen;
-
 	kyla::SourcePackageWriter spw;
 	std::int64_t dataInCurrentPackage = 0;
 	std::int64_t currentPackageId = -1;
@@ -607,12 +602,12 @@ std::vector<SourcePackageInfo> WriteGeneratedPackages (
 					// Open current package if needed, start inserting
 					if (! spw.IsOpen ()) {
 						// Add a new source package
-						auto packageId = uuidGen ();
+						const auto packageId = kyla::Uuid::CreateRandom ();
 						currentPackageId = CreateGeneratedPackage (
 							installationDatabase, packageId);
 
 						spw.Open (targetDirectory / packageNameTemplate (currentPackageId),
-							packageId.data);
+							packageId.GetData ());
 					}
 
 					// Insert the chunk right away, increment current size, if
@@ -746,7 +741,6 @@ public:
 	boost::filesystem::path sourceDirectory;
 	boost::filesystem::path	temporaryDirectory;
 	boost::filesystem::path targetDirectory;
-	boost::uuids::random_generator uuidGenerator;
 };
 
 /*
@@ -803,8 +797,7 @@ std::unordered_map<std::string, std::int64_t> CreateFeatures (GeneratorContext& 
 /*
 Returns a mapping of source package id string to the source package id in the database.
 */
-std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorContext& gc,
-	boost::uuids::random_generator& uuidGen)
+std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorContext& gc)
 {
 	auto transaction = gc.installationDatabase.BeginTransaction();
 
@@ -822,10 +815,10 @@ std::unordered_map<std::string, std::int64_t> CreateSourcePackages (GeneratorCon
 		const auto sourcePackageId = sourcePackage.attribute ("Id").value ();
 		insertSourcePackageStatement.Bind (1, sourcePackageId);
 
-		const auto packageUuid = uuidGen ();
-		insertSourcePackageStatement.Bind (2, kyla::ToString (packageUuid.data));
-		insertSourcePackageStatement.Bind (3, packageUuid.data);
-		insertSourcePackageStatement.Bind (4, packageUuid.data);
+		const auto packageUuid = kyla::Uuid::CreateRandom ();
+		insertSourcePackageStatement.Bind (2, packageUuid.ToString ());
+		insertSourcePackageStatement.Bind (3, kyla::ArrayRef<> (packageUuid));
+		insertSourcePackageStatement.Bind (4, kyla::ArrayRef<> (packageUuid));
 
 		insertSourcePackageStatement.Step ();
 		insertSourcePackageStatement.Reset ();
@@ -966,7 +959,7 @@ int main (int argc, char* argv[])
 	gc.SetupBuildDatabase (gc.temporaryDirectory);
 
 	const auto featureIds = CreateFeatures (gc);
-	const auto sourcePackageIds = CreateSourcePackages (gc, gc.uuidGenerator);
+	const auto sourcePackageIds = CreateSourcePackages (gc);
 
 	AssignFilesToFeaturesPackages (gc.productNode, sourcePackageIds,
 		featureIds, gc.buildDatabase);
