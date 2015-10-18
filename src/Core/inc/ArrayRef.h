@@ -38,26 +38,26 @@ public:
 	typedef std::ptrdiff_t count_type;
 
 	template <typename U>
-	ArrayRef (const U& t,
+	constexpr ArrayRef (const U& t,
 		typename ArrayAdapter<U>::Type* = nullptr)
 		: data_ (ArrayAdapter<U>::GetDataPointer (t))
 		, count_ (ArrayAdapter<U>::GetCount (t))
 	{
 	}
 
-	ArrayRef (const T* begin, const T* end)
+	constexpr ArrayRef (const T* begin, const T* end)
 		: data_ (begin)
 		, count_ (end-begin)
 	{
 	}
 
-	ArrayRef (const T* data, const count_type count)
+	constexpr ArrayRef (const T* data, const count_type count)
 		: data_ (data)
 		, count_ (count)
 	{
 	}
 
-	ArrayRef (const count_type count, const T* data)
+	constexpr ArrayRef (const count_type count, const T* data)
 		: data_ (data)
 		, count_ (count)
 	{
@@ -70,26 +70,26 @@ public:
 	}
 
 	template <int N>
-	ArrayRef (const T (&array)[N])
+	constexpr ArrayRef (const T (&array)[N])
 		: data_ (array)
 		, count_ (N)
 	{
 	}
 
-	explicit ArrayRef (const T& element)
+	explicit constexpr ArrayRef (const T& element)
 		: data_ (&element)
 		, count_ (1)
 	{
 	}
 
-	ArrayRef ()
+	constexpr ArrayRef ()
 		: data_ (nullptr)
 		, count_ (0)
 	{
 	}
 
 	template <typename IndexType>
-	const T& operator [] (const IndexType index) const
+	constexpr const T& operator [] (const IndexType index) const
 	{
 		return data_ [index];
 	}
@@ -100,7 +100,7 @@ public:
 	* @note This is not the size in bytes. The memory size can be queried
 	*	using GetSize().
 	*/
-	count_type GetCount () const
+	constexpr count_type GetCount () const
 	{
 		return count_;
 	}
@@ -111,42 +111,42 @@ public:
 	* @note This is not the element count. The number of elements can be
 	*	obtained using GetCount().
 	*/
-	size_type GetSize () const
+	constexpr size_type GetSize () const
 	{
 		return sizeof (T) * count_;
 	}
 
-	const T* GetData () const
+	constexpr const T* GetData () const
 	{
 		return data_;
 	}
 
-	const_iterator begin () const
+	constexpr const_iterator begin () const
 	{
 		return data_;
 	}
 
-	const_iterator cbegin () const
+	constexpr const_iterator cbegin () const
 	{
 		return data_;
 	}
 
-	const_iterator end () const
+	constexpr const_iterator end () const
 	{
 		return data_ + count_;
 	}
 
-	const_iterator cend () const
+	constexpr const_iterator cend () const
 	{
 		return data_ + count_;
 	}
 
-	bool empty () const
+	constexpr bool empty () const
 	{
 		return count_ == 0;
 	}
 
-	bool IsEmpty () const
+	constexpr bool IsEmpty () const
 	{
 		return empty ();
 	}
@@ -157,7 +157,7 @@ public:
 	Returns a sub-range into this array, starting at \c first and
 	containing \c count elements.
 	*/
-	ArrayRef Slice (size_type first, size_type count) const
+	constexpr ArrayRef Slice (size_type first, size_type count) const
 	{
 		return ArrayRef (data_ + first, data_ + first + count);
 	}
@@ -168,7 +168,7 @@ public:
 	Returns a sub-range from this array, starting at \c first and going to
 	the end.
 	*/
-	ArrayRef Slice (size_type first) const
+	constexpr ArrayRef Slice (size_type first) const
 	{
 		return ArrayRef (data_ + first, data_ + count_);
 	}
@@ -185,73 +185,73 @@ public:
 	typedef ptrdiff_t size_type;
 
 	template <typename T>
-	ArrayRef (const ArrayRef<T>& ref)
+	constexpr ArrayRef (const ArrayRef<T>& ref)
 		: data_ (ref.GetData ())
 		, size_ (ref.GetSize ())
 	{
 	}
 
 	template <typename U>
-	ArrayRef (const U& t,
+	constexpr ArrayRef (const U& t,
 		typename ArrayAdapter<U>::Type* = nullptr)
 		: data_ (ArrayAdapter<U>::GetDataPointer (t))
 		, size_ (ArrayAdapter<U>::GetSize (t))
 	{
 	}
 
-	ArrayRef (const void* data, const size_type size)
+	constexpr ArrayRef (const void* data, const size_type size)
 		: data_ (data)
 		, size_ (size)
 	{
 	}
 
-	ArrayRef (const size_type size, const void* data)
+	constexpr ArrayRef (const size_type size, const void* data)
 		: data_ (data)
 		, size_ (size)
 	{
 	}
 
 	template <typename T>
-	ArrayRef (const std::vector<T>& vec)
+	constexpr ArrayRef (const std::vector<T>& vec)
 		: data_ (vec.data ())
 		, size_ (vec.size () * sizeof (T))
 	{
 	}
 
 	template <typename T, int N>
-	ArrayRef (const T (&array)[N])
+	constexpr ArrayRef (const T (&array)[N])
 		: data_ (array)
 		, size_ (N * sizeof (T))
 	{
 	}
 
-	ArrayRef ()
+	constexpr ArrayRef ()
 		: data_ (nullptr)
 		, size_ (0)
 	{
 	}
 
-	size_type GetSize () const
+	constexpr size_type GetSize () const
 	{
 		return size_;
 	}
 
-	const void* GetData () const
+	constexpr const void* GetData () const
 	{
 		return data_;
 	}
 
-	bool empty () const
+	constexpr bool empty () const
 	{
 		return size_ == 0;
 	}
 
-	bool IsEmpty () const
+	constexpr bool IsEmpty () const
 	{
 		return empty ();
 	}
 
-	ArrayRef<byte> ToByteRef () const
+	constexpr ArrayRef<byte> ToByteRef () const
 	{
 		return ArrayRef<byte> (
 			static_cast<const byte*> (data_),
@@ -284,60 +284,60 @@ public:
 	typedef T* iterator;
 	typedef typename ArrayRef<T>::size_type size_type;
 
-	MutableArrayRef (T* begin, T* end)
+	constexpr MutableArrayRef (T* begin, T* end)
 	: ArrayRef<T> (begin, end)
 	{
 	}
 
 	template <typename U>
-	MutableArrayRef (U& t)
+	constexpr MutableArrayRef (U& t)
 	: ArrayRef<T> (t)
 	{
 	}
 
-	MutableArrayRef (T* data, const typename ArrayRef<T>::count_type count)
+	constexpr MutableArrayRef (T* data, const typename ArrayRef<T>::count_type count)
 	: ArrayRef<T> (data, count)
 	{
 	}
 
-	MutableArrayRef (const typename ArrayRef<T>::count_type count, T* data)
+	constexpr MutableArrayRef (const typename ArrayRef<T>::count_type count, T* data)
 	: ArrayRef<T> (count, data)
 	{
 	}
 
-	MutableArrayRef (std::vector<T>& vec)
+	constexpr MutableArrayRef (std::vector<T>& vec)
 	: ArrayRef<T> (vec)
 	{
 	}
 
 	template <int N>
-	MutableArrayRef (T (&array)[N])
+	constexpr MutableArrayRef (T (&array)[N])
 	: ArrayRef<T> (array)
 	{
 	}
 
-	MutableArrayRef ()
+	constexpr MutableArrayRef ()
 	: ArrayRef<T> ()
 	{
 	}
 
 	template <typename IndexType>
-	T& operator [] (const IndexType index) const
+	constexpr T& operator [] (const IndexType index) const
 	{
 		return GetData () [index];
 	}
 
-	T* GetData () const
+	constexpr T* GetData () const
 	{
 		return const_cast<T*> (ArrayRef<T>::GetData ());
 	}
 
-	iterator begin () const
+	constexpr iterator begin () const
 	{
 		return GetData ();
 	}
 
-	iterator end () const
+	constexpr iterator end () const
 	{
 		return GetData () + this->GetCount ();
 	}
@@ -345,7 +345,7 @@ public:
 	/**
 	@copydoc ArrayRef::Slice(size_type first, size_type count) const
 	*/
-	MutableArrayRef Slice (size_type first, size_type count) const
+	constexpr MutableArrayRef Slice (size_type first, size_type count) const
 	{
 		return MutableArrayRef (GetData() + first, GetData () + first + count);
 	}
@@ -353,7 +353,7 @@ public:
 	/**
 	@copydoc ArrayRef::Slice(size_type first) const
 	*/
-	MutableArrayRef Slice (size_type first) const
+	constexpr MutableArrayRef Slice (size_type first) const
 	{
 		return MutableArrayRef (GetData () + first, GetData () + this->GetCount ());
 	}
@@ -366,45 +366,45 @@ public:
 	typedef ptrdiff_t size_type;
 
 	template <typename T>
-	MutableArrayRef (const MutableArrayRef<T>& ref)
+	constexpr MutableArrayRef (const MutableArrayRef<T>& ref)
 	: ArrayRef<void> (ref)
 	{
 	}
 
 	template <typename U>
-	MutableArrayRef (U& t)
+	constexpr MutableArrayRef (U& t)
 	: ArrayRef<void> (t)
 	{
 	}
 
-	MutableArrayRef (void* data, const size_type size)
+	constexpr MutableArrayRef (void* data, const size_type size)
 	: ArrayRef<void> (data, size)
 	{
 	}
 
-	MutableArrayRef (const size_type size, void* data)
+	constexpr MutableArrayRef (const size_type size, void* data)
 	: ArrayRef<void> (data, size)
 	{
 	}
 
 	template <typename T>
-	MutableArrayRef (std::vector<T>& vec)
+	constexpr MutableArrayRef (std::vector<T>& vec)
 	: ArrayRef<void> (vec)
 	{
 	}
 
 	template <typename T, int N>
-	MutableArrayRef (T (&array)[N])
+	constexpr MutableArrayRef (T (&array)[N])
 	: ArrayRef<void> (array)
 	{
 	}
 
-	MutableArrayRef ()
+	constexpr MutableArrayRef ()
 	: ArrayRef<void> ()
 	{
 	}
 
-	void* GetData () const
+	constexpr void* GetData () const
 	{
 		return const_cast<void*> (ArrayRef<void>::GetData ());
 	}
