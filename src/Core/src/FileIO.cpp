@@ -39,14 +39,14 @@ struct LinuxFile final : public File
 		fd_ = -1;
 	}
 
-	void WriteImpl (const void* buffer, const std::int64_t size) override
+	void WriteImpl (const ArrayRef<>& data) override
 	{
-		write (fd_, buffer, size);
+		write (fd_, data.GetData (), data.GetSize ());
 	}
 
-	std::int64_t ReadImpl (void* buffer, const std::int64_t size) override
+	std::int64_t ReadImpl (const MutableArrayRef<>& buffer) override
 	{
-		return read (fd_, buffer, size);
+		return read (fd_, buffer.GetData (), buffer.GetSize ());
 	}
 
 	void SeekImpl (const std::int64_t offset) override

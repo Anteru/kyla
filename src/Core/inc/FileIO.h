@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <memory>
 
+#include "ArrayRef.h"
+
 namespace kyla {
 struct File
 {
@@ -13,14 +15,14 @@ struct File
 	File (const File&) = delete;
 	File& operator= (const File&) = delete;
 
-	void Write (const void* buffer, const std::int64_t size)
+	void Write (const ArrayRef<>& data)
 	{
-		WriteImpl (buffer, size);
+		WriteImpl (data);
 	}
 
-	std::int64_t Read (void* buffer, const std::int64_t size)
+	std::int64_t Read (const MutableArrayRef<>& buffer)
 	{
-		return ReadImpl (buffer, size);
+		return ReadImpl (buffer);
 	}
 
 	void Seek (const std::int64_t offset)
@@ -59,8 +61,8 @@ struct File
 	}
 
 private:
-	virtual void WriteImpl (const void* buffer, const std::int64_t size) = 0;
-	virtual std::int64_t ReadImpl (void* buffer, const std::int64_t size) = 0;
+	virtual void WriteImpl (const ArrayRef<>& data) = 0;
+	virtual std::int64_t ReadImpl (const MutableArrayRef<>& buffer) = 0;
 
 	virtual void SeekImpl (const std::int64_t offset) = 0;
 	virtual std::int64_t TellImpl () const = 0;

@@ -29,11 +29,11 @@ public:
 		Log& log)
 	{
 		SourcePackageHeader header;
-		input_->Read (&header, sizeof (header));
+		input_->Read (MutableArrayRef<decltype(header)> (header));
 		input_->Seek (header.indexOffset);
 
 		std::vector<SourcePackageIndexEntry> index (header.indexEntryCount);
-		input_->Read (index.data (), sizeof (SourcePackageIndexEntry) * index.size ());
+		input_->Read (index);
 
 		std::vector<unsigned char> buffer;
 		for (const auto& entry : index) {
@@ -48,14 +48,14 @@ public:
 					<< absolute (directory / ToString (digest)).c_str ();
 
 				SourcePackageChunk chunkEntry;
-				input_->Read (&chunkEntry, sizeof (chunkEntry));
+				input_->Read (MutableArrayRef<decltype(chunkEntry)>(chunkEntry));
 
 				if (chunkEntry.compressionMode == CompressionMode::Zip) {
 					if (buffer.size () < chunkEntry.compressedSize) {
 						buffer.resize (chunkEntry.compressedSize);
 					}
 
-					input_->Read (buffer.data (), chunkEntry.compressedSize);
+					input_->Read (MutableArrayRef<> (buffer.data (), chunkEntry.compressedSize));
 
 					const auto targetPath = directory / ToString (digest);
 

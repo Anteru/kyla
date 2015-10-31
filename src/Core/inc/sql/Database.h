@@ -125,7 +125,6 @@ public:
 		BindArgumentsInternal<1> (args ...);
 	}
 
-	///@TODO Bind ArrayRef
 	std::int64_t GetInt64 (const int column) const;
 	const char* GetText (const int column) const;
 	const void* GetBlob (const int column) const;

@@ -43,16 +43,16 @@ void SourcePackageWriter::Add (const SHA512Digest& digest,
 ////////////////////////////////////////////////////////////////////////////////
 namespace {
 std::int64_t BlockCopy (const boost::filesystem::path& file, kyla::File& out,
-	std::vector<unsigned char>& buffer)
+	std::vector<byte>& buffer)
 {
 	auto input = kyla::OpenFile (file.c_str (), kyla::FileOpenMode::Read);
 
 	std::int64_t bytesReadTotal = 0;
 
 	for (;;) {
-		const auto bytesRead = input->Read (buffer.data (), buffer.size ());
+		const auto bytesRead = input->Read (buffer);
 		bytesReadTotal += bytesRead;
-		out.Write (buffer.data (), bytesRead);
+		out.Write (ArrayRef<byte> (buffer.data (), bytesRead));
 
 		if (bytesRead < buffer.size ()) {
 			return bytesReadTotal;
@@ -84,7 +84,7 @@ SHA512Digest SourcePackageWriter::Finalize()
 		offset += sizeof (SourcePackageIndexEntry) * hashChunks.second.size ();
 	}
 
-	output->Write (&header, sizeof (header));
+	output->Write (ArrayRef<decltype(header)> (header));
 	output->Seek (offset);
 
 	// This is our I/O buffer, we read/write in blocks of this size, and also
@@ -106,8 +106,7 @@ SHA512Digest SourcePackageWriter::Finalize()
 	}
 
 	output->Seek (sizeof (header));
-	output->Write (packageIndex.data (),
-		sizeof (SourcePackageIndexEntry) * packageIndex.size ());
+	output->Write (packageIndex);
 
 	output->Close ();
 

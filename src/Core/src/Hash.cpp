@@ -35,8 +35,7 @@ SHA512Digest ComputeSHA512(const boost::filesystem::path& p,
 	hasher.Initialize ();
 
 	for (;;) {
-		const auto bytesRead = input->Read (fileReadBuffer.data (),
-			fileReadBuffer.size ());
+		const auto bytesRead = input->Read (fileReadBuffer);
 
 		hasher.Update (ArrayRef<byte> (fileReadBuffer.data (), bytesRead));
 

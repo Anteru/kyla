@@ -45,6 +45,53 @@ enum KylaPropertyCategory
 
 struct KylaProperty;
 
+struct KylaRepository;
+
+enum KylaRepositoryOpenMode
+{
+	Read,
+	Write
+};
+
+enum KylaRepositoryFormat
+{
+	Unpacked,
+	Packed
+};
+
+struct KylaContext;
+
+typedef int64_t KylaFileSetId;
+
+struct KylaFileSetInfo
+{
+	char identifier [256];
+	int64_t size;
+	int64_t fileCount;
+};
+
+int kylaCreateContext (struct KylaContext** context);
+int kylaDestroyContext (struct KylaContext** context);
+
+struct KylaRepositoryOpenInfo
+{
+	const char* path;
+	enum KylaRepositoryOpenMode mode;
+	enum KylaRepositoryFormat format;
+};
+
+int kylaOpenRepository (struct KylaContext* context, const struct KylaRepositoryOpenInfo* openInfo,
+	struct KylaRepository** result);
+int kylaEnumerateFileSets (struct KylaContext* context, struct KylaRepository* repository, int* count, KylaFileSetInfo* infos);
+int kylaChangeRepository (struct KylaContext* context,
+	struct KylaRepository* target,
+	int fileSetCount,
+	const KylaFileSetId* fileSets,
+	struct KylaRepository* source
+	);
+
+int kylaVerifyRepository (struct KylaContext* context, struct KylaRepository* repository);
+
 int kylaCreateStringProperty (const char* s, KylaProperty** result);
 int kylaCreateIntProperty (const int value, KylaProperty** result);
 int kylaCreateBinaryProperty (const void* d, const int size, KylaProperty** result);
