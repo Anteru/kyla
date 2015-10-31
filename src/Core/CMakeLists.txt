@@ -12,9 +12,6 @@ SET(HEADERS
 	inc/FileIO.h
     inc/Hash.h
 	inc/Installer.h
-	inc/InstallPackage.h
-	inc/InstallPackageReader.h
-	inc/InstallPackageWriter.h
 	inc/Kyla.h
 	inc/Log.h
 	inc/Property.h
@@ -33,8 +30,6 @@ SET(SOURCES
 	src/FileIO.cpp
     src/Hash.cpp
 	src/Installer.cpp
-	src/InstallPackageReader.cpp
-	src/InstallPackageWriter.cpp
 	src/Kyla.cpp
 	src/Property.cpp
     src/SourcePackage.cpp

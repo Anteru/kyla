@@ -35,31 +35,6 @@ private:
 	virtual int CompressImpl (const ArrayRef<>& input,
 		const MutableArrayRef<>& output) const = 0;
 };
-
-struct StreamCompressor
-{
-public:
-	StreamCompressor ();
-	virtual ~StreamCompressor ();
-
-	void Initialize (std::function<void (const void* data, const std::int64_t)> writeCallback);
-	void Update (const void* data, const std::int64_t size);
-	void Finalize ();
-	void Compress (const void* data, const std::int64_t size,
-		std::vector<std::uint8_t>& buffer);
-
-	StreamCompressor (const StreamCompressor&) = delete;
-	StreamCompressor& operator= (const StreamCompressor&) = delete;
-
-private:
-	virtual void InitializeImpl (std::function<void (const void* data, const std::int64_t)> writeCallback) = 0;
-	virtual void UpdateImpl (const void* data, const std::int64_t size) = 0;
-	virtual void FinalizeImpl () = 0;
-	virtual void CompressImpl (const void* data, const std::int64_t size,
-		std::vector<std::uint8_t>& buffer);
-};
-
-std::unique_ptr<StreamCompressor> CreateStreamCompressor (CompressionMode compression);
 std::unique_ptr<BlockCompressor> CreateBlockCompressor (CompressionMode compression);
 }
 
