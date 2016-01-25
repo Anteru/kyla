@@ -46,7 +46,7 @@ int main (int argc, char* argv[])
 		vm ["package-directory"].as<std::string> ()));
 
 	sqlite3* installationDb;
-	sqlite3_open_v2 (inputFilePath.c_str (), &installationDb,
+	sqlite3_open_v2 (inputFilePath.string ().c_str (), &installationDb,
 		SQLITE_OPEN_READONLY, nullptr);
 
 	sqlite3_stmt* selectSourcePackageCountStatement;

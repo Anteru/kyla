@@ -5,7 +5,6 @@
 #include <unordered_map>
 #include <set>
 
-#include <boost/log/trivial.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
 
@@ -20,6 +19,8 @@
 #include "Installer.h"
 
 #include "sql/Database.h"
+
+#undef CreateFile
 
 namespace kyla {
 ////////////////////////////////////////////////////////////////////////////////
@@ -195,7 +196,7 @@ void Installer::InstallProduct (Sql::Database& db, InstallationEnvironment env,
 		requiredContentObjects [digest] = chunkCount;
 
 		kyla::CreateFile (
-			(stagingDirectory / ToString (digest)).c_str ())->SetSize (size);
+			(stagingDirectory / ToString (digest)).string ().c_str ())->SetSize (size);
 
 		log.Trace () << "Content object " << ToString (digest) << " allocated (" << size << " bytes)";
 	}
@@ -255,7 +256,7 @@ void Installer::InstallProduct (Sql::Database& db, InstallationEnvironment env,
 		if (selectFilesStatement.GetColumnType (1) == Sql::Type::Null) {
 			log.Debug () << "Creating empty file " << targetPath.string ();
 
-			kyla::CreateFile (targetPath.c_str ());
+			kyla::CreateFile (targetPath.string ().c_str ());
 		} else {
 			kyla::SHA512Digest digest;
 

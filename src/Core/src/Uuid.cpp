@@ -4,11 +4,9 @@
 
 #include <cassert>
 
-#define KYLA_OS_LINUX 1
-
-#if KYLA_OS_WINDOWS
+#if KYLA_PLATFORM_WINDOWS
 	#include <Objbase.h>
-#elif KYLA_OS_LINUX
+#elif KYLA_PLATFORM_LINUX
 	#include <unistd.h>
 	#include <sys/types.h>
 	#include <sys/stat.h>
@@ -83,13 +81,13 @@ uint32 ParseUuidPart (const char* str)
 */
 Uuid Uuid::CreateRandom ()
 {
-#if KYLA_OS_WINDOWS
+#if KYLA_PLATFORM_WINDOWS
 	::GUID id;
 	::CoCreateGuid (&id);
 
 	Uuid uuid;
 	::memcpy (uuid.uuid_, &id, sizeof (id));
-#elif KYLA_OS_LINUX
+#elif KYLA_PLATFORM_LINUX
 	char kernelUuid [36];
 	const int f = open ("/proc/sys/kernel/random/uuid", O_RDONLY);
 	if (f == -1) {

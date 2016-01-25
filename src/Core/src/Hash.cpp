@@ -29,7 +29,7 @@ SHA512Digest ComputeSHA512 (const boost::filesystem::path& p)
 SHA512Digest ComputeSHA512(const boost::filesystem::path& p,
 	std::vector<byte>& fileReadBuffer)
 {
-	auto input = kyla::OpenFile (p.c_str (), kyla::FileOpenMode::Read);
+	auto input = kyla::OpenFile (p.string ().c_str (), kyla::FileOpenMode::Read);
 
 	SHA512StreamHasher hasher;
 	hasher.Initialize ();

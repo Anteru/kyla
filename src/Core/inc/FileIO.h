@@ -37,12 +37,12 @@ struct File
 
 	void* Map (const std::int64_t offset, const std::int64_t size)
 	{
-		MapImpl (offset, size);
+		return MapImpl (offset, size);
 	}
 
 	void* Unmap (void* p)
 	{
-		UnmapImpl (p);
+		return UnmapImpl (p);
 	}
 
 	void SetSize (const std::int64_t size)

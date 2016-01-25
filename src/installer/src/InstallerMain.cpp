@@ -51,7 +51,7 @@ int main (int argc, char* argv [])
 	boost::filesystem::path stagingDirectory = "stage";
 
 	KylaInstaller* installer;
-	kylaOpenInstallationPackage (inputFilePath.c_str (),
+	kylaOpenInstallationPackage (inputFilePath.string ().c_str (),
 		&installer);
 
 	KylaFeatures* features;
@@ -71,19 +71,19 @@ int main (int argc, char* argv [])
 	kylaDeleteFeatures (features);
 
 	KylaProperty* targetDirectoryProperty;
-	kylaCreateStringProperty (installationDirectory.c_str (), &targetDirectoryProperty);
+	kylaCreateStringProperty (installationDirectory.string ().c_str (), &targetDirectoryProperty);
 	kylaSetProperty (installer, KylaPropertyCategoryInstallation,
 		"TargetDirectory", targetDirectoryProperty);
 	kylaDeleteProperty (targetDirectoryProperty);
 
 	KylaProperty* stagingDirectoryProperty;
-	kylaCreateStringProperty (stagingDirectory.c_str (), &stagingDirectoryProperty);
+	kylaCreateStringProperty (stagingDirectory.string ().c_str (), &stagingDirectoryProperty);
 	kylaSetProperty (installer, KylaPropertyCategoryInstallation,
 		"StagingDirectory", stagingDirectoryProperty);
 	kylaDeleteProperty (stagingDirectoryProperty);
 
 	KylaProperty* sourcePackageDirectoryProperty;
-	kylaCreateStringProperty (packageDirectory.c_str (), &sourcePackageDirectoryProperty);
+	kylaCreateStringProperty (packageDirectory.string ().c_str (), &sourcePackageDirectoryProperty);
 	kylaSetProperty (installer, KylaPropertyCategoryInstallation,
 		"SourcePackageDirectory", sourcePackageDirectoryProperty);
 	kylaDeleteProperty (sourcePackageDirectoryProperty);

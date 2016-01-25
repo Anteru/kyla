@@ -7,6 +7,8 @@
 
 #include "Log.h"
 
+#undef CreateFile
+
 namespace kyla {
 ////////////////////////////////////////////////////////////////////////////////
 void SourcePackageReader::Store (const std::function<bool (const SHA512Digest&)>& filter,
@@ -20,7 +22,7 @@ struct FileSourcePackageReader::Impl
 {
 public:
 	Impl (const boost::filesystem::path& packageFilename)
-		: input_ (kyla::OpenFile (packageFilename.c_str (), kyla::FileOpenMode::Read))
+		: input_ (kyla::OpenFile (packageFilename.string ().c_str (), kyla::FileOpenMode::Read))
 	{
 	}
 
@@ -45,7 +47,7 @@ public:
 				input_->Seek (entry.offset);
 
 				log.Debug () << "Extracing content object " << ToString (digest) << " to "
-					<< absolute (directory / ToString (digest)).c_str ();
+					<< absolute (directory / ToString (digest)).string ().c_str ();
 
 				SourcePackageChunk chunkEntry;
 				input_->Read (MutableArrayRef<decltype(chunkEntry)>(chunkEntry));
@@ -59,7 +61,7 @@ public:
 
 					const auto targetPath = directory / ToString (digest);
 
-					auto targetFile = kyla::CreateFile (targetPath.c_str ());
+					auto targetFile = kyla::CreateFile (targetPath.string ().c_str ());
 
 					// we expect that the target is already pre-allocated at
 					// the right size, otherwise, the mmap below will fail

@@ -69,6 +69,8 @@ int NullBlockCompressor::CompressImpl (const ArrayRef<>& input,
 	const MutableArrayRef<>& output) const
 {
 	::memcpy (output.GetData (), input.GetData (), input.GetSize ());
+
+	return static_cast<int> (input.GetSize ());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

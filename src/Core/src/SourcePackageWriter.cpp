@@ -45,7 +45,7 @@ namespace {
 std::int64_t BlockCopy (const boost::filesystem::path& file, kyla::File& out,
 	std::vector<byte>& buffer)
 {
-	auto input = kyla::OpenFile (file.c_str (), kyla::FileOpenMode::Read);
+	auto input = kyla::OpenFile (file.string ().c_str (), kyla::FileOpenMode::Read);
 
 	std::int64_t bytesReadTotal = 0;
 
@@ -64,7 +64,7 @@ std::int64_t BlockCopy (const boost::filesystem::path& file, kyla::File& out,
 ////////////////////////////////////////////////////////////////////////////////
 SHA512Digest SourcePackageWriter::Finalize()
 {
-	auto output = CreateFile (impl_->filename.c_str ());
+	auto output = CreateFile (impl_->filename.string ().c_str ());
 
 	// Write header
 	SourcePackageHeader header;

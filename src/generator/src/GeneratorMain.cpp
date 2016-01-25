@@ -147,7 +147,7 @@ public:
 
 		if (!input) {
 			spdlog::get ("log")->error () << "Could not open file: '"
-									 << fullSourcePath.c_str () << "'";
+									 << fullSourcePath.string ().c_str () << "'";
 			exit (1);
 		}
 
@@ -195,7 +195,7 @@ public:
 				compressedSize);
 
 			spdlog::get ("log")->trace () << "Wrote chunk '" << chunkName
-				<< "' for file '" << fullSourcePath.c_str () << "' (uncompressed: "
+				<< "' for file '" << fullSourcePath.string ().c_str () << "' (uncompressed: "
 				<< bytesRead << ", compressed: " << compressedSize << ")";
 
 			++chunkCount;
@@ -298,7 +298,7 @@ std::unordered_map<std::string, ContentObjectIdHashDigest> PrepareFiles (
 			for (const auto chunk : chunkResult.chunks) {
 				insertChunkStatement.Bind (1, contentObjectId);
 				insertChunkStatement.Bind (2,
-					absolute (temporaryDirectory / chunk.name).c_str ());
+					absolute (temporaryDirectory / chunk.name).string ().c_str ());
 				insertChunkStatement.Bind (3, chunk.size);
 				insertChunkStatement.Step ();
 				insertChunkStatement.Reset ();
@@ -717,9 +717,9 @@ public:
 
 	void SetupBuildDatabase (const boost::filesystem::path& temporaryDirectory)
 	{
-		spdlog::get ("log")->trace () << "Build database: '" << (temporaryDirectory / "build.db").c_str () << "'";
+		spdlog::get ("log")->trace () << "Build database: '" << (temporaryDirectory / "build.db").string ().c_str () << "'";
 		buildDatabase = kyla::Sql::Database::Create (
-					(temporaryDirectory / "build.db").c_str ());
+					(temporaryDirectory / "build.db").string ().c_str ());
 		buildDatabase.Execute (build_db_structure);
 	}
 
@@ -729,7 +729,7 @@ public:
 
 	void WriteInstallationDatabase (const boost::filesystem::path& outputFile) const
 	{
-		installationDatabase.SaveCopyTo (outputFile.c_str ());
+		installationDatabase.SaveCopyTo (outputFile.string ().c_str ());
 
 		spdlog::get ("log")->info () << "Wrote installation database "
 			<< outputFile.string ();
@@ -895,13 +895,13 @@ void FinalizeSourcePackageNames (const SourcePackageNameTemplate& nameTemplate,
 
 int main (int argc, char* argv[])
 {
-    namespace po = boost::program_options;
-    po::options_description generic ("Generic options");
-    generic.add_options ()
-        ("help,h", "Show help message");
+	namespace po = boost::program_options;
+	po::options_description generic ("Generic options");
+	generic.add_options ()
+		("help,h", "Show help message");
 
-    po::options_description desc ("Configuration");
-    desc.add_options ()
+	po::options_description desc ("Configuration");
+	desc.add_options ()
 		("log-level", po::value<int> ()->default_value (2))
 		("source-directory", po::value<std::string> ()->default_value ("."))
 		("target-directory", po::value<std::string> ()->default_value ("."))
@@ -909,28 +909,28 @@ int main (int argc, char* argv[])
 			 std::string ("kytmp-") + boost::filesystem::unique_path ().string ()))
 		;
 
-    po::options_description hidden ("Hidden options");
-    hidden.add_options ()
-        ("input-file", po::value<std::string> ());
+	po::options_description hidden ("Hidden options");
+	hidden.add_options ()
+		("input-file", po::value<std::string> ());
 
-    po::options_description cmdline_options;
-    cmdline_options.add (generic).add (desc).add (hidden);
+	po::options_description cmdline_options;
+	cmdline_options.add (generic).add (desc).add (hidden);
 
-    po::options_description visible_options;
-    visible_options.add (generic).add (desc);
+	po::options_description visible_options;
+	visible_options.add (generic).add (desc);
 
-    po::positional_options_description p;
-    p.add("input-file", 1);
+	po::positional_options_description p;
+	p.add("input-file", 1);
 
-    po::variables_map vm;
-    po::store (po::command_line_parser (argc, argv)
-        .options (cmdline_options).positional (p).run (), vm);
-    po::notify (vm);
+	po::variables_map vm;
+	po::store (po::command_line_parser (argc, argv)
+		.options (cmdline_options).positional (p).run (), vm);
+	po::notify (vm);
 
-    if (vm.count ("help")) {
-        std::cout << visible_options << std::endl;
-        return 0;
-    }
+	if (vm.count ("help")) {
+		std::cout << visible_options << std::endl;
+		return 0;
+	}
 
 	auto log = spdlog::stdout_logger_mt ("log");
 	log->set_level (static_cast<spdlog::level::level_enum> (vm ["log-level"].as<int> ()));
