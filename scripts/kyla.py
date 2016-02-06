@@ -12,85 +12,45 @@ def _IdString (s):
 	else:
 		return s
 
-class InstallationBuilder:
-	def __init__ (self, productName, productVersion, productId = uuid.uuid4 (), persistentId = uuid.uuid4 ()):
-		self._productNode = etree.Element ('Product')
-		self._productNode.set ('Name', productName)
-		self._productNode.set ('Version', productVersion)
-		self._productNode.set ('Id', _IdString (productId))
-		self._productNode.set ('PersistentId', _IdString (persistentId))
-		self._features = []
-		self._sourcePackagesEmbedded = False
-		self._sourcePackages = []
+class FileRepositoryBuilder:
+	def __init__ (self, name=None, version=None):
+		self._propertyNode = etree.Element ('Properties')
+		self._fileSets = []
 
-	def SetEmbeddedSourcePackages (self, value):
-		self._sourcePackagesEmbedded = value
-
-	def AddSourcePackage (self, name, embedded=False):
-		node = etree.Element ('SourcePackage')
-		node.set ('Id', name)
-		if embedded:
-			node.set ('Embedded', 'yes')
-		else:
-			node.set ('Embedded', 'no')
-		self._sourcePackages.append (node)
-
-	class FeatureBuilder:
-		def __init__ (self, name, featureId):
-			self._element = etree.Element ('Feature')
-			self._element.set ('Name', name)
-			self._element.set ('Id', _IdString (featureId))
-			self._sourcePackage = None
+	class FileSetBuilder:
+		def __init__ (self, name, fileSetId = uuid.uuid4 ()):
+			self.__element = etree.Element ('FileSet')
+			self.__element.set ('Name', name)
+			self.__element.set ('Id', _IdString (fileSetId))
 
 		def SetSourcePackage (self, sourcePackage):
-			self._sourcePackage = sourcePackage
+			self.__element.set = ('SourcePackage', sourcePackage)
 
 		def AddFilesFromDirectory (self, baseDirectory, prefix=''):
 			for directory, _, entry in os.walk (baseDirectory):
 				directory = directory [len (baseDirectory) + 1:]
 				if entry:
 					for e in entry:
-						fileElement = etree.SubElement (self._element, 'File')
+						fileElement = etree.SubElement (self.__element, 'File')
 						fileElement.set ('Source', os.path.join (prefix, directory, e))
 
-		def Finalize (self):
-			if self._sourcePackage:
-				for f in self._element:
-					f.set ('SourcePackage', self._sourcePackage)
-			return self._element
+		def Get(self):
+			return self.__element
 
-	def AddFeature (self, name, featureId = None):
-		if featureId is None:
-			featureId = uuid.uuid4 ()
-		fb = self.FeatureBuilder (name, featureId)
-		self._features.append (fb)
+	def AddFileSet (self, name = None, fileSetId = uuid.uuid4 ()):
+		fb = self.FileSetBuilder (name, fileSetId)
+		self._fileSets.append (fb)
 		return fb
 
 	def Finalize (self):
 		'''Generate the installer XML and return as a string. The output is
 		already preprocessed.'''
-		root = etree.Element ('Installer')
-		root.append (self._productNode)
+		root = etree.Element ('FileRepositry')
+		root.append (self._propertyNode)
 
-		featuresNode = etree.SubElement (self._productNode, 'Features')
-		for fb in self._features:
-			featuresNode.append (fb.Finalize ())
-
-		sourcePackagesNode = etree.SubElement (self._productNode, 'SourcePackages')
-		if self._sourcePackagesEmbedded:
-			sourcePackagesNode.set ('Embedded', 'yes')
-		else:
-			sourcePackagesNode.set ('Embedded', 'no')
-		for n in self._sourcePackages:
-			sourcePackagesNode.append (n)
-
-		root = Preprocess (root)
+		fileSets = etree.SubElement (root, 'FileSets')
+		for fs in self._fileSets:
+			fileSets.append (fs.Get ())
 
 		decl = '<?xml version="1.0" encoding="UTF-8"?>'
 		return decl + etree.tostring (root, encoding='utf-8').decode ('utf-8')
-
-def Preprocess (xmlDocument, baseDirectory = os.getcwd ()):
-	'''Preprocess a Kyla XML installation description and return an element
-	tree corresponding to the preprocessed document. The baseDirectory is used
-	to resolve includes.'''
-	return xmlDocument

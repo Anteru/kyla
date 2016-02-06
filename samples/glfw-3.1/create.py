@@ -3,12 +3,11 @@ import sys
 import os
 
 sys.path.append ('../../scripts')
-from kyla import InstallationBuilder
+from kyla import FileRepositoryBuilder
 
-builder = InstallationBuilder ('GFLW', '3.1')
-glfwFeature = builder.AddFeature ('GFLW')
-glfwFeature.AddFilesFromDirectory (os.path.join (os.getcwd (), 'data'))
-builder.SetEmbeddedSourcePackages (True)
+builder = FileRepositoryBuilder ()
+fileSet = builder.AddFileSet ('GFLW')
+fileSet.AddFilesFromDirectory (os.path.join (os.getcwd (), 'data'))
 
 doc = builder.Finalize ()
 print (doc)
