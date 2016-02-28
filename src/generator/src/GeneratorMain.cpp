@@ -66,7 +66,7 @@ std::vector<FileSet> GetFileSets (const pugi::xml_document& doc,
 		FileSet fileSet;
 
 		fileSet.id = kyla::Uuid::Parse (fileSetNode.node ().attribute ("Id").as_string ());
-		fileSet.name = fileSetNode.node ().attribute ("name").as_string ();
+		fileSet.name = fileSetNode.node ().attribute ("Name").as_string ();
 
 		for (const auto& fileNode : fileSetNode.node ().children ("File")) {
 			File file;
@@ -74,6 +74,8 @@ std::vector<FileSet> GetFileSets (const pugi::xml_document& doc,
 
 			if (fileNode.attribute ("Target")) {
 				file.target = fileNode.attribute ("Target").as_string ();
+			} else {
+				file.target = file.source;
 			}
 
 			fileSet.files.push_back (file);
@@ -144,9 +146,9 @@ std::vector<UniqueFile> FindUniqueFileContents (std::vector<FileSet>& fileSets,
 		if (kv.second.size () > 1) {
 			ctx.log->Trace () << "File '" << uf.sourceFile.string () << "' has " <<
 				(kv.second.size () - 1) << " duplicates";
-
-			uf.references.assign (kv.second.begin () + 1, kv.second.end ());
 		}
+		
+		uf.references.assign (kv.second.begin (), kv.second.end ());
 
 		result.push_back (uf);
 	}
@@ -174,29 +176,86 @@ struct LooseRepositoryBuilder final : public IRepositoryBuilder
 		const std::vector<FileSet>& fileSets,
 		const std::vector<UniqueFile>& uniqueFiles) override
 	{
+		auto dbFile = ctx.targetDirectory / "k.db";
+		boost::filesystem::remove (dbFile);
+
 		auto db = kyla::Sql::Database::Create (
-			(ctx.targetDirectory / "k.db").string ().c_str ());
+			dbFile.string ().c_str ());
 
 		db.Execute (install_db_structure);
 		db.Execute (install_db_indices);
 
+		const auto fileToFileSetId = PopulateFileSets (db, fileSets);
+		PopulateContentObjectsAndFiles (db, uniqueFiles, fileToFileSetId);
+
+		db.Close ();
+	}
+
+private:
+
+	std::map<path, int> PopulateFileSets (kyla::Sql::Database& db,
+		const std::vector<FileSet>& fileSets)
+	{
+		auto fileSetsInsert = db.BeginTransaction ();
+		auto fileSetsInsertQuery = db.Prepare (
+			"INSERT INTO file_sets (Name) VALUES (?);");
+
+		std::map<path, int> result;
+
+		for (const auto& fileSet : fileSets) {
+			fileSetsInsertQuery.BindArguments (
+				fileSet.name);
+
+			fileSetsInsertQuery.Step ();
+			fileSetsInsertQuery.Reset ();
+
+			const auto fileSetId = db.GetLastRowId ();
+
+			for (const auto& file : fileSet.files) {
+				result [file.target] = fileSetId;
+			}
+		}
+
+		fileSetsInsert.Commit ();
+
+		return result;
+	}
+
+	void PopulateContentObjectsAndFiles (kyla::Sql::Database& db,
+		const std::vector<UniqueFile>& uniqueFiles,
+		const std::map<path, int>& fileToFileSetId)
+	{
 		auto contentObjectInsert = db.BeginTransaction ();
 		auto contentObjectInsertQuery = db.Prepare (
 			"INSERT INTO content_objects (Hash, Size, ReferenceCount) VALUES (?, ?, ?);");
+		auto filesInsertQuery = db.Prepare (
+			"INSERT INTO files (Path, ContentObjectId, FileSetId) VALUES (?, ?, ?);");
+
 		// We can insert content objects directly - every unique file is one
 		for (const auto& kv : uniqueFiles) {
 			contentObjectInsertQuery.BindArguments (
 				kv.hash,
 				kv.size,
 				// Self + duplicates
-				(kv.references.size () + 1));
+				kv.references.size ());
 			contentObjectInsertQuery.Step ();
 			contentObjectInsertQuery.Reset ();
+
+			const auto contentObjectId = db.GetLastRowId ();
+
+			for (const auto& reference : kv.references) {
+				const auto fileSetId = fileToFileSetId.find (reference)->second;
+
+				filesInsertQuery.BindArguments (
+					reference.string ().c_str (),
+					contentObjectId,
+					fileSetId);
+				filesInsertQuery.Step ();
+				filesInsertQuery.Reset ();
+			}
 		}
 
 		contentObjectInsert.Commit ();
-
-		db.Close ();
 	}
 };
 
@@ -243,6 +302,8 @@ int main (int argc, char* argv [])
 	BuildContext ctx;
 	ctx.sourceDirectory = vm ["source-directory"].as<std::string> ();
 	ctx.targetDirectory = vm ["target-directory"].as<std::string> ();
+
+	boost::filesystem::create_directories (ctx.targetDirectory);
 
 	ctx.log.reset (new kyla::Log ("Generator", "build.log", kyla::LogLevel::Trace));
 

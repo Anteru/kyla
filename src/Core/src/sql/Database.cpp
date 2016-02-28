@@ -4,13 +4,13 @@
 #include <sqlite3.h>
 
 namespace {
-void OnSQLiteError (const int errorCode)
+void OnSQLiteError (const int errorCode, const char* errorMessage)
 {
-	perror (sqlite3_errstr(errorCode));
+	std::cerr << sqlite3_errstr (errorCode) << " : " << errorMessage << std::endl;
 }
 }
 
-#define SAFE_SQLITE_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_OK) { OnSQLiteError (r_); } } while (0)
+#define SAFE_SQLITE_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_OK) { OnSQLiteError (r_, sqlite3_errmsg (db_)); } } while (0)
 #define SAFE_SQLITE_INSERT_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_DONE) { spdlog::get ("log")->error () << file << ":" << line << " " << sqlite3_errstr(r_); exit (1); } } while (0)
 
 #define K_S(expr) SAFE_SQLITE_INTERNAL(expr, __FILE__, __LINE__)
