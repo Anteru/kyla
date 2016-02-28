@@ -11,7 +11,7 @@
 
 namespace kyla {
 ////////////////////////////////////////////////////////////////////////////////
-void SourcePackageReader::Store (const std::function<bool (const SHA512Digest&)>& filter,
+void SourcePackageReader::Store (const std::function<bool (const SHA256Digest&)>& filter,
 	const boost::filesystem::path& directory, Log& log)
 {
 	StoreImpl (filter, directory, log);
@@ -26,7 +26,7 @@ public:
 	{
 	}
 
-	void Store (const std::function<bool (const SHA512Digest&)>& filter,
+	void Store (const std::function<bool (const SHA256Digest&)>& filter,
 		const boost::filesystem::path& directory,
 		Log& log)
 	{
@@ -39,9 +39,9 @@ public:
 
 		std::vector<unsigned char> buffer;
 		for (const auto& entry : index) {
-			SHA512Digest digest;
-			static_assert (sizeof (digest.bytes) == sizeof (entry.sha512digest), "Hash size mismatch!");
-			::memcpy (digest.bytes, entry.sha512digest, sizeof (entry.sha512digest));
+			SHA256Digest digest;
+			static_assert (sizeof (digest.bytes) == sizeof (entry.SHA256digest), "Hash size mismatch!");
+			::memcpy (digest.bytes, entry.SHA256digest, sizeof (entry.SHA256digest));
 
 			if (filter (digest)) {
 				input_->Seek (entry.offset);
@@ -98,7 +98,7 @@ FileSourcePackageReader::~FileSourcePackageReader ()
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void FileSourcePackageReader::StoreImpl (const std::function<bool (const SHA512Digest&)>& filter,
+void FileSourcePackageReader::StoreImpl (const std::function<bool (const SHA256Digest&)>& filter,
 	const boost::filesystem::path& directory, Log& log)
 {
 	impl_->Store (filter, directory, log);

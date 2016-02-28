@@ -188,6 +188,12 @@ std::string Uuid::ToString () const
 }
 
 /////////////////////////////////////////////////////////////////////////
+std::string ToString (const Uuid& uuid)
+{
+	return uuid.ToString ();
+}
+
+/////////////////////////////////////////////////////////////////////////
 bool Uuid::operator == (const Uuid& other) const
 {
 	return std::equal (uuid_, uuid_ + 16, other.uuid_);

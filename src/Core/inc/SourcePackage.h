@@ -23,14 +23,14 @@ struct SourcePackageHeader
 
 struct SourcePackageIndexEntry
 {
-	byte sha512digest [64];
+	byte SHA256digest [32];
 	int64 offset;		// Absolute offset within the source package
 								// to the entry
 };
 
 struct SourcePackageChunk
 {
-	byte sha512digest [64];
+	byte SHA256digest [32];
 	int64 offset;				// Offset into the target file
 	int64 size;					// Size of the uncompressed data
 

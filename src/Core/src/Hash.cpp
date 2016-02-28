@@ -8,30 +8,30 @@
 
 namespace kyla {
 ////////////////////////////////////////////////////////////////////////////////
-SHA512Digest ComputeSHA512 (const ArrayRef<>& data)
+SHA256Digest ComputeSHA256 (const ArrayRef<>& data)
 {
-	SHA512Digest result;
+	SHA256Digest result;
 
-	SHA512 (static_cast<const unsigned char*> (data.GetData()), data.GetSize (),
-        reinterpret_cast<unsigned char*> (result.bytes));
+	SHA256 (static_cast<const unsigned char*> (data.GetData()), data.GetSize (),
+		reinterpret_cast<unsigned char*> (result.bytes));
 
-    return result;
+	return result;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-SHA512Digest ComputeSHA512 (const boost::filesystem::path& p)
+SHA256Digest ComputeSHA256 (const boost::filesystem::path& p)
 {
 	std::vector<unsigned char> buffer (4 << 20 /* 4 MiB */);
-	return ComputeSHA512 (p, buffer);
+	return ComputeSHA256 (p, buffer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-SHA512Digest ComputeSHA512(const boost::filesystem::path& p,
+SHA256Digest ComputeSHA256(const boost::filesystem::path& p,
 	std::vector<byte>& fileReadBuffer)
 {
 	auto input = kyla::OpenFile (p.string ().c_str (), kyla::FileOpenMode::Read);
 
-	SHA512StreamHasher hasher;
+	SHA256StreamHasher hasher;
 	hasher.Initialize ();
 
 	for (;;) {
@@ -47,7 +47,7 @@ SHA512Digest ComputeSHA512(const boost::filesystem::path& p,
 	return hasher.Finalize ();
 }
 
-struct SHA512StreamHasher::Impl
+struct SHA256StreamHasher::Impl
 {
 public:
 	Impl ()
@@ -62,7 +62,7 @@ public:
 
 	void Initialize ()
 	{
-		EVP_DigestInit_ex (ctx_, EVP_sha512 (), nullptr);
+		EVP_DigestInit_ex (ctx_, EVP_sha256 (), nullptr);
 	}
 
 	void Update (const void* p, const std::int64_t size)
@@ -70,9 +70,9 @@ public:
 		EVP_DigestUpdate (ctx_, p, size);
 	}
 
-	SHA512Digest Finalize ()
+	SHA256Digest Finalize ()
 	{
-		SHA512Digest result;
+		SHA256Digest result;
 		EVP_DigestFinal_ex (ctx_, result.bytes, nullptr);
 		return result;
 	}
@@ -82,30 +82,30 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-SHA512StreamHasher::SHA512StreamHasher ()
+SHA256StreamHasher::SHA256StreamHasher ()
 : impl_ (new Impl)
 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-SHA512StreamHasher::~SHA512StreamHasher ()
+SHA256StreamHasher::~SHA256StreamHasher ()
 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void SHA512StreamHasher::Initialize ()
+void SHA256StreamHasher::Initialize ()
 {
 	impl_->Initialize ();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void SHA512StreamHasher::Update (const ArrayRef<>& data)
+void SHA256StreamHasher::Update (const ArrayRef<>& data)
 {
 	impl_->Update (data.GetData (), data.GetSize ());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-SHA512Digest SHA512StreamHasher::Finalize ()
+SHA256Digest SHA256StreamHasher::Finalize ()
 {
 	return impl_->Finalize ();
 }

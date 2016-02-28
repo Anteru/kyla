@@ -37,6 +37,8 @@ private:
 	byte uuid_ [16];
 };
 
+std::string ToString (const Uuid& uuid);
+
 template <>
 struct ArrayAdapter<Uuid>
 {

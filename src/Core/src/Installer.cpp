@@ -176,9 +176,9 @@ void Installer::InstallProduct (Sql::Database& db, InstallationEnvironment env,
 	auto selectRequiredContentObjectsStatement = db.Prepare (
 		GetContentObjectHashesChunkCountForSelectedFeaturesQueryString (selectedFeatureIds));
 
-	std::unordered_map<kyla::SHA512Digest, int, kyla::HashDigestHash, kyla::HashDigestEqual> requiredContentObjects;
+	std::unordered_map<kyla::SHA256Digest, int, kyla::HashDigestHash, kyla::HashDigestEqual> requiredContentObjects;
 	while (selectRequiredContentObjectsStatement.Step ()) {
-		kyla::SHA512Digest digest;
+		kyla::SHA256Digest digest;
 
 		const auto digestSize = selectRequiredContentObjectsStatement.GetInt64 (3);
 
@@ -211,7 +211,7 @@ void Installer::InstallProduct (Sql::Database& db, InstallationEnvironment env,
 
 		log.Info () << "Processing source package " << sourcePackageFilename;
 
-		reader.Store ([&requiredContentObjects](const kyla::SHA512Digest& digest) -> bool {
+		reader.Store ([&requiredContentObjects](const kyla::SHA256Digest& digest) -> bool {
 			return requiredContentObjects.find (digest) != requiredContentObjects.end ();
 		}, stagingDirectory, log);
 
@@ -258,7 +258,7 @@ void Installer::InstallProduct (Sql::Database& db, InstallationEnvironment env,
 
 			kyla::CreateFile (targetPath.string ().c_str ());
 		} else {
-			kyla::SHA512Digest digest;
+			kyla::SHA256Digest digest;
 
 			const auto digestSize = selectFilesStatement.GetInt64 (2);
 

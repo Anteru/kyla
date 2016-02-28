@@ -63,31 +63,31 @@ struct HashDigestHash
 };
 
 /*
-The default hash in Kyla is a 64-byte SHA512.
+The default hash in Kyla is a 32-byte SHA256.
 */
-typedef HashDigest<64> SHA512Digest;
+typedef HashDigest<32> SHA256Digest;
 
-class SHA512StreamHasher final
+class SHA256StreamHasher final
 {
 public:
-	SHA512StreamHasher ();
-	~SHA512StreamHasher ();
+	SHA256StreamHasher ();
+	~SHA256StreamHasher ();
 
-	SHA512StreamHasher (const SHA512StreamHasher&) = delete;
-	SHA512StreamHasher& operator= (const SHA512StreamHasher&) = delete;
+	SHA256StreamHasher (const SHA256StreamHasher&) = delete;
+	SHA256StreamHasher& operator= (const SHA256StreamHasher&) = delete;
 
 	void Initialize ();
 	void Update (const ArrayRef<>& data);
-	SHA512Digest Finalize();
+	SHA256Digest Finalize();
 
 private:
 	struct Impl;
 	std::unique_ptr<Impl> impl_;
 };
 
-SHA512Digest ComputeSHA512 (const ArrayRef<>& data);
-SHA512Digest ComputeSHA512 (const boost::filesystem::path& p);
-SHA512Digest ComputeSHA512 (const boost::filesystem::path& p,
+SHA256Digest ComputeSHA256 (const ArrayRef<>& data);
+SHA256Digest ComputeSHA256 (const boost::filesystem::path& p);
+SHA256Digest ComputeSHA256 (const boost::filesystem::path& p,
 	std::vector<byte>& fileReadBuffer);
 
 template <int Size>

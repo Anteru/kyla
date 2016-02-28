@@ -21,8 +21,8 @@ public:
 
 	void Open (const boost::filesystem::path& outputFile,
 		const void* uuid);
-	void Add (const SHA512Digest& digest, const boost::filesystem::path& chunkPath);
-	SHA512Digest Finalize ();
+	void Add (const SHA256Digest& digest, const boost::filesystem::path& chunkPath);
+	SHA256Digest Finalize ();
 
 	bool IsOpen () const;
 

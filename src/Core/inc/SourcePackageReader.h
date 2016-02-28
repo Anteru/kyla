@@ -18,12 +18,12 @@ public:
 	SourcePackageReader (const SourcePackageReader&) = delete;
 	SourcePackageReader& operator= (const SourcePackageReader&) = delete;
 
-	void Store (const std::function<bool (const SHA512Digest&)>& filter,
+	void Store (const std::function<bool (const SHA256Digest&)>& filter,
 		const boost::filesystem::path& directory,
 		Log& log);
 
 private:
-	virtual void StoreImpl (const std::function<bool (const SHA512Digest&)>& filter,
+	virtual void StoreImpl (const std::function<bool (const SHA256Digest&)>& filter,
 		const boost::filesystem::path& directory,
 		Log& log) = 0;
 };
@@ -35,7 +35,7 @@ public:
 	~FileSourcePackageReader ();
 
 private:
-	void StoreImpl (const std::function<bool (const SHA512Digest&)>& filter,
+	void StoreImpl (const std::function<bool (const SHA256Digest&)>& filter,
 		const boost::filesystem::path& directory,
 		Log& log) override;
 

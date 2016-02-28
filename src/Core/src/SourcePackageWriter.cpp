@@ -9,7 +9,7 @@ namespace kyla {
 struct SourcePackageWriter::Impl
 {
 public:
-	std::unordered_map<SHA512Digest, std::vector<boost::filesystem::path>, HashDigestHash, HashDigestEqual> hashChunkMap;
+	std::unordered_map<SHA256Digest, std::vector<boost::filesystem::path>, HashDigestHash, HashDigestEqual> hashChunkMap;
 	boost::filesystem::path filename;
 
 	byte packageUuid [16];
@@ -34,7 +34,7 @@ void SourcePackageWriter::Open (const boost::filesystem::path& filename, const v
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-void SourcePackageWriter::Add (const SHA512Digest& digest,
+void SourcePackageWriter::Add (const SHA256Digest& digest,
 	const boost::filesystem::path& chunkPath)
 {
 	impl_->hashChunkMap [digest].push_back (chunkPath);
@@ -62,7 +62,7 @@ std::int64_t BlockCopy (const boost::filesystem::path& file, kyla::File& out,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-SHA512Digest SourcePackageWriter::Finalize()
+SHA256Digest SourcePackageWriter::Finalize()
 {
 	auto output = CreateFile (impl_->filename.string ().c_str ());
 
@@ -97,7 +97,7 @@ SHA512Digest SourcePackageWriter::Finalize()
 	for (const auto& hashChunks : impl_->hashChunkMap) {
 		for (const auto& chunk : hashChunks.second) {
 			SourcePackageIndexEntry indexEntry;
-			::memcpy (indexEntry.sha512digest, hashChunks.first.bytes, sizeof (hashChunks.first.bytes));
+			::memcpy (indexEntry.SHA256digest, hashChunks.first.bytes, sizeof (hashChunks.first.bytes));
 			indexEntry.offset = offset;
 
 			offset += BlockCopy (chunk, *output, buffer);
@@ -113,7 +113,7 @@ SHA512Digest SourcePackageWriter::Finalize()
 	// We have to read again, as we can't make a fully streaming update due to
 	// our delayed index write. Hopefully, the file is still in the disk cache,
 	// so this should be quick
-	return ComputeSHA512 (impl_->filename, buffer);
+	return ComputeSHA256 (impl_->filename, buffer);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
