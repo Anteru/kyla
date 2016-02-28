@@ -5,16 +5,15 @@ CREATE TABLE content_objects (
     Id INTEGER PRIMARY KEY NOT NULL,
     Hash BLOB NOT NULL UNIQUE,
     Size INTEGER NOT NULL,
-    ChunkCount INTEGER NOT NULL,
     ReferenceCount INTEGER NOT NULL DEFAULT 1);
 
 -- All file sets stored in this repository
-CREATE TABLE file_sets (Id INTEGER PRIMARY KEY NOT NULL,
+CREATE TABLE file_sets (
+    Id INTEGER PRIMARY KEY NOT NULL,
     Name VARCHAR NOT NULL UNIQUE);
 
 CREATE TABLE files (Path TEXT PRIMARY KEY NOT NULL,
-    -- If NULL, the file is an empty file
-    ContentObjectId INTEGER,
+    ContentObjectId INTEGER NOT NULL,
     FileSetId INTEGER NOT NULL,
     FOREIGN KEY(ContentObjectId) REFERENCES content_objects(Id),
     FOREIGN KEY(FileSetId) REFERENCES file_sets(Id));

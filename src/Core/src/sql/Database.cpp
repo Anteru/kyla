@@ -6,7 +6,7 @@
 namespace {
 void OnSQLiteError (const int errorCode)
 {
-	spdlog::get ("log")->error () << sqlite3_errstr(errorCode); exit (1);
+	perror (sqlite3_errstr(errorCode));
 }
 }
 
@@ -21,6 +21,23 @@ namespace Sql {
 struct Database::Impl
 {
 public:
+	Impl () = default;
+
+	Impl (const Impl&) = delete;
+	Impl& operator=(const Impl&) = delete;
+
+	Impl (Impl&& other)
+		: db_ (other.db_)
+	{
+		other.db_ = nullptr;
+	}
+
+	Impl& operator= (Impl&& other)
+	{
+		db_ = other.db_;
+		other.db_ = nullptr;
+	}
+
 	void Open (const char *name, const OpenMode mode)
 	{
 		int sqliteOpenMode = 0;
@@ -202,6 +219,8 @@ private:
 		case ValueBinding::Reference:
 			return SQLITE_STATIC;
 		}
+
+		return nullptr;
 	}
 
 	sqlite3* db_ = nullptr;
@@ -209,7 +228,7 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 Database::Database ()
-	: impl_ (new Impl ())
+	: impl_ (new Impl)
 {
 }
 

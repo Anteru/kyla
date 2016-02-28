@@ -30,6 +30,17 @@ namespace kyla {
 	{
 	}
 
+	FileStat Stat (const char* path)
+	{
+		struct stat stats;
+		::stat (path, &stats);
+
+		FileStat result;
+		result.size = stats.st_size;
+
+		return result;
+	}
+
 #if KYLA_PLATFORM_LINUX
 	struct LinuxFile final : public File
 	{

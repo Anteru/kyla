@@ -75,6 +75,13 @@ private:
 	virtual void CloseImpl () = 0;
 };
 
+struct FileStat
+{
+	std::size_t size;
+};
+
+FileStat Stat (const char* path);
+
 enum class FileOpenMode
 {
 	Read,

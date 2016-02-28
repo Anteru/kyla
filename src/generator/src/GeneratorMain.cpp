@@ -59,7 +59,7 @@ std::vector<FileSet> GetFileSets (const pugi::xml_document& doc,
 	const BuildContext& ctx)
 {
 	std::vector<FileSet> result;
-	
+
 	int filesFound = 0;
 
 	for (const auto& fileSetNode : doc.select_nodes ("//FileSet")) {
@@ -110,6 +110,7 @@ struct UniqueFile
 {
 	path sourceFile;
 	kyla::SHA256Digest hash;
+	std::size_t size;
 
 	std::vector<path> references;
 };
@@ -137,7 +138,9 @@ std::vector<UniqueFile> FindUniqueFileContents (std::vector<FileSet>& fileSets,
 
 		uf.hash = kv.first;
 		uf.sourceFile = kv.second.front ();
-		
+
+		uf.size = kyla::Stat ((ctx.sourceDirectory / uf.sourceFile).string ().c_str ()).size;
+
 		if (kv.second.size () > 1) {
 			ctx.log->Trace () << "File '" << uf.sourceFile.string () << "' has " <<
 				(kv.second.size () - 1) << " duplicates";
@@ -151,8 +154,54 @@ std::vector<UniqueFile> FindUniqueFileContents (std::vector<FileSet>& fileSets,
 	return result;
 }
 
+struct IRepositoryBuilder
+{
+	virtual ~IRepositoryBuilder ()
+	{
+	}
+
+	virtual void Build (const BuildContext& ctx,
+		const std::vector<FileSet>& fileSets,
+		const std::vector<UniqueFile>& uniqueFiles) = 0;
+};
+
+/**
+A loose repository is little more than the files themselves, with hashes.
+*/
+struct LooseRepositoryBuilder final : public IRepositoryBuilder
+{
+	void Build (const BuildContext& ctx,
+		const std::vector<FileSet>& fileSets,
+		const std::vector<UniqueFile>& uniqueFiles) override
+	{
+		auto db = kyla::Sql::Database::Create (
+			(ctx.targetDirectory / "k.db").string ().c_str ());
+
+		db.Execute (install_db_structure);
+		db.Execute (install_db_indices);
+
+		auto contentObjectInsert = db.BeginTransaction ();
+		auto contentObjectInsertQuery = db.Prepare (
+			"INSERT INTO content_objects (Hash, Size, ReferenceCount) VALUES (?, ?, ?);");
+		// We can insert content objects directly - every unique file is one
+		for (const auto& kv : uniqueFiles) {
+			contentObjectInsertQuery.BindArguments (
+				kv.hash,
+				kv.size,
+				// Self + duplicates
+				(kv.references.size () + 1));
+			contentObjectInsertQuery.Step ();
+			contentObjectInsertQuery.Reset ();
+		}
+
+		contentObjectInsert.Commit ();
+
+		db.Close ();
+	}
+};
+
 ///////////////////////////////////////////////////////////////////////////////
-int main (int argc, char* argv[])
+int main (int argc, char* argv [])
 {
 	namespace po = boost::program_options;
 	po::options_description generic ("Generic options");
@@ -177,7 +226,7 @@ int main (int argc, char* argv[])
 	visible_options.add (generic).add (desc);
 
 	po::positional_options_description p;
-	p.add("input-file", 1);
+	p.add ("input-file", 1);
 
 	po::variables_map vm;
 	po::store (po::command_line_parser (argc, argv)
@@ -206,5 +255,17 @@ int main (int argc, char* argv[])
 
 	auto uniqueFiles = FindUniqueFileContents (fileSets, ctx);
 
-	// Build content object database
+	const auto packageTypeNode = doc.select_node ("//Package/Type");
+
+	std::unique_ptr<IRepositoryBuilder> builder;
+
+	if (packageTypeNode) {
+		if (strcmp (packageTypeNode.node ().text ().as_string (), "Loose") == 0) {
+			builder.reset (new LooseRepositoryBuilder);
+		}
+	}
+
+	if (builder) {
+		builder->Build (ctx, fileSets, uniqueFiles);
+	}
 }

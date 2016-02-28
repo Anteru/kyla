@@ -7,15 +7,6 @@ SET(HEADERS
 
 ADD_CUSTOM_COMMAND(
 	OUTPUT
-		${CMAKE_CURRENT_BINARY_DIR}/build-db-structure.h
-	COMMAND
-		txttoheader build_db_structure ${kyla_SOURCE_DIR}/sql/build-db-structure.sql > ${CMAKE_CURRENT_BINARY_DIR}/build-db-structure.h
-	DEPENDS
-		${kyla_SOURCE_DIR}/sql/build-db-structure.sql
-	)
-
-ADD_CUSTOM_COMMAND(
-	OUTPUT
 		${CMAKE_CURRENT_BINARY_DIR}/install-db-structure.h
 	COMMAND
 		txttoheader install_db_structure ${kyla_SOURCE_DIR}/sql/install-db-structure.sql > ${CMAKE_CURRENT_BINARY_DIR}/install-db-structure.h
