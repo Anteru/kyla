@@ -204,7 +204,7 @@ public:
 		sqlite3_close (targetDb);
 	}
 
-	int GetLastRowId ()
+	std::int64_t GetLastRowId ()
 	{
 		return sqlite3_last_insert_rowid (db_);
 	}
