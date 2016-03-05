@@ -2,6 +2,8 @@
 
 #include "Kyla.h"
 
+#include <iostream>
+
 ///////////////////////////////////////////////////////////////////////////////
 int main (int argc, char* argv [])
 {
@@ -52,5 +54,33 @@ int main (int argc, char* argv [])
 
 		kylaBuildRepository (vm ["input"].as<std::string> ().c_str (),
 			&buildEnv);
+	} else if (cmd == "validate") {
+		po::options_description build_desc ("validation options");
+		
+		po::positional_options_description posBuild;
+		posBuild
+			.add ("input", 1);
+
+		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
+
+		auto validationCallback = [](const char* file, int validationResult,
+			void*) -> void {
+			switch (validationResult) {
+			case kylaValidationResult_Ok:
+				std::cout << "OK:        " << file << '\n';
+				break;
+
+			case kylaValidationResult_Missing:
+				std::cout << "MISSING:   " << file << '\n';
+				break;
+
+			case kylaValidationResult_Corrupted:
+				std::cout << "CORRUPTED: " << file << '\n';
+				break;
+			}
+		};
+
+		kylaValidateRepository (vm ["input"].as<std::string> ().c_str (),
+			validationCallback, nullptr);
 	}
 }

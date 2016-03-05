@@ -33,6 +33,7 @@ SET(HEADERS
 	inc/Hash.h
 	inc/Kyla.h
 	inc/Log.h
+	inc/Repository.h
 	inc/RepositoryBuilder.h
 	inc/StringRef.h
 	inc/Types.h
@@ -46,6 +47,7 @@ SET(SOURCES
 	src/FileIO.cpp
 	src/Hash.cpp
 	src/Kyla.cpp
+	src/Repository.cpp
 	src/RepositoryBuilder.cpp
 	src/StringRef.cpp
 	src/Uuid.cpp)

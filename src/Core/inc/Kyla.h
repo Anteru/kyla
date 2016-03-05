@@ -31,11 +31,14 @@ enum kylaValidationResult
 	kylaValidationResult_Missing
 };
 
-typedef void (*KylaValidateCallback)(const char* filename,
-	const int validationResult);
+typedef void (*KylaValidateCallback)(
+	const char* filename,
+	const int validationResult,
+	void* callbackContext);
 
 int kylaValidateRepository (const char* repositoryPath,
-	KylaValidateCallback validationCallback);
+	KylaValidateCallback validationCallback,
+	void* callbackContext);
 
 int kylaRepairRepository (const char* repositoryPath,
 	// If nullptr, this means we have to try to repair using the target
