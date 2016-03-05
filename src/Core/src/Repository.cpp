@@ -32,6 +32,10 @@ public:
 			"LEFT JOIN content_objects ON content_objects.Id = files.ContentObjectId "
 			"ORDER BY size";
 
+		///@TODO(major) On Windows, sort this by disk cluster to get best
+		/// disk access pattern
+		/// See: https://msdn.microsoft.com/en-us/library/windows/desktop/aa364572%28v=vs.85%29.aspx
+
 		auto query = db_.Prepare (querySql);
 
 		while (query.Step ()) {
@@ -51,8 +55,8 @@ public:
 			const auto statResult = Stat (filePath);
 
 			///@TODO Try/catch here and report corrupted if something goes wrong?
-			// This would indicate the file got deleted or is read-protected
-			// while the validation is running
+			/// This would indicate the file got deleted or is read-protected
+			/// while the validation is running
 
 			if (statResult.size != size) {
 				validationCallback (filePath.string ().c_str (),

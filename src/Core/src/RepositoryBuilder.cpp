@@ -106,16 +106,21 @@ void HashFiles (std::vector<FileSet>& fileSets,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-struct UniqueFile
+struct UniqueContentObjects
 {
 	kyla::Path sourceFile;
 	kyla::SHA256Digest hash;
 	std::size_t size;
 
-	std::vector<kyla::Path> references;
+	std::vector<kyla::Path> duplicates;
 };
 
-std::vector<UniqueFile> FindUniqueFileContents (std::vector<FileSet>& fileSets,
+///////////////////////////////////////////////////////////////////////////////
+/**
+Given a couple of file sets, we find unique files by hashing everything
+and merging the results on the hash.
+*/
+std::vector<UniqueContentObjects> FindUniqueFileContents (std::vector<FileSet>& fileSets,
 	const BuildContext& ctx)
 {
 	std::unordered_map<kyla::SHA256Digest, std::vector<kyla::Path>,
@@ -130,11 +135,11 @@ std::vector<UniqueFile> FindUniqueFileContents (std::vector<FileSet>& fileSets,
 
 	ctx.log->Info () << "Found " << uniqueContents.size () << " unique files";
 
-	std::vector<UniqueFile> result;
+	std::vector<UniqueContentObjects> result;
 	result.reserve (uniqueContents.size ());
 
 	for (const auto& kv : uniqueContents) {
-		UniqueFile uf;
+		UniqueContentObjects uf;
 
 		uf.hash = kv.first;
 		uf.sourceFile = kv.second.front ();
@@ -146,7 +151,7 @@ std::vector<UniqueFile> FindUniqueFileContents (std::vector<FileSet>& fileSets,
 				(kv.second.size () - 1) << " duplicates";
 		}
 
-		uf.references.assign (kv.second.begin (), kv.second.end ());
+		uf.duplicates.assign (kv.second.begin (), kv.second.end ());
 
 		result.push_back (uf);
 	}
@@ -162,7 +167,7 @@ struct IRepositoryBuilder
 
 	virtual void Build (const BuildContext& ctx,
 		const std::vector<FileSet>& fileSets,
-		const std::vector<UniqueFile>& uniqueFiles) = 0;
+		const std::vector<UniqueContentObjects>& uniqueFiles) = 0;
 };
 
 /**
@@ -172,7 +177,7 @@ struct LooseRepositoryBuilder final : public IRepositoryBuilder
 {
 	void Build (const BuildContext& ctx,
 		const std::vector<FileSet>& fileSets,
-		const std::vector<UniqueFile>& uniqueFiles) override
+		const std::vector<UniqueContentObjects>& uniqueFiles) override
 	{
 		auto dbFile = ctx.targetDirectory / "k.db";
 		boost::filesystem::remove (dbFile);
@@ -220,7 +225,7 @@ private:
 	}
 
 	void PopulateContentObjectsAndFiles (kyla::Sql::Database& db,
-		const std::vector<UniqueFile>& uniqueFiles,
+		const std::vector<UniqueContentObjects>& uniqueFiles,
 		const std::map<kyla::Path, int>& fileToFileSetId)
 	{
 		auto contentObjectInsert = db.BeginTransaction ();
@@ -235,13 +240,13 @@ private:
 				kv.hash,
 				kv.size,
 				// Self + duplicates
-				kv.references.size ());
+				kv.duplicates.size ());
 			contentObjectInsertQuery.Step ();
 			contentObjectInsertQuery.Reset ();
 
 			const auto contentObjectId = db.GetLastRowId ();
 
-			for (const auto& reference : kv.references) {
+			for (const auto& reference : kv.duplicates) {
 				const auto fileSetId = fileToFileSetId.find (reference)->second;
 
 				filesInsertQuery.BindArguments (
