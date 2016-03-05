@@ -16,6 +16,22 @@ template <int Size>
 struct HashDigest
 {
 	byte bytes [Size];
+
+	template <int OtherSize>
+	bool operator== (const HashDigest<OtherSize>& other) const
+	{
+		if (OtherSize != Size) {
+			return false;
+		}
+
+		return ::memcmp (bytes, other.bytes, Size) == 0;
+	}
+
+	template <int OtherSize>
+	bool operator!= (const HashDigest<OtherSize>& other) const
+	{
+		return !(*this == other);
+	}
 };
 
 template <int Size>

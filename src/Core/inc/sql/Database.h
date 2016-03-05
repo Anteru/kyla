@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <string>
 #include "../ArrayRef.h"
+#include "../FileIO.h"
 
 namespace kyla {
 namespace Sql {
@@ -36,6 +37,9 @@ public:
 
 	static Database Open (const char* name);
 	static Database Open (const char* name, const OpenMode openMode);
+
+	static Database Open (const Path& path);
+	static Database Open (const Path& path, const OpenMode openMode);
 
 	static Database Create (const char* name);
 	static Database Create ();
@@ -128,6 +132,7 @@ public:
 	std::int64_t GetInt64 (const int column) const;
 	const char* GetText (const int column) const;
 	const void* GetBlob (const int column) const;
+	void GetBlob (const int column, const MutableArrayRef<>& output) const;
 
 	Type GetColumnType (const int column) const;
 

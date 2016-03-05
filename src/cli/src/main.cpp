@@ -56,6 +56,8 @@ int main (int argc, char* argv [])
 			&buildEnv);
 	} else if (cmd == "validate") {
 		po::options_description build_desc ("validation options");
+		build_desc.add_options ()
+			("input", po::value<std::string> ());
 		
 		po::positional_options_description posBuild;
 		posBuild

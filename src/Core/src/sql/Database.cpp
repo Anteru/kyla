@@ -170,6 +170,18 @@ public:
 		return sqlite3_column_blob (static_cast<sqlite3_stmt*> (statement), column);
 	}
 
+	void StatementGetBlob (void* statement, const int column,
+		const MutableArrayRef<>& result)
+	{
+		if (sqlite3_column_bytes (static_cast<sqlite3_stmt*> (statement), 1) != result.GetSize ()) {
+			throw std::runtime_error ("Output buffer size does not match blob size");
+		}
+
+		::memcpy (result.GetData (), 
+			sqlite3_column_blob (static_cast<sqlite3_stmt*> (statement), column),
+			result.GetSize ());
+	}
+
 	const Type StatementGetColumnType (void* statement, const int column)
 	{
 		const auto t = sqlite3_column_type (static_cast<sqlite3_stmt*> (statement), column);
@@ -262,6 +274,20 @@ Database Database::Open (const char* name, const OpenMode openMode)
 {
 	Database db;
 	db.impl_->Open (name, openMode);
+	return std::move (db);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+Database Database::Open (const Path& path)
+{
+	return Open (path, OpenMode::Read);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+Database Database::Open (const Path& path, const OpenMode openMode)
+{
+	Database db;
+	db.impl_->Open (path.string ().c_str (), openMode);
 	return std::move (db);
 }
 
@@ -417,6 +443,12 @@ const char* Statement::GetText (const int index) const
 const void* Statement::GetBlob (const int index) const
 {
 	return impl_->StatementGetBlob (p_, index);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void Statement::GetBlob (const int index, const MutableArrayRef<>& result) const
+{
+	return impl_->StatementGetBlob (p_, index, result);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

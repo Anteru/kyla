@@ -4,9 +4,13 @@
 #include <cstdint>
 #include <memory>
 
+#include <boost/filesystem.hpp>
+
 #include "ArrayRef.h"
 
 namespace kyla {
+using Path = boost::filesystem::path;
+
 struct File
 {
 	virtual ~File ();
@@ -80,6 +84,7 @@ struct FileStat
 	std::size_t size;
 };
 
+FileStat Stat (const Path& path);
 FileStat Stat (const char* path);
 
 enum class FileOpenMode
@@ -91,6 +96,10 @@ enum class FileOpenMode
 
 std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode);
 std::unique_ptr<File> CreateFile (const char* path);
+
+
+std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode);
+std::unique_ptr<File> CreateFile (const Path& path);
 }
 
 #endif // FILEIO_H

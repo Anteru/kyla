@@ -2,6 +2,7 @@
 #define KYLA_CORE_INTERNAL_REPOSITORY_H
 
 #include <functional>
+#include <memory>
 
 #include "Kyla.h"
 
@@ -18,15 +19,7 @@ private:
 	virtual void ValidateImpl (const ValidationCallback& validationCallback) = 0;
 };
 
-/**
-Stores all data stored in a repository
-*/
-struct IRepositoryDatabase
-{
-	virtual ~IRepositoryDatabase () = default;
-
-
-};
+std::unique_ptr<IRepository> OpenRepository (const char* path);
 
 /**
 Content files stored directly, not deployed
@@ -42,10 +35,17 @@ Files as if the repository has been deployed
 class DeployedRepository final : public IRepository
 {
 public:
-	static DeployedRepository Open (const char* location);
+	DeployedRepository (const char* path);
+	~DeployedRepository ();
+
+	DeployedRepository (DeployedRepository&& other);
+	DeployedRepository& operator= (DeployedRepository&& other);
 
 private:
 	void ValidateImpl (const ValidationCallback& validationCallback) override;
+
+	struct Impl;
+	std::unique_ptr<Impl> impl_;
 };
 
 /**

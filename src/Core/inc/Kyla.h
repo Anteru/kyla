@@ -9,7 +9,8 @@ extern "C" {
 enum kylaResult
 {
 	kylaResult_Ok = 0,
-	kylaResult_Error = 1
+	kylaResult_Error = 1,
+	kylaResult_ErrorInvalidArgument = 2
 };
 
 typedef void (*KylaProgressCallback)(const int stageCount,

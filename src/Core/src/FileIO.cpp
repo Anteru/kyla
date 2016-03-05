@@ -30,6 +30,11 @@ namespace kyla {
 	{
 	}
 
+	FileStat Stat (const Path& path)
+	{
+		return Stat (path.string ().c_str ());
+	}
+
 	FileStat Stat (const char* path)
 	{
 		struct stat stats;
@@ -318,19 +323,7 @@ namespace kyla {
 		std::unordered_map<const void*, HANDLE> mappings_;
 	};
 
-	std::unique_ptr<File> CreateFile (const char* path)
-	{
-		auto fd = ::CreateFileA (path, GENERIC_READ | GENERIC_WRITE,
-			0, nullptr, CREATE_ALWAYS, 0, 0);
-
-		if (fd == INVALID_HANDLE_VALUE) {
-			throw std::exception ("Could not create file");
-		}
-
-		return std::unique_ptr<File> (new WindowsFile (fd));
-	}
-
-	std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode)
+	int ConvertOpenMode (const FileOpenMode openMode)
 	{
 		int mode;
 		switch (openMode) {
@@ -347,7 +340,52 @@ namespace kyla {
 			break;
 		}
 
+		return mode;
+	}
+
+	std::unique_ptr<File> CreateFile (const char* path)
+	{
+		auto fd = ::CreateFileA (path, GENERIC_READ | GENERIC_WRITE,
+			0, nullptr, CREATE_ALWAYS, 0, 0);
+
+		if (fd == INVALID_HANDLE_VALUE) {
+			throw std::exception ("Could not create file");
+		}
+
+		return std::unique_ptr<File> (new WindowsFile (fd));
+	}
+
+	std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode)
+	{
+		const int mode = ConvertOpenMode (openMode);
+
 		auto fd = ::CreateFileA (path, mode,
+			0, nullptr, OPEN_EXISTING, 0, 0);
+
+		if (fd == INVALID_HANDLE_VALUE) {
+			throw std::exception ("Could not open file");
+		}
+
+		return std::unique_ptr<File> (new WindowsFile (fd));
+	}
+
+	std::unique_ptr<File> CreateFile (const Path& path)
+	{
+		auto fd = ::CreateFileW (path.c_str (), GENERIC_READ | GENERIC_WRITE,
+			0, nullptr, CREATE_ALWAYS, 0, 0);
+
+		if (fd == INVALID_HANDLE_VALUE) {
+			throw std::exception ("Could not create file");
+		}
+
+		return std::unique_ptr<File> (new WindowsFile (fd));
+	}
+
+	std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode)
+	{
+		const int mode = ConvertOpenMode (openMode);
+
+		auto fd = ::CreateFileW (path.c_str (), mode,
 			0, nullptr, OPEN_EXISTING, 0, 0);
 
 		if (fd == INVALID_HANDLE_VALUE) {
