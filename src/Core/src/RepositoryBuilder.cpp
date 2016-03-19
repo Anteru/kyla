@@ -128,7 +128,7 @@ std::vector<UniqueContentObjects> FindUniqueFileContents (std::vector<FileSet>& 
 
 	for (const auto& fileSet : fileSets) {
 		for (const auto& file : fileSet.files) {
-			// This assumes the hashes are up-to-date
+			// This assumes the hashes are up-to-date, i.e. initialized
 			uniqueContents [file.hash].push_back (file.source);
 		}
 	}
@@ -142,9 +142,9 @@ std::vector<UniqueContentObjects> FindUniqueFileContents (std::vector<FileSet>& 
 		UniqueContentObjects uf;
 
 		uf.hash = kv.first;
-		uf.sourceFile = kv.second.front ();
+		uf.sourceFile = ctx.sourceDirectory / kv.second.front ();
 
-		uf.size = kyla::Stat ((ctx.sourceDirectory / uf.sourceFile).string ().c_str ()).size;
+		uf.size = kyla::Stat (uf.sourceFile.string ().c_str ()).size;
 
 		if (kv.second.size () > 1) {
 			ctx.log->Trace () << "File '" << uf.sourceFile.string () << "' has " <<
@@ -179,7 +179,10 @@ struct LooseRepositoryBuilder final : public IRepositoryBuilder
 		const std::vector<FileSet>& fileSets,
 		const std::vector<UniqueContentObjects>& uniqueFiles) override
 	{
-		auto dbFile = ctx.targetDirectory / "k.db";
+		boost::filesystem::create_directories (ctx.targetDirectory / ".ky");
+		boost::filesystem::create_directories (ctx.targetDirectory / ".ky" / "objects");
+
+		auto dbFile = ctx.targetDirectory / ".ky" / "repository.db";
 		boost::filesystem::remove (dbFile);
 
 		auto db = kyla::Sql::Database::Create (
@@ -189,13 +192,13 @@ struct LooseRepositoryBuilder final : public IRepositoryBuilder
 		db.Execute (install_db_indices);
 
 		const auto fileToFileSetId = PopulateFileSets (db, fileSets);
-		PopulateContentObjectsAndFiles (db, uniqueFiles, fileToFileSetId);
+		PopulateContentObjectsAndFiles (db, uniqueFiles, fileToFileSetId,
+			ctx.targetDirectory / ".ky" / "objects");
 
 		db.Close ();
 	}
 
 private:
-
 	std::map<kyla::Path, int> PopulateFileSets (kyla::Sql::Database& db,
 		const std::vector<FileSet>& fileSets)
 	{
@@ -226,7 +229,8 @@ private:
 
 	void PopulateContentObjectsAndFiles (kyla::Sql::Database& db,
 		const std::vector<UniqueContentObjects>& uniqueFiles,
-		const std::map<kyla::Path, int>& fileToFileSetId)
+		const std::map<kyla::Path, int>& fileToFileSetId,
+		const kyla::Path& contentObjectPath)
 	{
 		auto contentObjectInsert = db.BeginTransaction ();
 		auto contentObjectInsertQuery = db.Prepare (
@@ -256,6 +260,11 @@ private:
 				filesInsertQuery.Step ();
 				filesInsertQuery.Reset ();
 			}
+
+			///@TODO(minor) Enable compression here
+			// store the file itself
+			boost::filesystem::copy_file (kv.sourceFile,
+				contentObjectPath / ToString (kv.hash));
 		}
 
 		contentObjectInsert.Commit ();

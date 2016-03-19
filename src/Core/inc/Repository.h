@@ -26,7 +26,18 @@ Content files stored directly, not deployed
 */
 class LooseRepository final : public IRepository
 {
+public:
+	LooseRepository (const char* path);
+	~LooseRepository ();
+
+	LooseRepository (LooseRepository&& other);
+	LooseRepository& operator= (LooseRepository&& other);
+
 private:
+	void ValidateImpl (const ValidationCallback& validationCallback) override;
+
+	struct Impl;
+	std::unique_ptr<Impl> impl_;
 };
 
 /**

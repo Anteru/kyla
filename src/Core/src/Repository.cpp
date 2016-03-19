@@ -11,6 +11,110 @@ void IRepository::Validate (const ValidationCallback& validationCallback)
 	ValidateImpl (validationCallback);
 }
 
+struct LooseRepository::Impl
+{
+public:
+	Impl (const char* path)
+		: db_ (Sql::Database::Open (Path (path) / ".ky" / "repository.db"))
+		, path_ (path)
+	{
+	}
+
+	void Validate (const IRepository::ValidationCallback& validationCallback)
+	{
+		// Get a list of (file, hash, size)
+		// We sort by size first so we get small objects out of the way first
+		// (slower progress, but more things getting processed) and speed up 
+		// towards the end (larger files, higher throughput)
+		static const char* querySql =
+			"SELECT Hash, Size "
+			"FROM content_objects "
+			"ORDER BY Size";
+
+		///@TODO(major) On Windows, sort this by disk cluster to get best
+		/// disk access pattern
+		/// See: https://msdn.microsoft.com/en-us/library/windows/desktop/aa364572%28v=vs.85%29.aspx
+
+		auto query = db_.Prepare (querySql);
+
+		while (query.Step ()) {
+			SHA256Digest hash;
+			query.GetBlob (0, hash);
+			const auto size = query.GetInt64 (1);
+
+			const auto filePath = Path{ path_ } / Path{ ".ky" } 
+				/ Path{ "objects" } / ToString (hash);
+
+			if (!boost::filesystem::exists (filePath)) {
+				validationCallback (filePath.string ().c_str (),
+					kylaValidationResult_Missing);
+
+				continue;
+			}
+
+			const auto statResult = Stat (filePath);
+
+			///@TODO Try/catch here and report corrupted if something goes wrong?
+			/// This would indicate the file got deleted or is read-protected
+			/// while the validation is running
+
+			if (statResult.size != size) {
+				validationCallback (filePath.string ().c_str (),
+					kylaValidationResult_Corrupted);
+
+				continue;
+			}
+
+			// For size 0 files, don't bother checking the hash
+			///@TODO Assert hash is the null hash
+			if (size != 0 && ComputeSHA256 (filePath) != hash) {
+				validationCallback (filePath.string ().c_str (),
+					kylaValidationResult_Corrupted);
+
+				continue;
+			}
+
+			validationCallback (filePath.string ().c_str (),
+				kylaValidationResult_Ok);
+		}
+	}
+
+private:
+	Sql::Database db_;
+	Path path_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+LooseRepository::~LooseRepository ()
+{
+}
+
+///////////////////////////////////////////////////////////////////////////////
+LooseRepository::LooseRepository (const char* path)
+	: impl_ (new Impl{ path })
+{
+}
+
+///////////////////////////////////////////////////////////////////////////////
+LooseRepository::LooseRepository (LooseRepository&& other)
+	: impl_ (std::move (other.impl_))
+{
+}
+
+///////////////////////////////////////////////////////////////////////////////
+LooseRepository& LooseRepository::operator= (LooseRepository&& other)
+{
+	impl_ = std::move (other.impl_);
+	return *this;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void LooseRepository::ValidateImpl (const ValidationCallback& validationCallback)
+{
+	impl_->Validate (validationCallback);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 struct DeployedRepository::Impl
 {
 public:
@@ -117,7 +221,7 @@ void DeployedRepository::ValidateImpl (const ValidationCallback& validationCallb
 ///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<IRepository> OpenRepository (const char* path)
 {
-	// For know, we only support deployed repositories
-	return std::unique_ptr<IRepository> (new DeployedRepository{ path });
+	// For know, we only support loose repositories
+	return std::unique_ptr<IRepository> (new LooseRepository{ path });
 }
 }

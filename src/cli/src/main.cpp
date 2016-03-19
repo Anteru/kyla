@@ -27,6 +27,11 @@ int main (int argc, char* argv [])
 
 	po::store (parsed, vm);
 
+	if (vm.find ("command") == vm.end ()) {
+		global.print (std::cout);
+		return 0;
+	}
+
 	const auto cmd = vm ["command"].as<std::string> ();
 
 	auto options = po::collect_unrecognized (parsed.options, po::include_positional);
