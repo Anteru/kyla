@@ -173,7 +173,7 @@ public:
 	void StatementGetBlob (void* statement, const int column,
 		const MutableArrayRef<>& result)
 	{
-		if (sqlite3_column_bytes (static_cast<sqlite3_stmt*> (statement), 1) != result.GetSize ()) {
+		if (sqlite3_column_bytes (static_cast<sqlite3_stmt*> (statement), column) != result.GetSize ()) {
 			throw std::runtime_error ("Output buffer size does not match blob size");
 		}
 
