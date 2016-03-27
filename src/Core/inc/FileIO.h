@@ -44,6 +44,11 @@ struct File
 		return MapImpl (offset, size);
 	}
 
+	void* Map ()
+	{
+		return MapImpl (0, GetSize ());
+	}
+
 	void* Unmap (void* p)
 	{
 		return UnmapImpl (p);

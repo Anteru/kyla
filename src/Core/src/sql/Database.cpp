@@ -3,6 +3,8 @@
 #include <spdlog.h>
 #include <sqlite3.h>
 
+#include "Exception.h"
+
 namespace {
 void OnSQLiteError (const int errorCode, const char* errorMessage)
 {
@@ -138,9 +140,10 @@ public:
 			return true;
 		} else if (r == SQLITE_DONE) {
 			return false;
-		} else {
-			///@TODO Handle error
 		}
+
+		throw RuntimeException ("Error while performing step on statement",
+			KYLA_FILE_LINE);
 	}
 
 	void StatementReset (void* statement)
@@ -196,7 +199,8 @@ public:
 			return Type::Blob;
 		}
 
-		///@TODO Handle error
+		throw RuntimeException ("Invalid column type",
+			KYLA_FILE_LINE);
 	}
 
 	bool Execute (const char* statement)

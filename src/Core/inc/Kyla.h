@@ -33,6 +33,8 @@ enum kylaValidationResult
 };
 
 typedef void (*KylaValidateCallback)(
+	const int objectIdSize,
+	const void* objectId,
 	const char* filename,
 	const int validationResult,
 	void* callbackContext);
@@ -42,9 +44,6 @@ int kylaValidateRepository (const char* repositoryPath,
 	void* callbackContext);
 
 int kylaRepairRepository (const char* repositoryPath,
-	// If nullptr, this means we have to try to repair using the target
-	// only - that can work if a duplicated file is missing, or a zero-sized
-	// file is missing
 	const char* sourceRepositoryPath);
 
 #ifdef __cplusplus

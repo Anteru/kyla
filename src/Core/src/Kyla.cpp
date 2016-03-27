@@ -44,9 +44,34 @@ int kylaValidateRepository (const char* repositoryPath,
 	}
 
 	auto repository = kyla::OpenRepository (repositoryPath);
-	repository->Validate ([=] (const char* file, kylaValidationResult result) -> void {
-		validationCallback (file, result, callbackContext);
+	repository->Validate ([=] (const kyla::SHA256Digest& hash, 
+		const char* file, kylaValidationResult result) -> void {
+		validationCallback (sizeof (hash.bytes), hash.bytes, 
+			file, result, callbackContext);
 	});
+
+	return kylaResult_Ok;
+
+	KYLA_C_API_END ()
+}
+
+///////////////////////////////////////////////////////////////////////////////
+int kylaRepairRepository (const char* targetPath, const char* sourcePath)
+{
+	KYLA_C_API_BEGIN ()
+
+	if (targetPath == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if (sourcePath == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	auto targetRepository = kyla::OpenRepository (targetPath);
+	auto sourceRepository = kyla::OpenRepository (sourcePath);
+
+	targetRepository->Repair (*sourceRepository);
 
 	return kylaResult_Ok;
 

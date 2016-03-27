@@ -150,8 +150,9 @@ namespace kyla {
 #elif KYLA_PLATFORM_WINDOWS
 	struct WindowsFile final : public File
 	{
-		WindowsFile (HANDLE handle)
+		WindowsFile (HANDLE handle, int openMode)
 			: fd_ (handle)
+			, openMode_ (openMode)
 		{
 		}
 
@@ -241,8 +242,8 @@ namespace kyla {
 
 		void* MapImpl (const std::int64_t offset, const std::int64_t size) override
 		{
-			const ::DWORD protection = PAGE_READWRITE /* PAGE_READONLY */;
-			const ::DWORD access = FILE_MAP_ALL_ACCESS /* FILE_MAP_READ */;
+			const ::DWORD protection = ((openMode_ & GENERIC_WRITE) != 0) ? PAGE_READWRITE : PAGE_READONLY;
+			const ::DWORD access = ((openMode_ & GENERIC_WRITE) != 0) ? FILE_MAP_ALL_ACCESS : FILE_MAP_READ;
 
 			// If set here, the file size will get set correctly
 			const DWORD	sizeHigh = (offset + size) >> 32;
@@ -320,6 +321,7 @@ namespace kyla {
 
 	private:
 		HANDLE fd_ = INVALID_HANDLE_VALUE;
+		int openMode_ = 0;
 		std::unordered_map<const void*, HANDLE> mappings_;
 	};
 
@@ -352,7 +354,7 @@ namespace kyla {
 			throw std::exception ("Could not create file");
 		}
 
-		return std::unique_ptr<File> (new WindowsFile (fd));
+		return std::unique_ptr<File> (new WindowsFile (fd, GENERIC_READ | GENERIC_WRITE));
 	}
 
 	std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode)
@@ -366,7 +368,7 @@ namespace kyla {
 			throw std::exception ("Could not open file");
 		}
 
-		return std::unique_ptr<File> (new WindowsFile (fd));
+		return std::unique_ptr<File> (new WindowsFile (fd, mode));
 	}
 
 	std::unique_ptr<File> CreateFile (const Path& path)
@@ -378,7 +380,7 @@ namespace kyla {
 			throw std::exception ("Could not create file");
 		}
 
-		return std::unique_ptr<File> (new WindowsFile (fd));
+		return std::unique_ptr<File> (new WindowsFile (fd, GENERIC_READ | GENERIC_WRITE));
 	}
 
 	std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode)
@@ -392,7 +394,7 @@ namespace kyla {
 			throw std::exception ("Could not open file");
 		}
 
-		return std::unique_ptr<File> (new WindowsFile (fd));
+		return std::unique_ptr<File> (new WindowsFile (fd, mode));
 	}
 #else
 #error Unsupported platform

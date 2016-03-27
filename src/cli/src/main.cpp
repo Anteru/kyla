@@ -70,7 +70,8 @@ int main (int argc, char* argv [])
 
 		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
 
-		auto validationCallback = [](const char* file, int validationResult,
+		auto validationCallback = [](const int, const void*, 
+			const char* file, int validationResult,
 			void*) -> void {
 			switch (validationResult) {
 			case kylaValidationResult_Ok:
@@ -89,5 +90,22 @@ int main (int argc, char* argv [])
 
 		kylaValidateRepository (vm ["input"].as<std::string> ().c_str (),
 			validationCallback, nullptr);
+	} else if (cmd == "repair") {
+		po::options_description build_desc ("repair options");
+		build_desc.add_options ()
+			("source", po::value<std::string> ())
+			("target", po::value<std::string> ());
+
+		po::positional_options_description posBuild;
+		posBuild
+			.add ("source", 1)
+			.add ("target", 1);
+
+		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
+
+		const auto source = vm ["source"].as<std::string> ();
+		const auto target = vm ["target"].as<std::string> ();
+
+		kylaRepairRepository (target.c_str (), source.c_str ());
 	}
 }

@@ -1,12 +1,12 @@
-.. kyla documentation master file, created by
-   sphinx-quickstart on Sun Oct 18 21:02:46 2015.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
-
 Welcome to kyla's documentation!
 ================================
 
 Contents:
+
+.. toctree::
+
+    tutorial
+    repository-types
 
 Introduction
 ------------
@@ -26,18 +26,6 @@ Overview
 
 kyla consists of three separate parts:
 
-* ``kyla``, the kyla command line binary. It includes the kyla compiler which takes a repository description and builds a *packed repository* from it, as well as basic routines to perform a deploy, repair and change of a kyla repository.
+* ``kcl``, the **k**yla **c**ommand **l**ine binary. It includes the kyla compiler which takes a repository description and builds a *packed repository* from it, as well as basic routines to perform a deploy, repair and change of a kyla repository.
 * ``pykyla``, the kyla utility library. A Python module which facilitates the repository description creation.
-* ``libkyla``, the core library which contains all processing logic. libkyla provides a C API for clients for integration.
-
-Tutorial
---------
-
-Let's get started with building a basic file repository. We'll use the ``pykyla`` builder for this.
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+* ``libkyla``, the core library which contains all processing logic. ``libkyla`` provides a C API for clients for integration.
