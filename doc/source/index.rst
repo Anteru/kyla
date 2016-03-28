@@ -7,6 +7,8 @@ Contents:
 
     tutorial
     repository-types
+    kcl
+    capi
 
 Introduction
 ------------
@@ -26,6 +28,6 @@ Overview
 
 kyla consists of three separate parts:
 
-* ``kcl``, the **k**yla **c**ommand **l**ine binary. It includes the kyla compiler which takes a repository description and builds a *packed repository* from it, as well as basic routines to perform a deploy, repair and change of a kyla repository.
+* ``kcl``, the kyla command line binary. It includes the kyla compiler which takes a repository description and builds a *packed repository* from it, as well as basic routines to perform a deploy, repair and change of a kyla repository.
 * ``pykyla``, the kyla utility library. A Python module which facilitates the repository description creation.
 * ``libkyla``, the core library which contains all processing logic. ``libkyla`` provides a C API for clients for integration.

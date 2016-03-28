@@ -1,8 +1,8 @@
 import urllib.request
 import zipfile
 
-if __name__=='__main__':
-    with urllib.request.urlopen ('https://github.com/glfw/glfw/releases/download/3.1.2/glfw-3.1.2.zip') as dl, open ('glfw-3.1.2.zip', 'wb') as output:
+def DownloadFile (url, filename):
+    with urllib.request.urlopen (url) as dl, open (filename, 'wb') as output:
         cl = dl.getheader ('Content-Length')
 
         if cl:
@@ -18,5 +18,11 @@ if __name__=='__main__':
         else:
             output.write (dl.read ())
 
-    with zipfile.ZipFile ('glfw-3.1.2.zip', 'r') as z:
+def DownloadAndExtract (url, filename):
+    DownloadFile (url, filename)
+    with zipfile.ZipFile (filename, 'r') as z:
         z.extractall ('.')
+
+if __name__=='__main__':
+    DownloadAndExtract ('https://github.com/glfw/glfw/releases/download/3.1.2/glfw-3.1.2.zip', 'glfw-3.1.2.zip')
+    DownloadAndExtract ('https://github.com/glfw/glfw/releases/download/3.1/glfw-3.1.zip', 'glfw-3.1.zip')

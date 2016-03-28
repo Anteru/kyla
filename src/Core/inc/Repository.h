@@ -8,8 +8,16 @@
 
 #include "ArrayRef.h"
 #include "Hash.h"
+#include "Uuid.h"
 
 namespace kyla {
+struct FilesetInfo
+{
+	Uuid id;
+	int64_t fileCount;
+	int64_t fileSize;
+};
+
 struct IRepository
 {
 	virtual ~IRepository () = default;
@@ -28,11 +36,14 @@ struct IRepository
 
 	void Repair (IRepository& source);
 
+	std::vector<FilesetInfo> GetFilesetInfos ();
+
 private:
 	virtual void ValidateImpl (const ValidationCallback& validationCallback) = 0;
 	virtual void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) = 0;
 	virtual void RepairImpl (IRepository& source) = 0;
+	virtual std::vector<FilesetInfo> GetFilesetInfosImpl () = 0;
 };
 
 std::unique_ptr<IRepository> OpenRepository (const char* path);
@@ -55,6 +66,7 @@ private:
 	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) override;
 	void RepairImpl (IRepository& source) override;
+	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
 
 	struct Impl;
 	std::unique_ptr<Impl> impl_;
@@ -75,6 +87,10 @@ public:
 private:
 	void ValidateImpl (const ValidationCallback& validationCallback) override;
 	void RepairImpl (IRepository& source) override;
+	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
+		const GetContentObjectCallback& getCallback) override;
+
+	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
 
 	struct Impl;
 	std::unique_ptr<Impl> impl_;

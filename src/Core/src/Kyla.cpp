@@ -46,8 +46,11 @@ int kylaValidateRepository (const char* repositoryPath,
 	auto repository = kyla::OpenRepository (repositoryPath);
 	repository->Validate ([=] (const kyla::SHA256Digest& hash, 
 		const char* file, kylaValidationResult result) -> void {
-		validationCallback (sizeof (hash.bytes), hash.bytes, 
-			file, result, callbackContext);
+		kylaValidationItemInfo info;
+
+		info.filename = file;
+
+		validationCallback (result, &info, callbackContext);
 	});
 
 	return kylaResult_Ok;
@@ -72,6 +75,55 @@ int kylaRepairRepository (const char* targetPath, const char* sourcePath)
 	auto sourceRepository = kyla::OpenRepository (sourcePath);
 
 	targetRepository->Repair (*sourceRepository);
+
+	return kylaResult_Ok;
+
+	KYLA_C_API_END ()
+}
+
+///////////////////////////////////////////////////////////////////////////////
+int kylaQueryRepository (const char* repositoryPath,
+	int query,
+	void* queryContext,
+	int* queryResultSize,
+	void* queryResult)
+{
+	KYLA_C_API_BEGIN ()
+
+	if (repositoryPath == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if (queryResultSize == nullptr && queryResult == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	auto repository = kyla::OpenRepository (repositoryPath);
+
+	switch (query) {
+	case kylaQueryRepositoryKey_AvailableFileSets:
+		{
+			const auto result = repository->GetFilesetInfos ();
+
+			if (queryResultSize) {
+				*queryResultSize = result.size () * sizeof (kylaFileSetInfo);
+			}
+
+			if (queryResult) {
+				kylaFileSetInfo* output = static_cast<kylaFileSetInfo*> (queryResult);
+
+				for (const auto item : result) {
+					output->fileCount = item.fileCount;
+					output->fileSize = item.fileSize;
+					::memcpy (output->id, item.id.GetData (), sizeof (output->id));
+
+					++output;
+				}
+			}
+
+			break;
+		}
+	}
 
 	return kylaResult_Ok;
 

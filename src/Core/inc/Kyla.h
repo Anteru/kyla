@@ -32,11 +32,14 @@ enum kylaValidationResult
 	kylaValidationResult_Missing
 };
 
+struct kylaValidationItemInfo
+{
+	const char* filename;
+};
+
 typedef void (*KylaValidateCallback)(
-	const int objectIdSize,
-	const void* objectId,
-	const char* filename,
 	const int validationResult,
+	const struct kylaValidationItemInfo* info,
 	void* callbackContext);
 
 int kylaValidateRepository (const char* repositoryPath,
@@ -45,6 +48,25 @@ int kylaValidateRepository (const char* repositoryPath,
 
 int kylaRepairRepository (const char* repositoryPath,
 	const char* sourceRepositoryPath);
+
+enum kylaQueryRepositoryKey
+{
+	kylaQueryRepositoryKey_AvailableFileSets,
+	kylaQueryRepositoryKey_GetFileSetName
+};
+
+struct kylaFileSetInfo
+{
+	uint8_t id [16];
+	int64_t fileCount;
+	int64_t fileSize;
+};
+
+int kylaQueryRepository (const char* repository,
+	int query,
+	void* queryContext,
+	int* queryResultSize,
+	void* queryResult);
 
 #ifdef __cplusplus
 }

@@ -16,6 +16,7 @@ public:
 
 	Uuid ();
 	Uuid (const uint32 a, const uint32 b, const uint32 c, const uint32 d);
+	Uuid (const uint8 bytes [16]);
 
 	static bool TryParse (StringRef s, Uuid& output);
 	static Uuid Parse (StringRef s);

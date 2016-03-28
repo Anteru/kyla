@@ -10,6 +10,7 @@ CREATE TABLE content_objects (
 -- All file sets stored in this repository
 CREATE TABLE file_sets (
     Id INTEGER PRIMARY KEY NOT NULL,
+    Uuid BLOB NOT NULL,
     Name VARCHAR NOT NULL UNIQUE);
 
 CREATE TABLE files (Path TEXT PRIMARY KEY NOT NULL,

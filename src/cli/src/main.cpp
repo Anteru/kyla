@@ -3,6 +3,7 @@
 #include "Kyla.h"
 
 #include <iostream>
+#include "Uuid.h"
 
 ///////////////////////////////////////////////////////////////////////////////
 int main (int argc, char* argv [])
@@ -62,6 +63,10 @@ int main (int argc, char* argv [])
 	} else if (cmd == "validate") {
 		po::options_description build_desc ("validation options");
 		build_desc.add_options ()
+			("verbose,v", po::bool_switch ()->default_value (false),
+				"verbose output")
+			("summary,s", po::bool_switch ()->default_value (true),
+				"show summary")
 			("input", po::value<std::string> ());
 		
 		po::positional_options_description posBuild;
@@ -70,26 +75,53 @@ int main (int argc, char* argv [])
 
 		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
 
-		auto validationCallback = [](const int, const void*, 
-			const char* file, int validationResult,
-			void*) -> void {
+		int errors = 0;
+		int ok = 0;
+
+		struct Context
+		{
+			int* errors;
+			int* ok;
+			bool verbose;
+		};
+
+		Context context = { &errors, &ok, vm["verbose"].as<bool> () };
+
+		auto validationCallback = [](int validationResult,
+			const kylaValidationItemInfo* info,
+			void* pContext) -> void {
+			auto context = static_cast<Context*> (pContext);
+
 			switch (validationResult) {
 			case kylaValidationResult_Ok:
-				std::cout << "OK:        " << file << '\n';
+				if (context->verbose) {
+					std::cout << "OK        " << info->filename << '\n';
+				}
+				++(*context->ok);
 				break;
 
 			case kylaValidationResult_Missing:
-				std::cout << "MISSING:   " << file << '\n';
+				if (context->verbose) {
+					std::cout << "MISSING   " << info->filename << '\n';
+				}
+				++(*context->errors);
 				break;
 
 			case kylaValidationResult_Corrupted:
-				std::cout << "CORRUPTED: " << file << '\n';
+				if (context->verbose) {
+					std::cout << "CORRUPTED " << info->filename << '\n';
+				}
+				++(*context->errors);
 				break;
 			}
 		};
 
 		kylaValidateRepository (vm ["input"].as<std::string> ().c_str (),
-			validationCallback, nullptr);
+			validationCallback, &context);
+
+		if (vm ["summary"].as<bool> ()) {
+			std::cout << "OK " << ok << " CORRUPTED/MISSING " << errors << std::endl;
+		}
 	} else if (cmd == "repair") {
 		po::options_description build_desc ("repair options");
 		build_desc.add_options ()
@@ -107,5 +139,33 @@ int main (int argc, char* argv [])
 		const auto target = vm ["target"].as<std::string> ();
 
 		kylaRepairRepository (target.c_str (), source.c_str ());
+	} else if (cmd == "query-filesets") {
+		po::options_description build_desc ("query-filesets options");
+		build_desc.add_options ()
+			("source", po::value<std::string> ());
+
+		po::positional_options_description posBuild;
+		posBuild
+			.add ("source", 1);
+
+		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
+
+		const auto source = vm ["source"].as<std::string> ();
+
+		int resultSize = 0;
+
+		kylaQueryRepository (source.c_str (),
+			kylaQueryRepositoryKey_AvailableFileSets, nullptr,
+			&resultSize, nullptr);
+
+		std::vector<kylaFileSetInfo> filesetInfos (resultSize / sizeof (kylaFileSetInfo));
+
+		kylaQueryRepository (source.c_str (),
+			kylaQueryRepositoryKey_AvailableFileSets, nullptr,
+			&resultSize, filesetInfos.data ());
+
+		for (const auto& info : filesetInfos) {
+			std::cout << ToString (kyla::Uuid{ info.id }) << " " << info.fileCount << " " << info.fileSize << std::endl;
+		}
 	}
 }

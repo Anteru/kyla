@@ -26,6 +26,38 @@ void IRepository::GetContentObjects (const ArrayRef<SHA256Digest>& requestedObje
 	GetContentObjectsImpl (requestedObjects, getCallback);
 }
 
+///////////////////////////////////////////////////////////////////////////////
+std::vector<FilesetInfo> IRepository::GetFilesetInfos ()
+{
+	return GetFilesetInfosImpl ();
+}
+
+std::vector<FilesetInfo> GetFilesetInfoInternal (Sql::Database& db)
+{
+	static const char* querySql =
+		"SELECT file_sets.Uuid, COUNT(content_objects.Id), SUM(content_objects.size) "
+		"FROM file_sets INNER JOIN files "
+		"ON file_sets.Id = files.FileSetId "
+		"INNER JOIN content_objects "
+		"ON content_objects.Id = files.ContentObjectId";
+
+	auto query = db.Prepare (querySql);
+
+	std::vector<FilesetInfo> result;
+
+	while (query.Step ()) {
+		FilesetInfo info;
+
+		query.GetBlob (0, info.id);
+		info.fileCount = query.GetInt64 (1);
+		info.fileSize = query.GetInt64 (2);
+
+		result.push_back (info);
+	}
+
+	return result;
+}
+
 struct LooseRepository::Impl
 {
 public:
@@ -151,6 +183,11 @@ public:
 		});
 	}
 
+	std::vector<FilesetInfo> GetFilesetInfos ()
+	{
+		return GetFilesetInfoInternal (db_);
+	}
+
 private:
 	Sql::Database db_;
 	Path path_;
@@ -197,6 +234,12 @@ void LooseRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& reque
 void LooseRepository::RepairImpl (IRepository& other)
 {
 	impl_->Repair (other);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::vector<FilesetInfo> LooseRepository::GetFilesetInfosImpl ()
+{
+	return impl_->GetFilesetInfos ();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -312,6 +355,11 @@ public:
 		});
 	}
 
+	std::vector<FilesetInfo> GetFilesetInfos ()
+	{
+		return GetFilesetInfoInternal (db_);
+	}
+
 private:
 	Sql::Database db_;
 	Path path_;
@@ -354,9 +402,28 @@ void DeployedRepository::RepairImpl (IRepository& other)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+void DeployedRepository::GetContentObjectsImpl (
+	const ArrayRef<SHA256Digest>& requestedObjects,
+	const GetContentObjectCallback& getCallback)
+{
+	///@TODO(minor) Implement
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::vector<FilesetInfo> DeployedRepository::GetFilesetInfosImpl ()
+{
+	return impl_->GetFilesetInfos ();
+}
+
+///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<IRepository> OpenRepository (const char* path)
 {
-	// For know, we only support loose repositories
-	return std::unique_ptr<IRepository> (new LooseRepository{ path });
+	if (boost::filesystem::exists (Path{ path } / Path{ ".ky" })) {
+		// .ky indicates a loose repository
+		return std::unique_ptr<IRepository> (new LooseRepository{ path });
+	} else {
+		// Assume deployed repository for now
+		return std::unique_ptr<IRepository> (new DeployedRepository{ path });
+	}
 }
 }

@@ -195,6 +195,9 @@ struct LooseRepositoryBuilder final : public IRepositoryBuilder
 		PopulateContentObjectsAndFiles (db, uniqueFiles, fileToFileSetId,
 			ctx.targetDirectory / ".ky" / "objects");
 
+		// Necessary to get good index statistics
+		db.Execute ("ANALYZE");
+
 		db.Close ();
 	}
 
@@ -204,13 +207,13 @@ private:
 	{
 		auto fileSetsInsert = db.BeginTransaction ();
 		auto fileSetsInsertQuery = db.Prepare (
-			"INSERT INTO file_sets (Name) VALUES (?);");
+			"INSERT INTO file_sets (Uuid, Name) VALUES (?, ?);");
 
 		std::map<kyla::Path, int> result;
 
 		for (const auto& fileSet : fileSets) {
 			fileSetsInsertQuery.BindArguments (
-				fileSet.name);
+				fileSet.id, fileSet.name);
 
 			fileSetsInsertQuery.Step ();
 			fileSetsInsertQuery.Reset ();
