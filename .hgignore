@@ -13,3 +13,4 @@ samples/glfw/source/**
 samples/**/*.zip
 samples/glfw/glfw-*
 **/__pycache__/*
+**/build.log
