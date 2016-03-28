@@ -4,8 +4,7 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE content_objects (
     Id INTEGER PRIMARY KEY NOT NULL,
     Hash BLOB NOT NULL UNIQUE,
-    Size INTEGER NOT NULL,
-    ReferenceCount INTEGER NOT NULL DEFAULT 1);
+    Size INTEGER NOT NULL);
 
 -- All file sets stored in this repository
 CREATE TABLE file_sets (
@@ -43,3 +42,7 @@ CREATE TABLE properties (
     Name VARCHAR PRIMARY KEY,
     Value NOT NULL
 );
+
+CREATE VIEW content_objects_with_reference_count
+    AS SELECT Id, Hash, Size, (SELECT COUNT(*) FROM files WHERE ContentObjectId=Id) AS ReferenceCount
+    FROM content_objects;

@@ -4,7 +4,11 @@
 #include "FileIO.h"
 #include "Hash.h"
 
+#include "install-db-structure.h"
+#include "install-db-indices.h"
+
 #include <unordered_map>
+#include <set>
 
 namespace kyla {
 ///////////////////////////////////////////////////////////////////////////////
@@ -30,6 +34,12 @@ void IRepository::GetContentObjects (const ArrayRef<SHA256Digest>& requestedObje
 std::vector<FilesetInfo> IRepository::GetFilesetInfos ()
 {
 	return GetFilesetInfosImpl ();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+Sql::Database& IRepository::GetDatabase ()
+{
+	return GetDatabaseImpl ();
 }
 
 std::vector<FilesetInfo> GetFilesetInfoInternal (Sql::Database& db)
@@ -65,6 +75,11 @@ public:
 		: db_ (Sql::Database::Open (Path (path) / ".ky" / "repository.db"))
 		, path_ (path)
 	{
+	}
+
+	Sql::Database& GetDatabase ()
+	{
+		return db_;
 	}
 
 	void GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjects,
@@ -243,6 +258,12 @@ std::vector<FilesetInfo> LooseRepository::GetFilesetInfosImpl ()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+Sql::Database& LooseRepository::GetDatabaseImpl ()
+{
+	return impl_->GetDatabase ();
+}
+
+///////////////////////////////////////////////////////////////////////////////
 struct DeployedRepository::Impl
 {
 public:
@@ -250,6 +271,11 @@ public:
 		: db_ (Sql::Database::Open (Path (path) / "k.db"))
 		, path_ (path)
 	{
+	}
+
+	Sql::Database& GetDatabase ()
+	{
+		return db_;
 	}
 
 	void Validate (const IRepository::ValidationCallback& validationCallback)
@@ -360,10 +386,153 @@ public:
 		return GetFilesetInfoInternal (db_);
 	}
 
+	void GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjects,
+		const IRepository::GetContentObjectCallback& getCallback)
+	{
+		auto query = db_.Prepare (
+			"SELECT Path FROM files "
+			"WHERE ContentObjectId=(SELECT Id FROM content_objects WHERE Hash=?) "
+			"LIMIT 1");
+
+		for (const auto& hash : requestedObjects) {
+			query.BindArguments (hash);
+			query.Step ();
+
+			const auto filePath = path_ / Path{ query.GetText (0) };
+
+			auto file = OpenFile (filePath, FileOpenMode::Read);
+			auto pointer = file->Map ();
+
+			const ArrayRef<> fileContents{ pointer, file->GetSize () };
+			getCallback (hash, fileContents);
+
+			file->Unmap (pointer);
+
+			query.Reset ();
+		}
+	}
+
 private:
 	Sql::Database db_;
 	Path path_;
 };
+
+///////////////////////////////////////////////////////////////////////////////
+void DeployedRepository::CreateFrom (IRepository& other,
+	const ArrayRef<Uuid>& filesets,
+	const Path& targetDirectory)
+{
+	auto db = Sql::Database::Create ((targetDirectory / "k.db").string ().c_str ());
+
+	db.Execute (install_db_structure);
+	db.Execute (install_db_indices);
+
+	db.Execute ("PRAGMA journal_mode=WAL;");
+	db.Execute ("PRAGMA synchronous=NORMAL;");
+
+	// for each fileset, we find all content objects, and deploy them into
+	// the target
+	{
+		for (const auto& fileset : filesets) {
+			int64 filesetId = -1;
+			int64 localFilesetId = -1;
+
+			// Get the file set Id and insert it into the deploy database as well
+			{
+				auto filesetQuery = other.GetDatabase ().Prepare ("SELECT Id, Name FROM file_sets WHERE Uuid = ?");
+				filesetQuery.BindArguments (fileset);
+				filesetQuery.Step ();
+
+				filesetId = filesetQuery.GetInt64 (0);
+
+				auto insertFilesetQuery = db.Prepare ("INSERT INTO file_sets (Uuid, Name) VALUES (?, ?);");
+				insertFilesetQuery.BindArguments (fileset, filesetQuery.GetText (1));
+				insertFilesetQuery.Step ();
+
+				localFilesetId = db.GetLastRowId ();
+			}
+
+			auto query = other.GetDatabase ().Prepare ("SELECT Hash, Path FROM files "
+				"INNER JOIN content_objects ON content_objects.Id = files.ContentObjectId "
+				"WHERE FileSetId=? ORDER BY ContentObjectId");
+			query.BindArguments (filesetId);
+
+			std::unordered_multimap<SHA256Digest, Path, HashDigestHash, HashDigestEqual> contentObjectToFiles;
+			std::vector<SHA256Digest> uniqueContentObjects;
+			///@TODO(minor) Make this an unordered_set - there's a hash for path,
+			/// it's just not hooked up automatically
+			std::set<Path> uniquePaths;
+
+			// Iterate over all files in this file set
+			while (query.Step ()) {
+				SHA256Digest hash;
+				query.GetBlob (0, hash);
+				
+				const Path path{ query.GetText (1) };
+
+				if (contentObjectToFiles.find (hash) == contentObjectToFiles.end ()) {
+					uniqueContentObjects.push_back (hash);
+				}
+
+				contentObjectToFiles.insert (std::make_pair (hash, path));
+
+				uniquePaths.insert (path.parent_path ());
+			}
+
+			// Create directories
+			{
+				for (const auto& dir : uniquePaths) {
+					boost::filesystem::create_directories (targetDirectory / dir);
+				}
+			}
+
+			other.GetContentObjects (uniqueContentObjects, [&](const SHA256Digest& hash,
+				const ArrayRef<>& contents) -> void {
+
+				auto range = contentObjectToFiles.equal_range (hash);
+
+				int64 contentObjectId = -1;
+				{
+					auto insertContentObjectQuery = db.Prepare (
+						"INSERT INTO content_objects (Hash, Size) "
+						"VALUES (?, ?);");
+
+					insertContentObjectQuery.BindArguments (hash, contents.GetSize ());
+					insertContentObjectQuery.Step ();
+
+					contentObjectId = db.GetLastRowId ();
+				}
+
+				for (auto it = range.first; it != range.second; ++it) {
+					auto file = CreateFile (targetDirectory / it->second);
+
+					file->SetSize (contents.GetSize ());
+
+					auto pointer = file->Map ();
+					::memcpy (pointer, contents.GetData (), contents.GetSize ());
+					file->Unmap (pointer);
+
+					{
+						auto insertFileQuery = db.Prepare (
+							"INSERT INTO files (ContentObjectId, Path, FileSetId) "
+							"SELECT content_objects.Id, ?, ? "
+							"FROM content_objects "
+							"WHERE content_objects.Hash = ?");
+
+						insertFileQuery.BindArguments (it->second.string (), 
+							localFilesetId, hash);
+						insertFileQuery.Step ();
+					}
+				}
+			});
+		}
+	}
+
+	db.Execute ("PRAGMA journal_mode=DELETE;");
+	db.Execute ("ANALYZE");
+
+	db.Close ();
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 DeployedRepository::~DeployedRepository ()
@@ -406,13 +575,19 @@ void DeployedRepository::GetContentObjectsImpl (
 	const ArrayRef<SHA256Digest>& requestedObjects,
 	const GetContentObjectCallback& getCallback)
 {
-	///@TODO(minor) Implement
+	impl_->GetContentObjects (requestedObjects, getCallback);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 std::vector<FilesetInfo> DeployedRepository::GetFilesetInfosImpl ()
 {
 	return impl_->GetFilesetInfos ();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+Sql::Database& DeployedRepository::GetDatabaseImpl ()
+{
+	return impl_->GetDatabase ();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -425,5 +600,16 @@ std::unique_ptr<IRepository> OpenRepository (const char* path)
 		// Assume deployed repository for now
 		return std::unique_ptr<IRepository> (new DeployedRepository{ path });
 	}
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void DeployRepository (IRepository& source,
+	const char* destinationPath,
+	const ArrayRef<Uuid>& filesets)
+{
+	Path targetPath{ destinationPath };
+	boost::filesystem::create_directories (destinationPath);
+
+	DeployedRepository::CreateFrom (source, filesets, targetPath);
 }
 }

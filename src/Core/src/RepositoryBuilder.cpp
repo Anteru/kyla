@@ -237,7 +237,7 @@ private:
 	{
 		auto contentObjectInsert = db.BeginTransaction ();
 		auto contentObjectInsertQuery = db.Prepare (
-			"INSERT INTO content_objects (Hash, Size, ReferenceCount) VALUES (?, ?, ?);");
+			"INSERT INTO content_objects (Hash, Size) VALUES (?, ?);");
 		auto filesInsertQuery = db.Prepare (
 			"INSERT INTO files (Path, ContentObjectId, FileSetId) VALUES (?, ?, ?);");
 
@@ -245,9 +245,7 @@ private:
 		for (const auto& kv : uniqueFiles) {
 			contentObjectInsertQuery.BindArguments (
 				kv.hash,
-				kv.size,
-				// Self + duplicates
-				kv.duplicates.size ());
+				kv.size);
 			contentObjectInsertQuery.Step ();
 			contentObjectInsertQuery.Reset ();
 

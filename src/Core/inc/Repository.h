@@ -7,10 +7,14 @@
 #include "Kyla.h"
 
 #include "ArrayRef.h"
+#include "FileIO.h"
 #include "Hash.h"
 #include "Uuid.h"
 
 namespace kyla {
+namespace Sql {
+	class Database;
+}
 struct FilesetInfo
 {
 	Uuid id;
@@ -37,6 +41,7 @@ struct IRepository
 	void Repair (IRepository& source);
 
 	std::vector<FilesetInfo> GetFilesetInfos ();
+	Sql::Database& GetDatabase ();
 
 private:
 	virtual void ValidateImpl (const ValidationCallback& validationCallback) = 0;
@@ -44,9 +49,14 @@ private:
 		const GetContentObjectCallback& getCallback) = 0;
 	virtual void RepairImpl (IRepository& source) = 0;
 	virtual std::vector<FilesetInfo> GetFilesetInfosImpl () = 0;
+	virtual Sql::Database& GetDatabaseImpl () = 0;
 };
 
 std::unique_ptr<IRepository> OpenRepository (const char* path);
+
+void DeployRepository (IRepository& source,
+	const char* targetPath,
+	const ArrayRef<Uuid>& selectedFilesets);
 
 /**
 Content files stored directly, not deployed
@@ -67,6 +77,7 @@ private:
 		const GetContentObjectCallback& getCallback) override;
 	void RepairImpl (IRepository& source) override;
 	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
+	Sql::Database& GetDatabaseImpl () override;
 
 	struct Impl;
 	std::unique_ptr<Impl> impl_;
@@ -84,6 +95,10 @@ public:
 	DeployedRepository (DeployedRepository&& other);
 	DeployedRepository& operator= (DeployedRepository&& other);
 
+	static void CreateFrom (IRepository& other,
+		const ArrayRef<Uuid>& filesets,
+		const Path& targetDirectory);
+
 private:
 	void ValidateImpl (const ValidationCallback& validationCallback) override;
 	void RepairImpl (IRepository& source) override;
@@ -91,6 +106,7 @@ private:
 		const GetContentObjectCallback& getCallback) override;
 
 	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
+	Sql::Database& GetDatabaseImpl () override;
 
 	struct Impl;
 	std::unique_ptr<Impl> impl_;

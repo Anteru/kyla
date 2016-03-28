@@ -69,4 +69,26 @@ This will give us::
 
 .. note:: The uuid will be different if you run this!
 
-The output is file set uuid, followed by the number of files in the file set and the total size in bytes.
+The output is file set uuid, followed by the number of files in the file set and the total size in bytes. Now we can create an installation. The ``kcl`` allows us to select the file sets on the command line::
+
+    kcl install source deploy bd4f8902-087f-401b-819c-f978c6e14d6b
+
+An installation is also a file repository, so we can use the usual options on it. Let's start by validating the installation::
+
+    kcl validate deploy
+
+This yields::
+
+    OK 377 CORRUPTED/MISSING 0
+
+Let's try the previous example of damaging the installation. Delete the ``CMakeLists.txt`` file and change a byte in ``COPYING``, and check again::
+
+    OK 375 CORRUPTED/MISSING 2
+
+We can repair the repository using our source repository as before::
+
+    kcl repair source deploy
+
+In fact, we could have also repaired the source repository using the deploy repository, as all repository types are equivalent. Wait a moment, does this mean we can install from the just installed repository? Yes, this is indeed possible::
+
+    kcl install deploy deploy2 bd4f8902-087f-401b-819c-f978c6e14d6b

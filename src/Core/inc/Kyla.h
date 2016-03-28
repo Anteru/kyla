@@ -68,6 +68,12 @@ int kylaQueryRepository (const char* repository,
 	int* queryResultSize,
 	void* queryResult);
 
+int kylaInstall (const char* repository,
+	const char* destination,
+	int filesetCount,
+	const uint8_t* const * filesetIds,
+	KylaProgressCallback progressCallback);
+
 #ifdef __cplusplus
 }
 #endif

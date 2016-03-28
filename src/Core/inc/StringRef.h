@@ -38,6 +38,12 @@ public:
 		}
 	}
 
+	inline StringRef (const std::string& s)
+		: length_ (s.size ())
+		, data_ (s.c_str ())
+	{
+	}
+
 	inline StringRef (const char* str, const int64 length)
 	: length_ (length)
 	, data_ (str)

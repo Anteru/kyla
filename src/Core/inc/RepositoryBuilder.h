@@ -4,8 +4,8 @@
 #include "Kyla.h"
 
 namespace kyla {
-	void BuildRepository (const char* descriptorFile,
-		const kylaBuildEnvironment* environment);
+void BuildRepository (const char* descriptorFile,
+	const kylaBuildEnvironment* environment);
 }
 
 #endif

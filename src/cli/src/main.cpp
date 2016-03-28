@@ -167,5 +167,39 @@ int main (int argc, char* argv [])
 		for (const auto& info : filesetInfos) {
 			std::cout << ToString (kyla::Uuid{ info.id }) << " " << info.fileCount << " " << info.fileSize << std::endl;
 		}
+	} else if (cmd == "install") {
+		po::options_description build_desc ("install options");
+		build_desc.add_options ()
+			("source", po::value<std::string> ())
+			("target", po::value<std::string> ())
+			("file-sets", po::value<std::vector<std::string>> ()->composing ());
+
+		po::positional_options_description posBuild;
+		posBuild
+			.add ("source", 1)
+			.add ("target", 1)
+			.add ("file-sets", -1);
+
+		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
+
+		const auto source = vm ["source"].as<std::string> ();
+		const auto target = vm ["target"].as<std::string> ();
+
+		const auto filesets = vm ["file-sets"].as<std::vector<std::string>> ();
+
+		std::vector<const uint8_t*> filesetPointers;
+		std::vector<kyla::Uuid> filesetIds;
+		for (const auto fileset : filesets) {
+			filesetIds.push_back (kyla::Uuid::Parse (fileset));
+		}
+
+		for (const auto& filesetId : filesetIds) {
+			filesetPointers.push_back (filesetId.GetData ());
+		}
+
+		kylaInstall (source.c_str (), target.c_str (),
+			static_cast<int> (filesetIds.size ()),
+			filesetPointers.data (),
+			nullptr);
 	}
 }

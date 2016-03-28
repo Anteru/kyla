@@ -129,3 +129,48 @@ int kylaQueryRepository (const char* repositoryPath,
 
 	KYLA_C_API_END ()
 }
+
+///////////////////////////////////////////////////////////////////////////////
+int kylaInstall (const char* repositoryPath,
+	const char* destination,
+	int filesetCount,
+	const uint8_t* const* pFilesetIds,
+	KylaProgressCallback progressCallback)
+{
+	KYLA_C_API_BEGIN ()
+
+	if (repositoryPath == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if (destination == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if (filesetCount <= 0) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if (pFilesetIds == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	for (int i = 0; i < filesetCount; ++i) {
+		if (pFilesetIds [i] == nullptr) {
+			return kylaResult_ErrorInvalidArgument;
+		}
+	}
+
+	auto repository = kyla::OpenRepository (repositoryPath);
+
+	std::vector<kyla::Uuid> filesetIds (filesetCount);
+	for (int i = 0; i < filesetCount; ++i) {
+		filesetIds [i] = kyla::Uuid{ pFilesetIds [i] };
+	}
+
+	kyla::DeployRepository (*repository, destination, filesetIds);
+		
+	return kylaResult_Ok;
+
+	KYLA_C_API_END ()
+}
