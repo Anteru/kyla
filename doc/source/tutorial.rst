@@ -92,3 +92,8 @@ We can repair the repository using our source repository as before::
 In fact, we could have also repaired the source repository using the deploy repository, as all repository types are equivalent. Wait a moment, does this mean we can install from the just installed repository? Yes, this is indeed possible::
 
     kcl install deploy deploy2 bd4f8902-087f-401b-819c-f978c6e14d6b
+
+Configuring
+-----------
+
+Configuring a repository means adding or removing file sets from it. We'll create three filesets for GLFW, a general one, one for the ``docs/`` folder, and one for the ``examples/`` folder.

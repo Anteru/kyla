@@ -6,6 +6,11 @@
 #define KYLA_C_API_BEGIN() try {
 #define KYLA_C_API_END() } catch (...) { return kylaResult_Error; }
 
+struct kylaRepositoryImpl
+{
+	std::unique_ptr<kyla::IRepository> p;
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 int kylaBuildRepository (const char* descriptorFile,
 	const kylaBuildEnvironment* environment)
@@ -29,13 +34,13 @@ int kylaBuildRepository (const char* descriptorFile,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaValidateRepository (const char* repositoryPath,
+int kylaValidateRepository (kylaRepository repository,
 	KylaValidateCallback validationCallback,
 	void* callbackContext)
 {
 	KYLA_C_API_BEGIN ()
 
-	if (repositoryPath == nullptr) {
+	if (repository == nullptr) {
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -43,8 +48,7 @@ int kylaValidateRepository (const char* repositoryPath,
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	auto repository = kyla::OpenRepository (repositoryPath);
-	repository->Validate ([=] (const kyla::SHA256Digest& hash, 
+	repository->p->Validate ([=] (const kyla::SHA256Digest& hash, 
 		const char* file, kylaValidationResult result) -> void {
 		kylaValidationItemInfo info;
 
@@ -59,22 +63,19 @@ int kylaValidateRepository (const char* repositoryPath,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaRepairRepository (const char* targetPath, const char* sourcePath)
+int kylaRepairRepository (kylaRepository target, kylaRepository source)
 {
 	KYLA_C_API_BEGIN ()
 
-	if (targetPath == nullptr) {
+	if (target == nullptr) {
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	if (sourcePath == nullptr) {
+	if (source == nullptr) {
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	auto targetRepository = kyla::OpenRepository (targetPath);
-	auto sourceRepository = kyla::OpenRepository (sourcePath);
-
-	targetRepository->Repair (*sourceRepository);
+	target->p->Repair (*source->p);
 
 	return kylaResult_Ok;
 
@@ -82,15 +83,15 @@ int kylaRepairRepository (const char* targetPath, const char* sourcePath)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaQueryRepository (const char* repositoryPath,
+int kylaQueryRepository (kylaRepository repository,
 	int query,
-	void* queryContext,
+	const void* queryContext,
 	int* queryResultSize,
 	void* queryResult)
 {
 	KYLA_C_API_BEGIN ()
 
-	if (repositoryPath == nullptr) {
+	if (repository == nullptr) {
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -98,15 +99,19 @@ int kylaQueryRepository (const char* repositoryPath,
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	auto repository = kyla::OpenRepository (repositoryPath);
-
 	switch (query) {
 	case kylaQueryRepositoryKey_AvailableFileSets:
 		{
-			const auto result = repository->GetFilesetInfos ();
+			const auto result = repository->p->GetFilesetInfos ();
 
 			if (queryResultSize) {
-				*queryResultSize = result.size () * sizeof (kylaFileSetInfo);
+				auto resultSize = static_cast<int> (result.size () * sizeof (kylaFileSetInfo));
+				if (resultSize < 0) {
+					// overflow
+					return kylaResult_ErrorInvalidArgument;
+				}
+
+				*queryResultSize = resultSize;
 			}
 
 			if (queryResult) {
@@ -123,6 +128,28 @@ int kylaQueryRepository (const char* repositoryPath,
 
 			break;
 		}
+
+	case kylaQueryRepositoryKey_GetFileSetName:
+		{			
+			const kyla::Uuid uuid{ static_cast<const std::uint8_t*> (queryContext) };
+			const auto result = repository->p->GetFilesetName (uuid);
+
+			if (queryResultSize) {
+				auto resultSize = static_cast<int> (result.size () + 1 /* trailing zero */);
+				if (resultSize < 0) {
+					// overflow
+					return kylaResult_ErrorInvalidArgument;
+				}
+
+				*queryResultSize = resultSize;
+			}
+
+			if (queryResult) {
+				::memcpy (queryResult, result.c_str (), result.size () + 1);
+			}
+
+			break;
+		}
 	}
 
 	return kylaResult_Ok;
@@ -131,19 +158,69 @@ int kylaQueryRepository (const char* repositoryPath,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaInstall (const char* repositoryPath,
-	const char* destination,
-	int filesetCount,
-	const uint8_t* const* pFilesetIds,
-	KylaProgressCallback progressCallback)
+int kylaOpenRepository (const char* path,
+	kylaRepositoryAccessMode accessMode,
+	kylaRepository* repository)
 {
 	KYLA_C_API_BEGIN ()
 
-	if (repositoryPath == nullptr) {
+	if (path == nullptr) {
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	if (destination == nullptr) {
+	if (repository == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	///@TODO(minor) Pass on the access mode
+
+	kylaRepository repo = new kylaRepositoryImpl;
+	repo->p = kyla::OpenRepository (path);
+
+	*repository = repo;
+
+	return kylaResult_Ok;
+
+	KYLA_C_API_END ()
+}
+
+///////////////////////////////////////////////////////////////////////////////
+int kylaCloseRepository (kylaRepository repository)
+{
+	KYLA_C_API_BEGIN ()
+
+	if (repository == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if (!repository->p) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	repository->p.reset ();
+
+	delete repository;
+
+	return kylaResult_Ok;
+
+	KYLA_C_API_END ()
+}
+
+///////////////////////////////////////////////////////////////////////////////
+int kylaInstall (const char* targetPath,
+	kylaRepository sourceRepository,
+	int filesetCount,
+	const uint8_t* const * pFilesetIds,
+	KylaProgressCallback progressCallback,
+	kylaRepository* targetRepository)
+{
+	KYLA_C_API_BEGIN ()
+
+	if (targetPath == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if (sourceRepository == nullptr) {
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -161,15 +238,61 @@ int kylaInstall (const char* repositoryPath,
 		}
 	}
 
-	auto repository = kyla::OpenRepository (repositoryPath);
+	std::vector<kyla::Uuid> filesetIds (filesetCount);
+	for (int i = 0; i < filesetCount; ++i) {
+		filesetIds [i] = kyla::Uuid{ pFilesetIds [i] };
+	}
+
+	if (targetRepository) {
+		kylaRepository target = new kylaRepositoryImpl;
+		target->p = kyla::DeployRepository (*sourceRepository->p, targetPath, filesetIds);
+		*targetRepository = target;
+	}
+
+	return kylaResult_Ok;
+
+	KYLA_C_API_END ()
+}
+
+///////////////////////////////////////////////////////////////////////////////
+int kylaConfigure (kylaRepository targetRepository,
+	kylaRepository sourceRepository,
+	int filesetCount,
+	const uint8_t* const * pFilesetIds,
+	KylaProgressCallback progressCallback)
+{
+	KYLA_C_API_BEGIN ()
+
+	if (targetRepository == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if (sourceRepository == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if (filesetCount <= 0) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if (pFilesetIds == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	for (int i = 0; i < filesetCount; ++i) {
+		if (pFilesetIds [i] == nullptr) {
+			return kylaResult_ErrorInvalidArgument;
+		}
+	}
 
 	std::vector<kyla::Uuid> filesetIds (filesetCount);
 	for (int i = 0; i < filesetCount; ++i) {
 		filesetIds [i] = kyla::Uuid{ pFilesetIds [i] };
 	}
 
-	kyla::DeployRepository (*repository, destination, filesetIds);
-		
+	///@TODO(major) Implement configure
+	// Configure here
+
 	return kylaResult_Ok;
 
 	KYLA_C_API_END ()

@@ -7,8 +7,6 @@ Contents:
 
     tutorial
     repository-types
-    kcl
-    capi
 
 Introduction
 ------------

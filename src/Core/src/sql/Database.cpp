@@ -482,7 +482,7 @@ Statement Database::Prepare (const std::string& statement)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-int Database::GetLastRowId()
+std::int64_t Database::GetLastRowId()
 {
 	return impl_->GetLastRowId ();
 }

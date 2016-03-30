@@ -37,11 +37,18 @@ std::vector<FilesetInfo> IRepository::GetFilesetInfos ()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+std::string IRepository::GetFilesetName (const Uuid& id)
+{
+	return GetFilesetNameImpl (id);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 Sql::Database& IRepository::GetDatabase ()
 {
 	return GetDatabaseImpl ();
 }
 
+///////////////////////////////////////////////////////////////////////////////
 std::vector<FilesetInfo> GetFilesetInfoInternal (Sql::Database& db)
 {
 	static const char* querySql =
@@ -66,6 +73,20 @@ std::vector<FilesetInfo> GetFilesetInfoInternal (Sql::Database& db)
 	}
 
 	return result;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::string GetFilesetNameInternal (Sql::Database& db, const Uuid& id)
+{
+	static const char* querySql =
+		"SELECT Name FROM file_sets "
+		"WHERE Uuid = ?";
+
+	auto query = db.Prepare (querySql);
+	query.BindArguments (id);
+	query.Step ();
+
+	return query.GetText (0);
 }
 
 struct LooseRepository::Impl
@@ -198,11 +219,6 @@ public:
 		});
 	}
 
-	std::vector<FilesetInfo> GetFilesetInfos ()
-	{
-		return GetFilesetInfoInternal (db_);
-	}
-
 private:
 	Sql::Database db_;
 	Path path_;
@@ -254,13 +270,19 @@ void LooseRepository::RepairImpl (IRepository& other)
 ///////////////////////////////////////////////////////////////////////////////
 std::vector<FilesetInfo> LooseRepository::GetFilesetInfosImpl ()
 {
-	return impl_->GetFilesetInfos ();
+	return GetFilesetInfoInternal (impl_->GetDatabase ());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 Sql::Database& LooseRepository::GetDatabaseImpl ()
 {
 	return impl_->GetDatabase ();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::string LooseRepository::GetFilesetNameImpl (const Uuid& id)
+{
+	return GetFilesetNameInternal (impl_->GetDatabase (), id);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -381,11 +403,6 @@ public:
 		});
 	}
 
-	std::vector<FilesetInfo> GetFilesetInfos ()
-	{
-		return GetFilesetInfoInternal (db_);
-	}
-
 	void GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjects,
 		const IRepository::GetContentObjectCallback& getCallback)
 	{
@@ -418,7 +435,7 @@ private:
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-void DeployedRepository::CreateFrom (IRepository& other,
+std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (IRepository& other,
 	const ArrayRef<Uuid>& filesets,
 	const Path& targetDirectory)
 {
@@ -532,6 +549,8 @@ void DeployedRepository::CreateFrom (IRepository& other,
 	db.Execute ("ANALYZE");
 
 	db.Close ();
+
+	return std::unique_ptr<DeployedRepository> (new DeployedRepository{ targetDirectory.string ().c_str () });
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -581,13 +600,19 @@ void DeployedRepository::GetContentObjectsImpl (
 ///////////////////////////////////////////////////////////////////////////////
 std::vector<FilesetInfo> DeployedRepository::GetFilesetInfosImpl ()
 {
-	return impl_->GetFilesetInfos ();
+	return GetFilesetInfoInternal (impl_->GetDatabase ());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 Sql::Database& DeployedRepository::GetDatabaseImpl ()
 {
 	return impl_->GetDatabase ();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::string DeployedRepository::GetFilesetNameImpl (const Uuid& id)
+{
+	return GetFilesetNameInternal (impl_->GetDatabase (), id);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -603,13 +628,13 @@ std::unique_ptr<IRepository> OpenRepository (const char* path)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void DeployRepository (IRepository& source,
+std::unique_ptr<IRepository> DeployRepository (IRepository& source,
 	const char* destinationPath,
 	const ArrayRef<Uuid>& filesets)
 {
 	Path targetPath{ destinationPath };
 	boost::filesystem::create_directories (destinationPath);
 
-	DeployedRepository::CreateFrom (source, filesets, targetPath);
+	return DeployedRepository::CreateFrom (source, filesets, targetPath);
 }
 }

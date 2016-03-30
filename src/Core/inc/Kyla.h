@@ -37,17 +37,31 @@ struct kylaValidationItemInfo
 	const char* filename;
 };
 
+typedef struct kylaRepositoryImpl* kylaRepository;
+
+enum kylaRepositoryAccessMode
+{
+	kylaRepositoryAccessMode_Read,
+	kylaRepositoryAccessMode_ReadWrite
+};
+
+int kylaOpenRepository (const char* path,
+	kylaRepositoryAccessMode accessMode,
+	kylaRepository* repository);
+
+int kylaCloseRepository (kylaRepository repository);
+
 typedef void (*KylaValidateCallback)(
 	const int validationResult,
 	const struct kylaValidationItemInfo* info,
 	void* callbackContext);
 
-int kylaValidateRepository (const char* repositoryPath,
+int kylaValidateRepository (kylaRepository repository,
 	KylaValidateCallback validationCallback,
 	void* callbackContext);
 
-int kylaRepairRepository (const char* repositoryPath,
-	const char* sourceRepositoryPath);
+int kylaRepairRepository (kylaRepository targetRepository,
+	kylaRepository sourceRepository);
 
 enum kylaQueryRepositoryKey
 {
@@ -62,14 +76,21 @@ struct kylaFileSetInfo
 	int64_t fileSize;
 };
 
-int kylaQueryRepository (const char* repository,
+int kylaQueryRepository (kylaRepository repository,
 	int query,
-	void* queryContext,
+	const void* queryContext,
 	int* queryResultSize,
 	void* queryResult);
 
-int kylaInstall (const char* repository,
-	const char* destination,
+int kylaInstall (const char* targetPath,
+	kylaRepository sourceRepository,
+	int filesetCount,
+	const uint8_t* const * filesetIds,
+	KylaProgressCallback progressCallback,
+	kylaRepository* repository);
+
+int kylaConfigure (kylaRepository repository,
+	kylaRepository sourceRepository,
 	int filesetCount,
 	const uint8_t* const * filesetIds,
 	KylaProgressCallback progressCallback);

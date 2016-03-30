@@ -116,8 +116,15 @@ int main (int argc, char* argv [])
 			}
 		};
 
-		kylaValidateRepository (vm ["input"].as<std::string> ().c_str (),
+		kylaRepository repository;
+		kylaOpenRepository (vm ["input"].as<std::string> ().c_str (),
+			kylaRepositoryAccessMode_Read,
+			&repository);
+
+		kylaValidateRepository (repository,
 			validationCallback, &context);
+
+		kylaCloseRepository (repository);
 
 		if (vm ["summary"].as<bool> ()) {
 			std::cout << "OK " << ok << " CORRUPTED/MISSING " << errors << std::endl;
@@ -135,14 +142,26 @@ int main (int argc, char* argv [])
 
 		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
 
-		const auto source = vm ["source"].as<std::string> ();
-		const auto target = vm ["target"].as<std::string> ();
+		kylaRepository source;
+		kylaOpenRepository (vm ["source"].as<std::string> ().c_str (),
+			kylaRepositoryAccessMode_Read,
+			&source);
 
-		kylaRepairRepository (target.c_str (), source.c_str ());
+		kylaRepository target;
+		kylaOpenRepository (vm ["target"].as<std::string> ().c_str (),
+			kylaRepositoryAccessMode_ReadWrite,
+			&target);
+
+		kylaRepairRepository (source, target);
+
+		kylaCloseRepository (source);
+		kylaCloseRepository (target);
 	} else if (cmd == "query-filesets") {
 		po::options_description build_desc ("query-filesets options");
 		build_desc.add_options ()
-			("source", po::value<std::string> ());
+			("source", po::value<std::string> ())
+			("name,n", po::bool_switch ()->default_value (false),
+				"query the fileset name as well");
 
 		po::positional_options_description posBuild;
 		posBuild
@@ -150,24 +169,54 @@ int main (int argc, char* argv [])
 
 		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
 
-		const auto source = vm ["source"].as<std::string> ();
+		kylaRepository repository;
+		kylaOpenRepository (vm ["source"].as<std::string> ().c_str (),
+			kylaRepositoryAccessMode_Read,
+			&repository);
 
 		int resultSize = 0;
 
-		kylaQueryRepository (source.c_str (),
+		kylaQueryRepository (repository,
 			kylaQueryRepositoryKey_AvailableFileSets, nullptr,
 			&resultSize, nullptr);
 
 		std::vector<kylaFileSetInfo> filesetInfos (resultSize / sizeof (kylaFileSetInfo));
 
-		kylaQueryRepository (source.c_str (),
+		kylaQueryRepository (repository,
 			kylaQueryRepositoryKey_AvailableFileSets, nullptr,
 			&resultSize, filesetInfos.data ());
 
+		const auto queryName = vm ["name"].as<bool> ();
+
 		for (const auto& info : filesetInfos) {
-			std::cout << ToString (kyla::Uuid{ info.id }) << " " << info.fileCount << " " << info.fileSize << std::endl;
+			if (queryName) {
+				int nameSize = 0;
+
+				kylaQueryRepository (repository,
+					kylaQueryRepositoryKey_GetFileSetName,
+					info.id,
+					&nameSize,
+					nullptr);
+
+				std::vector<char> name;
+				name.resize (nameSize);
+
+				kylaQueryRepository (repository,
+					kylaQueryRepositoryKey_GetFileSetName,
+					info.id,
+					&nameSize,
+					name.data ());
+
+				std::cout << ToString (kyla::Uuid{ info.id }) << " " << name.data ();
+			} else {
+				std::cout << ToString (kyla::Uuid{ info.id });
+			}
+
+			std::cout << " " << info.fileCount << " " << info.fileSize << std::endl;
 		}
-	} else if (cmd == "install") {
+
+		kylaCloseRepository (repository);
+	} else if (cmd == "install" || cmd == "configure") {
 		po::options_description build_desc ("install options");
 		build_desc.add_options ()
 			("source", po::value<std::string> ())
@@ -182,8 +231,17 @@ int main (int argc, char* argv [])
 
 		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
 
-		const auto source = vm ["source"].as<std::string> ();
-		const auto target = vm ["target"].as<std::string> ();
+		kylaRepository source;
+		kylaOpenRepository (vm ["source"].as<std::string> ().c_str (),
+			kylaRepositoryAccessMode_Read,
+			&source);
+
+		kylaRepository target;
+		if (cmd == "configure") {
+			kylaOpenRepository (vm ["target"].as<std::string> ().c_str (),
+				kylaRepositoryAccessMode_Read,
+				&target);
+		}
 
 		const auto filesets = vm ["file-sets"].as<std::vector<std::string>> ();
 
@@ -197,9 +255,21 @@ int main (int argc, char* argv [])
 			filesetPointers.push_back (filesetId.GetData ());
 		}
 
-		kylaInstall (source.c_str (), target.c_str (),
-			static_cast<int> (filesetIds.size ()),
-			filesetPointers.data (),
-			nullptr);
+		if (cmd == "install") {
+			kylaInstall (vm ["target"].as<std::string> ().c_str (),
+				source,
+				static_cast<int> (filesetIds.size ()),
+				filesetPointers.data (),
+				nullptr,
+				&target);
+		} else {
+			kylaConfigure (target, source,
+				static_cast<int> (filesetIds.size ()),
+				filesetPointers.data (),
+				nullptr);
+		}
+
+		kylaCloseRepository (source);
+		kylaCloseRepository (target);
 	}
 }

@@ -41,6 +41,9 @@ struct IRepository
 	void Repair (IRepository& source);
 
 	std::vector<FilesetInfo> GetFilesetInfos ();
+
+	std::string GetFilesetName (const Uuid& filesetId);
+
 	Sql::Database& GetDatabase ();
 
 private:
@@ -50,11 +53,12 @@ private:
 	virtual void RepairImpl (IRepository& source) = 0;
 	virtual std::vector<FilesetInfo> GetFilesetInfosImpl () = 0;
 	virtual Sql::Database& GetDatabaseImpl () = 0;
+	virtual std::string GetFilesetNameImpl (const Uuid& filesetId) = 0;
 };
 
 std::unique_ptr<IRepository> OpenRepository (const char* path);
 
-void DeployRepository (IRepository& source,
+std::unique_ptr<IRepository> DeployRepository (IRepository& source,
 	const char* targetPath,
 	const ArrayRef<Uuid>& selectedFilesets);
 
@@ -76,7 +80,9 @@ private:
 	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) override;
 	void RepairImpl (IRepository& source) override;
+
 	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
+	std::string GetFilesetNameImpl (const Uuid& filesetId) override;
 	Sql::Database& GetDatabaseImpl () override;
 
 	struct Impl;
@@ -95,7 +101,7 @@ public:
 	DeployedRepository (DeployedRepository&& other);
 	DeployedRepository& operator= (DeployedRepository&& other);
 
-	static void CreateFrom (IRepository& other,
+	static std::unique_ptr<DeployedRepository> CreateFrom (IRepository& other,
 		const ArrayRef<Uuid>& filesets,
 		const Path& targetDirectory);
 
@@ -106,6 +112,7 @@ private:
 		const GetContentObjectCallback& getCallback) override;
 
 	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
+	std::string GetFilesetNameImpl (const Uuid& filesetId) override;
 	Sql::Database& GetDatabaseImpl () override;
 
 	struct Impl;

@@ -57,7 +57,7 @@ public:
 
 	void SaveCopyTo (const char* filename) const;
 
-	int GetLastRowId ();
+	std::int64_t GetLastRowId ();
 
 public:
 	struct Impl;
