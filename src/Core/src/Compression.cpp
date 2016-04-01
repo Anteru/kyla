@@ -52,9 +52,13 @@ int ZipBlockCompressor::GetCompressionBoundImpl (const int inputSize) const
 int ZipBlockCompressor::CompressImpl (const ArrayRef<>& input,
 	const MutableArrayRef<>& output) const
 {
-	::uLongf compressedSize = output.GetSize ();
-	::compress (static_cast<::Bytef*> (output.GetData()), &compressedSize,
-			static_cast<const ::Bytef*> (input.GetData ()), input.GetSize ());
+	///@TODO(minor) Check for overflow
+	::uLongf compressedSize = static_cast<uLongf> (output.GetSize ());
+	::compress (
+		static_cast<::Bytef*> (output.GetData()), 
+		&compressedSize,
+		static_cast<const ::Bytef*> (input.GetData ()), 
+		static_cast<uLong> (input.GetSize ()));
 	return compressedSize;
 }
 
@@ -83,5 +87,7 @@ std::unique_ptr<BlockCompressor> CreateBlockCompressor (CompressionMode compress
 	case CompressionMode::Uncompressed:
 		return std::unique_ptr<BlockCompressor> (new NullBlockCompressor);
 	}
+
+	return std::unique_ptr<BlockCompressor> ();
 }
 }

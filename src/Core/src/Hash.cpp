@@ -27,7 +27,7 @@ SHA256Digest ComputeSHA256 (const boost::filesystem::path& p)
 
 ////////////////////////////////////////////////////////////////////////////////
 SHA256Digest ComputeSHA256(const boost::filesystem::path& p,
-	std::vector<byte>& fileReadBuffer)
+	const MutableArrayRef<>& fileReadBuffer)
 {
 	auto input = kyla::OpenFile (p.string ().c_str (), kyla::FileOpenMode::Read);
 
@@ -37,9 +37,9 @@ SHA256Digest ComputeSHA256(const boost::filesystem::path& p,
 	for (;;) {
 		const auto bytesRead = input->Read (fileReadBuffer);
 
-		hasher.Update (ArrayRef<byte> (fileReadBuffer.data (), bytesRead));
+		hasher.Update (ArrayRef<> (fileReadBuffer.GetData (), bytesRead));
 
-		if (bytesRead < fileReadBuffer.size ()) {
+		if (bytesRead < fileReadBuffer.GetSize ()) {
 			break;
 		}
 	}

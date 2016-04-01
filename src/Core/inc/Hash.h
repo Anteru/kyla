@@ -104,7 +104,7 @@ private:
 SHA256Digest ComputeSHA256 (const ArrayRef<>& data);
 SHA256Digest ComputeSHA256 (const boost::filesystem::path& p);
 SHA256Digest ComputeSHA256 (const boost::filesystem::path& p,
-	std::vector<byte>& fileReadBuffer);
+	const MutableArrayRef<>& fileReadBuffer);
 
 template <int Size>
 std::string ToString (const byte (&hash) [Size])

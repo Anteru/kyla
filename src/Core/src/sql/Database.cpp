@@ -128,8 +128,9 @@ public:
 		const std::size_t size, const void* data,
 		const ValueBinding binding)
 	{
+		///@TODO(minor) Check for overflow
 		K_S (sqlite3_bind_blob (static_cast<sqlite3_stmt*>(statement), index,
-			data, size, SQLiteValueBinding (binding)));
+			data, static_cast<int> (size), SQLiteValueBinding (binding)));
 	}
 
 	bool StatementStep (void* statement)

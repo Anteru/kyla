@@ -202,14 +202,14 @@ struct LooseRepositoryBuilder final : public IRepositoryBuilder
 	}
 
 private:
-	std::map<kyla::Path, int> PopulateFileSets (kyla::Sql::Database& db,
+	std::map<kyla::Path, std::int64_t> PopulateFileSets (kyla::Sql::Database& db,
 		const std::vector<FileSet>& fileSets)
 	{
 		auto fileSetsInsert = db.BeginTransaction ();
 		auto fileSetsInsertQuery = db.Prepare (
 			"INSERT INTO file_sets (Uuid, Name) VALUES (?, ?);");
 
-		std::map<kyla::Path, int> result;
+		std::map<kyla::Path, std::int64_t> result;
 
 		for (const auto& fileSet : fileSets) {
 			fileSetsInsertQuery.BindArguments (
@@ -232,7 +232,7 @@ private:
 
 	void PopulateContentObjectsAndFiles (kyla::Sql::Database& db,
 		const std::vector<UniqueContentObjects>& uniqueFiles,
-		const std::map<kyla::Path, int>& fileToFileSetId,
+		const std::map<kyla::Path, std::int64_t>& fileToFileSetId,
 		const kyla::Path& contentObjectPath)
 	{
 		auto contentObjectInsert = db.BeginTransaction ();
