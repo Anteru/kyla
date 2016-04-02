@@ -10,6 +10,7 @@ samples/**/*.tar.xz
 samples/**/*.xml
 samples/glfw/target/**
 samples/glfw/source/**
+samples/glfw/source-fs/**
 samples/**/*.zip
 samples/glfw/glfw-*
 **/__pycache__/*
