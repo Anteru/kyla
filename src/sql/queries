@@ -5,8 +5,9 @@ SELECT SourcePackageId FROM storage_mapping WHERE ContentObjectId IN (SELECT Con
 SELECT SUM(Size) AS TotalSize FROM content_objects WHERE Id IN (SELECT ContentObjectId FROM files WHERE FeatureId IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10))
 
 EXPLAIN QUERY PLAN
-SELECT file_sets.Name, file_sets.Uuid, COUNT(content_objects.Id), SUM(content_objects.size) 
+SELECT file_sets.Name, file_sets.Uuid, COUNT(content_objects.Id), SUM(content_objects.size)
 FROM file_sets INNER JOIN files
 ON file_sets.Id = files.FileSetId
 INNER JOIN content_objects
 ON content_objects.Id = files.ContentObjectId
+GROUP BY file_sets.Uuid

@@ -21,15 +21,15 @@ class PackageType(Enum):
 	Bundle = 2
 
 class FileRepositoryBuilder:
-	def __init__ (self, name=None, version=None):
+	def __init__ (self):
 		self._propertyNode = etree.Element ('Properties')
 		self._root = etree.Element ('FileRespository')
 		self._package = etree.SubElement (self._root, 'Package')
 		self._fileSets = []
+		self._packageType = PackageType.Loose
 
 	def SetPackageType(self, packageType):
-		typeElement = etree.SubElement (self._package, 'Type')
-		typeElement.text = packageType.name
+		self._packageType = packageType
 
 	class FileSetBuilder:
 		def __init__ (self, name, fileSetId = None):
@@ -51,6 +51,10 @@ class FileRepositoryBuilder:
 						fileElement = etree.SubElement (self.__element, 'File')
 						fileElement.set ('Source', os.path.join (prefix, directory, e))
 
+		def AddFile (self, filename, prefix=''):
+			fileElement = etree.SubElement (self.__element, 'File')
+			fileElement.set ('Source', os.path.join (prefix, filename))
+
 		def Get(self):
 			return self.__element
 
@@ -66,6 +70,9 @@ class FileRepositoryBuilder:
 		'''Generate the installer XML and return as a string. The output is
 		already preprocessed.'''
 		self._root.append (self._propertyNode)
+
+		typeElement = etree.SubElement (self._package, 'Type')
+		typeElement.text = self._packageType.name
 
 		fileSets = etree.SubElement (self._root, 'FileSets')
 		for fs in self._fileSets:

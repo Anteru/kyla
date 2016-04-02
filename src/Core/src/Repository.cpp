@@ -56,7 +56,8 @@ std::vector<FilesetInfo> GetFilesetInfoInternal (Sql::Database& db)
 		"FROM file_sets INNER JOIN files "
 		"ON file_sets.Id = files.FileSetId "
 		"INNER JOIN content_objects "
-		"ON content_objects.Id = files.ContentObjectId";
+		"ON content_objects.Id = files.ContentObjectId "
+		"GROUP BY file_sets.Uuid";
 
 	auto query = db.Prepare (querySql);
 
