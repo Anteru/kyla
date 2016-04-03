@@ -96,6 +96,7 @@ class DeployedRepository final : public IRepository
 {
 public:
 	DeployedRepository (const char* path);
+	DeployedRepository (const char* path, const bool enableWriteAccess);
 	~DeployedRepository ();
 
 	DeployedRepository (DeployedRepository&& other);

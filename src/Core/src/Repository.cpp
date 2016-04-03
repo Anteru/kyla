@@ -5,7 +5,7 @@
 #include "Hash.h"
 
 #include "install-db-structure.h"
-#include "install-db-indices.h"
+#include "temp-db-structure.h"
 
 #include <unordered_map>
 #include <set>
@@ -290,8 +290,8 @@ std::string LooseRepository::GetFilesetNameImpl (const Uuid& id)
 struct DeployedRepository::Impl
 {
 public:
-	Impl (const char* path)
-		: db_ (Sql::Database::Open (Path (path) / "k.db"))
+	Impl (const char* path, Sql::OpenMode openMode)
+		: db_ (Sql::Database::Open (Path (path) / "k.db", openMode))
 		, path_ (path)
 	{
 	}
@@ -430,6 +430,144 @@ public:
 		}
 	}
 
+	void Configure (IRepository& other,
+		const ArrayRef<Uuid>& filesets)
+	{
+		// This copies everything over, so we can do joins on source and target
+		// now
+		db_.AttachTemporaryCopy ("source",  other.GetDatabase ());
+
+		db_.Execute ("CREATE TEMPORARY TABLE pending_file_sets "
+			"(Uuid BLOB NOT NULL UNIQUE);");
+
+		{
+			auto transaction = db_.BeginTransaction ();
+			auto insertFilesetQuery = db_.Prepare (
+				"INSERT INTO pending_file_sets (Uuid) VALUES (?);");
+
+			for (const auto& fileset : filesets) {
+				insertFilesetQuery.BindArguments (fileset);
+				insertFilesetQuery.Step ();
+				insertFilesetQuery.Reset ();
+			}
+			transaction.Commit ();
+		}
+
+		// Insert those we don't have yet into our file_sets, but which are
+		// pending
+		db_.Execute (
+			"INSERT INTO file_sets (Name, Uuid) "
+			"SELECT Name, Uuid FROM source.file_sets "
+			"WHERE source.file_sets.Uuid IN (SELECT Uuid FROM pending_file_sets) "
+			"AND NOT source.file_sets.Uuid IN (SELECT Uuid FROM file_sets)");
+
+		// Find all missing content objects in this database
+		std::vector<SHA256Digest> requiredContentObjects;
+
+		{
+			auto diffQuery = db_.Prepare (
+				"SELECT Hash FROM source.content_objects "
+				"INNER JOIN source.files ON "
+				"source.content_objects.Id = source.files.ContentObjectId "
+				"WHERE source.files.FileSetId IN "
+				"(SELECT Id FROM source.file_sets "
+				"WHERE Uuid IN (SELECT Uuid FROM pending_file_sets)) "
+				"AND NOT Hash IN (SELECT Hash FROM main.content_objects)");
+
+			while (diffQuery.Step ()) {
+				SHA256Digest contentObjectHash;
+
+				diffQuery.GetBlob (0, contentObjectHash);
+				requiredContentObjects.push_back (contentObjectHash);
+			}
+		}
+
+		// Fetch the missing ones now and store in the right places
+		other.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
+			const ArrayRef<>& contents) -> void {
+
+			int64 contentObjectId = -1;
+			{
+				auto insertContentObjectQuery = db_.Prepare (
+					"INSERT INTO content_objects (Hash, Size) "
+					"VALUES (?, ?);");
+
+				insertContentObjectQuery.BindArguments (hash, contents.GetSize ());
+				insertContentObjectQuery.Step ();
+
+				contentObjectId = db_.GetLastRowId ();
+			}
+
+			auto insertFileQuery = db_.Prepare (
+				"INSERT INTO files (Path, ContentObjectId, FileSetId) "
+				"SELECT ?, ?, main.file_sets.Id FROM source.files "
+				"INNER JOIN source.content_objects "
+				"ON source.content_objects.Id = source.files.ContentObjectId "
+				"INNER JOIN source.file_sets ON source.file_sets.Id = source.files.FileSetId "
+				"INNER JOIN file_sets ON source.file_sets.Uuid = main.file_sets.Uuid "
+				"WHERE source.content_objects.Hash = ?"
+			);
+
+			auto getTargetFilesQuery = db_.Prepare (
+				"SELECT Path FROM source.files "
+				"WHERE source.files.ContentObjectId = (SELECT Id FROM source.content_objects WHERE source.content_objects.Hash = ?)");
+			getTargetFilesQuery.BindArguments (hash);
+
+			while (getTargetFilesQuery.Step ()) {
+				const Path targetPath{ getTargetFilesQuery.GetText (0) };
+
+				boost::filesystem::create_directories (path_ / targetPath.parent_path ());
+
+				auto file = CreateFile (path_ / targetPath);
+
+				file->SetSize (contents.GetSize ());
+
+				auto pointer = file->Map ();
+				::memcpy (pointer, contents.GetData (), contents.GetSize ());
+				file->Unmap (pointer);
+
+				insertFileQuery.BindArguments (targetPath.string ().c_str (), contentObjectId, hash);
+				insertFileQuery.Step ();
+				insertFileQuery.Reset ();
+			}
+		});
+
+		// We may have files that only require local copies - find those
+		// and execute them now
+		// That is, we search for all files, that are in a pending_file_set,
+		// but not present in our local copy yet (where we would add them above)
+		///@TODO(minor) implement this
+
+		// Delete files
+		{
+			auto unusedFilesQuery = db_.Prepare (
+				"SELECT Path FROM files WHERE FileSetId NOT IN ("
+				"    SELECT FileSetId FROM file_sets WHERE file_sets.Uuid IN "
+				"        (SELECT Uuid FROM pending_file_sets)"
+				"    )"
+			);
+
+			while (unusedFilesQuery.Step ()) {
+				boost::filesystem::remove (Path{ unusedFilesQuery.GetText (0) });
+			}
+		}
+
+		// Remove all unused files now, by removing all files which are not
+		// in a pending fileset, and then all non-pending filesets
+		db_.Execute ("DELETE FROM files "
+			"WHERE FileSetId NOT IN (SELECT FileSetId FROM file_sets WHERE "
+			"file_sets.Uuid IN (SELECT Uuid FROM pending_file_sets))");
+
+		// Now we just delete the content objects
+		db_.Execute ("DELETE FROM content_objects "
+			"WHERE Id IN "
+			"(SELECT Id FROM content_objects_with_reference_count WHERE ReferenceCount = 0)");
+
+		db_.Detach ("source");
+
+		db_.Execute ("ANALYZE");
+	}
+
 private:
 	Sql::Database db_;
 	Path path_;
@@ -443,115 +581,14 @@ std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (IRepository&
 	auto db = Sql::Database::Create ((targetDirectory / "k.db").string ().c_str ());
 
 	db.Execute (install_db_structure);
-	db.Execute (install_db_indices);
-
-	db.Execute ("PRAGMA journal_mode=WAL;");
-	db.Execute ("PRAGMA synchronous=NORMAL;");
-
-	// for each fileset, we find all content objects, and deploy them into
-	// the target
-	{
-		for (const auto& fileset : filesets) {
-			int64 filesetId = -1;
-			int64 localFilesetId = -1;
-
-			// Get the file set Id and insert it into the deploy database as well
-			{
-				auto filesetQuery = other.GetDatabase ().Prepare ("SELECT Id, Name FROM file_sets WHERE Uuid = ?");
-				filesetQuery.BindArguments (fileset);
-				filesetQuery.Step ();
-
-				filesetId = filesetQuery.GetInt64 (0);
-
-				auto insertFilesetQuery = db.Prepare ("INSERT INTO file_sets (Uuid, Name) VALUES (?, ?);");
-				insertFilesetQuery.BindArguments (fileset, filesetQuery.GetText (1));
-				insertFilesetQuery.Step ();
-
-				localFilesetId = db.GetLastRowId ();
-			}
-
-			auto query = other.GetDatabase ().Prepare ("SELECT Hash, Path FROM files "
-				"INNER JOIN content_objects ON content_objects.Id = files.ContentObjectId "
-				"WHERE FileSetId=? ORDER BY ContentObjectId");
-			query.BindArguments (filesetId);
-
-			std::unordered_multimap<SHA256Digest, Path, HashDigestHash, HashDigestEqual> contentObjectToFiles;
-			std::vector<SHA256Digest> uniqueContentObjects;
-			///@TODO(minor) Make this an unordered_set - there's a hash for path,
-			/// it's just not hooked up automatically
-			std::set<Path> uniquePaths;
-
-			// Iterate over all files in this file set
-			while (query.Step ()) {
-				SHA256Digest hash;
-				query.GetBlob (0, hash);
-				
-				const Path path{ query.GetText (1) };
-
-				if (contentObjectToFiles.find (hash) == contentObjectToFiles.end ()) {
-					uniqueContentObjects.push_back (hash);
-				}
-
-				contentObjectToFiles.insert (std::make_pair (hash, path));
-
-				uniquePaths.insert (path.parent_path ());
-			}
-
-			// Create directories
-			{
-				for (const auto& dir : uniquePaths) {
-					boost::filesystem::create_directories (targetDirectory / dir);
-				}
-			}
-
-			other.GetContentObjects (uniqueContentObjects, [&](const SHA256Digest& hash,
-				const ArrayRef<>& contents) -> void {
-
-				auto range = contentObjectToFiles.equal_range (hash);
-
-				int64 contentObjectId = -1;
-				{
-					auto insertContentObjectQuery = db.Prepare (
-						"INSERT INTO content_objects (Hash, Size) "
-						"VALUES (?, ?);");
-
-					insertContentObjectQuery.BindArguments (hash, contents.GetSize ());
-					insertContentObjectQuery.Step ();
-
-					contentObjectId = db.GetLastRowId ();
-				}
-
-				for (auto it = range.first; it != range.second; ++it) {
-					auto file = CreateFile (targetDirectory / it->second);
-
-					file->SetSize (contents.GetSize ());
-
-					auto pointer = file->Map ();
-					::memcpy (pointer, contents.GetData (), contents.GetSize ());
-					file->Unmap (pointer);
-
-					{
-						auto insertFileQuery = db.Prepare (
-							"INSERT INTO files (ContentObjectId, Path, FileSetId) "
-							"SELECT content_objects.Id, ?, ? "
-							"FROM content_objects "
-							"WHERE content_objects.Hash = ?");
-
-						insertFileQuery.BindArguments (it->second.string (), 
-							localFilesetId, hash);
-						insertFileQuery.Step ();
-					}
-				}
-			});
-		}
-	}
-
-	db.Execute ("PRAGMA journal_mode=DELETE;");
-	db.Execute ("ANALYZE");
 
 	db.Close ();
 
-	return std::unique_ptr<DeployedRepository> (new DeployedRepository{ targetDirectory.string ().c_str () });
+	std::unique_ptr<DeployedRepository> result (new DeployedRepository{ targetDirectory.string ().c_str (), true });
+
+	result->impl_->Configure (other, filesets);
+
+	return std::move (result);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -561,7 +598,13 @@ DeployedRepository::~DeployedRepository ()
 
 ///////////////////////////////////////////////////////////////////////////////
 DeployedRepository::DeployedRepository (const char* path)
-	: impl_ (new Impl { path })
+	: DeployedRepository (path, false)
+{
+}
+
+///////////////////////////////////////////////////////////////////////////////
+DeployedRepository::DeployedRepository (const char* path, const bool allowWriteAccess)
+	: impl_ (new Impl{ path, allowWriteAccess ? Sql::OpenMode::ReadWrite : Sql::OpenMode::Read })
 {
 }
 

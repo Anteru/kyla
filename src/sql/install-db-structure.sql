@@ -9,7 +9,7 @@ CREATE TABLE content_objects (
 -- All file sets stored in this repository
 CREATE TABLE file_sets (
     Id INTEGER PRIMARY KEY NOT NULL,
-    Uuid BLOB NOT NULL,
+    Uuid BLOB NOT NULL UNIQUE,
     Name VARCHAR NOT NULL UNIQUE);
 
 CREATE TABLE files (Path TEXT PRIMARY KEY NOT NULL,
@@ -42,6 +42,11 @@ CREATE TABLE properties (
     Name VARCHAR PRIMARY KEY,
     Value NOT NULL
 );
+
+CREATE INDEX files_file_set_id_idx ON files (FileSetId ASC);
+CREATE INDEX storage_mapping_content_object_id_idx ON storage_mapping (ContentObjectId ASC);
+CREATE INDEX content_object_hash_idx ON content_objects (Hash ASC);
+CREATE INDEX files_path_idx ON files (Path ASC);
 
 CREATE VIEW content_objects_with_reference_count
     AS SELECT Id, Hash, Size, (SELECT COUNT(*) FROM files WHERE ContentObjectId=Id) AS ReferenceCount

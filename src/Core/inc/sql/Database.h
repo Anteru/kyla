@@ -59,6 +59,9 @@ public:
 
 	std::int64_t GetLastRowId ();
 
+	void AttachTemporaryCopy (const char* name, Database& source);
+	void Detach (const char* name);
+
 public:
 	struct Impl;
 

@@ -228,6 +228,29 @@ public:
 		return sqlite3_last_insert_rowid (db_);
 	}
 
+	void AttachTemporaryCopy (Impl* other, const char* name)
+	{
+		std::string sql = "ATTACH DATABASE ':memory:' AS ";
+		sql += name;
+		K_S (sqlite3_exec (db_, sql.c_str (), nullptr, nullptr, nullptr));
+
+		auto backup = sqlite3_backup_init (db_, name, other->db_, "main");
+
+		if (backup == nullptr) {
+			OnSQLiteError (sqlite3_errcode (db_), sqlite3_errmsg (db_));
+		}
+
+		K_S (sqlite3_backup_step (backup, -1));
+		K_S (sqlite3_backup_finish (backup));
+	}
+
+	void Detach (const char* name)
+	{
+		std::string sql = "DETACH DATABASE ";
+		sql += name;
+		sqlite3_exec (db_, sql.c_str (), nullptr, nullptr, nullptr);
+	}
+
 private:
 	// Returns a function pointer to a void (void*) function
 	static void(*SQLiteValueBinding(const ValueBinding binding))(void*)
@@ -486,6 +509,18 @@ Statement Database::Prepare (const std::string& statement)
 std::int64_t Database::GetLastRowId()
 {
 	return impl_->GetLastRowId ();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void Database::AttachTemporaryCopy (const char* name, Database & source)
+{
+	impl_->AttachTemporaryCopy (source.impl_.get (), name);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void Database::Detach (const char * name)
+{
+	impl_->Detach (name);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

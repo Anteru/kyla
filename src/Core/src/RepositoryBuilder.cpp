@@ -21,7 +21,6 @@
 #include "Log.h"
 
 #include "install-db-structure.h"
-#include "install-db-indices.h"
 
 #include <map>
 
@@ -189,7 +188,6 @@ struct LooseRepositoryBuilder final : public IRepositoryBuilder
 			dbFile.string ().c_str ());
 
 		db.Execute (install_db_structure);
-		db.Execute (install_db_indices);
 
 		const auto fileToFileSetId = PopulateFileSets (db, fileSets);
 		PopulateContentObjectsAndFiles (db, uniqueFiles, fileToFileSetId,

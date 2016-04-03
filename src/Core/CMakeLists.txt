@@ -11,16 +11,16 @@ ADD_CUSTOM_COMMAND(
 
 ADD_CUSTOM_COMMAND(
 	OUTPUT
-		${CMAKE_CURRENT_BINARY_DIR}/install-db-indices.h
+		${CMAKE_CURRENT_BINARY_DIR}/temp-db-structure.h
 	COMMAND
-		txttoheader install_db_indices ${kyla_SOURCE_DIR}/sql/install-db-indices.sql > ${CMAKE_CURRENT_BINARY_DIR}/install-db-indices.h
+		txttoheader temp_db_structure ${kyla_SOURCE_DIR}/sql/temp-db-structure.sql > ${CMAKE_CURRENT_BINARY_DIR}/temp-db-structure.h
 	DEPENDS
-		${kyla_SOURCE_DIR}/sql/install-db-indices.sql
+		${kyla_SOURCE_DIR}/sql/temp-db-structure.sql
 	)
 
 SET(HEADERS
 	${CMAKE_CURRENT_BINARY_DIR}/install-db-structure.h
-	${CMAKE_CURRENT_BINARY_DIR}/install-db-indices.h
+	${CMAKE_CURRENT_BINARY_DIR}/temp-db-structure.h
 
 	inc/sql/Database.h
 	inc/ArrayAdapter.h
