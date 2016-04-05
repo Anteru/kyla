@@ -56,7 +56,8 @@ private:
 	virtual std::string GetFilesetNameImpl (const Uuid& filesetId) = 0;
 };
 
-std::unique_ptr<IRepository> OpenRepository (const char* path);
+std::unique_ptr<IRepository> OpenRepository (const char* path,
+	const bool allowReadAccess);
 
 std::unique_ptr<IRepository> DeployRepository (IRepository& source,
 	const char* targetPath,
@@ -105,6 +106,9 @@ public:
 	static std::unique_ptr<DeployedRepository> CreateFrom (IRepository& other,
 		const ArrayRef<Uuid>& filesets,
 		const Path& targetDirectory);
+
+	void Configure (IRepository& other,
+		const ArrayRef<Uuid>& filesets);
 
 private:
 	void ValidateImpl (const ValidationCallback& validationCallback) override;

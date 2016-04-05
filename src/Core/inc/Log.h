@@ -2,8 +2,10 @@
 #define KYLA_CORE_INTERNAL_LOG_H
 
 #include <spdlog.h>
-#include <sinks/file_sinks.h>
-#include <sinks/null_sink.h>
+
+#ifdef CreateFile
+#undef CreateFile
+#endif
 
 namespace kyla {
 enum class LogLevel
@@ -19,32 +21,7 @@ class Log
 {
 public:
 	Log (const char* name, const char* filename = nullptr,
-		 const LogLevel logLevel = LogLevel::Info)
-	{
-		if (filename) {
-			log_ = spdlog::create<spdlog::sinks::simple_file_sink_mt> (name,
-				filename);
-				switch (logLevel) {
-				case LogLevel::Trace:
-					log_->set_level (spdlog::level::trace);
-					break;
-				case LogLevel::Debug:
-					log_->set_level (spdlog::level::debug);
-					break;
-				case LogLevel::Info:
-					log_->set_level (spdlog::level::info);
-					break;
-				case LogLevel::Warning:
-					log_->set_level (spdlog::level::warn);
-					break;
-				case LogLevel::Error:
-					log_->set_level (spdlog::level::err);
-					break;
-				}
-		} else {
-			log_ = spdlog::create<spdlog::sinks::null_sink_mt> (name);
-		}
-	}
+		const LogLevel logLevel = LogLevel::Info);
 
 	spdlog::details::line_logger Trace ()
 	{

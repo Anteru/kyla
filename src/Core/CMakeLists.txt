@@ -47,6 +47,7 @@ SET(SOURCES
 	src/FileIO.cpp
 	src/Hash.cpp
 	src/Kyla.cpp
+	src/Log.cpp
 	src/Repository.cpp
 	src/RepositoryBuilder.cpp
 	src/StringRef.cpp

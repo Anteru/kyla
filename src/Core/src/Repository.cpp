@@ -3,6 +3,7 @@
 #include "sql/Database.h"
 #include "FileIO.h"
 #include "Hash.h"
+#include "Log.h"
 
 #include "install-db-structure.h"
 #include "temp-db-structure.h"
@@ -433,10 +434,16 @@ public:
 	void Configure (IRepository& other,
 		const ArrayRef<Uuid>& filesets)
 	{
+		// This log won't log actually - no filename means it's a null log
+		Log log{ "kyla.Configure", nullptr, LogLevel::Trace };
+
 		// This copies everything over, so we can do joins on source and target
-		// now
+		// now. Assumes the source contains all file sets, content objects and
+		// files we're about to configure
 		db_.AttachTemporaryCopy ("source",  other.GetDatabase ());
 
+		// Store the file sets we're going to install in a temporary table for
+		// joins, etc.
 		db_.Execute ("CREATE TEMPORARY TABLE pending_file_sets "
 			"(Uuid BLOB NOT NULL UNIQUE);");
 
@@ -445,11 +452,16 @@ public:
 			auto insertFilesetQuery = db_.Prepare (
 				"INSERT INTO pending_file_sets (Uuid) VALUES (?);");
 
+			log.Debug () << "Configuring filesets";
+
 			for (const auto& fileset : filesets) {
 				insertFilesetQuery.BindArguments (fileset);
 				insertFilesetQuery.Step ();
 				insertFilesetQuery.Reset ();
+
+				log.Debug () << "Preparing to configure fileset: '" << ToString (fileset) << "'";
 			}
+
 			transaction.Commit ();
 		}
 
@@ -466,7 +478,7 @@ public:
 
 		{
 			auto diffQuery = db_.Prepare (
-				"SELECT Hash FROM source.content_objects "
+				"SELECT DISTINCT Hash FROM source.content_objects "
 				"INNER JOIN source.files ON "
 				"source.content_objects.Id = source.files.ContentObjectId "
 				"WHERE source.files.FileSetId IN "
@@ -479,12 +491,17 @@ public:
 
 				diffQuery.GetBlob (0, contentObjectHash);
 				requiredContentObjects.push_back (contentObjectHash);
+
+				log.Debug () << "Discovered content object '" << ToString (contentObjectHash) << "'";
 			}
 		}
 
 		// Fetch the missing ones now and store in the right places
 		other.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
 			const ArrayRef<>& contents) -> void {
+			auto transaction = db_.BeginTransaction ();
+
+			log.Debug () << "Received content object '" << ToString (hash) << "'";
 
 			int64 contentObjectId = -1;
 			{
@@ -496,25 +513,28 @@ public:
 				insertContentObjectQuery.Step ();
 
 				contentObjectId = db_.GetLastRowId ();
+
+				log.Debug () << "Stored content object in database with id " << contentObjectId;
 			}
 
 			auto insertFileQuery = db_.Prepare (
-				"INSERT INTO files (Path, ContentObjectId, FileSetId) "
+				"INSERT INTO main.files (Path, ContentObjectId, FileSetId) "
 				"SELECT ?, ?, main.file_sets.Id FROM source.files "
-				"INNER JOIN source.content_objects "
-				"ON source.content_objects.Id = source.files.ContentObjectId "
 				"INNER JOIN source.file_sets ON source.file_sets.Id = source.files.FileSetId "
 				"INNER JOIN file_sets ON source.file_sets.Uuid = main.file_sets.Uuid "
-				"WHERE source.content_objects.Hash = ?"
+				"WHERE source.files.path = ?"
 			);
 
 			auto getTargetFilesQuery = db_.Prepare (
 				"SELECT Path FROM source.files "
 				"WHERE source.files.ContentObjectId = (SELECT Id FROM source.content_objects WHERE source.content_objects.Hash = ?)");
+
 			getTargetFilesQuery.BindArguments (hash);
 
 			while (getTargetFilesQuery.Step ()) {
 				const Path targetPath{ getTargetFilesQuery.GetText (0) };
+
+				log.Debug () << "Creating file '" << targetPath.string () << "'";
 
 				boost::filesystem::create_directories (path_ / targetPath.parent_path ());
 
@@ -526,42 +546,109 @@ public:
 				::memcpy (pointer, contents.GetData (), contents.GetSize ());
 				file->Unmap (pointer);
 
-				insertFileQuery.BindArguments (targetPath.string ().c_str (), contentObjectId, hash);
+				insertFileQuery.BindArguments (targetPath.string (), contentObjectId, targetPath.string ());
 				insertFileQuery.Step ();
 				insertFileQuery.Reset ();
+
+				log.Debug () << "Stored file '" << targetPath.string () << "'";
 			}
+
+			transaction.Commit ();
 		});
 
 		// We may have files that only require local copies - find those
 		// and execute them now
 		// That is, we search for all files, that are in a pending_file_set,
-		// but not present in our local copy yet (where we would add them above)
-		///@TODO(minor) implement this
+		// but not present in our local copy yet (those haven't been added in
+		// the loop above because we specifically excluded objects for which
+		// we already have the content.)
+		{
+			auto transaction = db_.BeginTransaction ();
+
+			auto diffQuery = db_.Prepare (
+				"SELECT Path, Hash FROM source.content_objects "
+				"INNER JOIN source.files ON "
+				"source.content_objects.Id = source.files.ContentObjectId "
+				"WHERE source.files.FileSetId IN "
+				"(SELECT Id FROM source.file_sets "
+				"WHERE Uuid IN (SELECT Uuid FROM pending_file_sets)) "
+				"AND NOT Path IN (SELECT Path FROM main.files)");
+
+			auto exemplarQuery = db_.Prepare (
+				"SELECT Path, Id FROM files "
+				"INNER JOIN content_objects ON files.ContentObjectId = content_objects.Id "
+				"WHERE Hash=?");
+
+			auto insertFileQuery = db_.Prepare (
+				"INSERT INTO main.files (Path, ContentObjectId, FileSetId) "
+				"SELECT ?, ?, main.file_sets.Id FROM source.files "
+				"INNER JOIN source.file_sets ON source.file_sets.Id = source.files.FileSetId "
+				"INNER JOIN file_sets ON source.file_sets.Uuid = main.file_sets.Uuid "
+				"WHERE source.files.path = ?"
+			);
+
+			while (diffQuery.Step ()) {
+				SHA256Digest hash;
+				diffQuery.GetBlob (1, hash);
+
+				const Path path{ diffQuery.GetText (0) };
+				boost::filesystem::create_directories (path_ / path.parent_path ());
+
+				exemplarQuery.BindArguments (hash);
+				exemplarQuery.Step ();
+
+				const Path exemplarPath{ exemplarQuery.GetText (0) };
+				boost::filesystem::copy_file (path_ / exemplarPath, path_ / path);
+
+				insertFileQuery.BindArguments (path.string (), 
+					exemplarQuery.GetInt64 (1), path.string ());
+
+				exemplarQuery.Reset ();
+
+				log.Debug () << "Copied file '" << exemplarPath.string () << "' to '" << path.string () << "'";
+			}
+
+			transaction.Commit ();
+		}
 
 		// Delete files
 		{
 			auto unusedFilesQuery = db_.Prepare (
 				"SELECT Path FROM files WHERE FileSetId NOT IN ("
-				"    SELECT FileSetId FROM file_sets WHERE file_sets.Uuid IN "
+				"    SELECT Id FROM file_sets WHERE file_sets.Uuid IN "
 				"        (SELECT Uuid FROM pending_file_sets)"
 				"    )"
 			);
 
 			while (unusedFilesQuery.Step ()) {
 				boost::filesystem::remove (Path{ unusedFilesQuery.GetText (0) });
+
+				log.Debug () << "Deleted '" << unusedFilesQuery.GetText (0) << "'";
 			}
 		}
 
-		// Remove all unused files now, by removing all files which are not
-		// in a pending fileset, and then all non-pending filesets
+		// The order here is files, file_sets, content_objects, to keep
+		// referential integrity at all times
+
+		// Remove all unused files from database, by removing all files which 
+		// are not in a pending fileset, and then all non-pending filesets
 		db_.Execute ("DELETE FROM files "
-			"WHERE FileSetId NOT IN (SELECT FileSetId FROM file_sets WHERE "
+			"WHERE FileSetId NOT IN (SELECT Id FROM file_sets WHERE "
 			"file_sets.Uuid IN (SELECT Uuid FROM pending_file_sets))");
+
+		log.Debug () << "Deleted unused files from repository";
+
+		db_.Execute ("DELETE FROM file_sets "
+			"WHERE file_sets.Uuid NOT IN (SELECT Uuid FROM pending_file_sets)");
+
+		log.Debug () << "Deleted unused file sets from repository";
 
 		// Now we just delete the content objects
 		db_.Execute ("DELETE FROM content_objects "
 			"WHERE Id IN "
 			"(SELECT Id FROM content_objects_with_reference_count WHERE ReferenceCount = 0)");
+
+		log.Debug () << "Deleted unused content objects from repository";
 
 		db_.Detach ("source");
 
@@ -660,14 +747,23 @@ std::string DeployedRepository::GetFilesetNameImpl (const Uuid& id)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<IRepository> OpenRepository (const char* path)
+void DeployedRepository::Configure (IRepository& other,
+	const ArrayRef<Uuid>& filesets)
+{
+	impl_->Configure (other, filesets);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::unique_ptr<IRepository> OpenRepository (const char* path,
+	const bool allowWrite)
 {
 	if (boost::filesystem::exists (Path{ path } / Path{ ".ky" })) {
 		// .ky indicates a loose repository
 		return std::unique_ptr<IRepository> (new LooseRepository{ path });
 	} else {
 		// Assume deployed repository for now
-		return std::unique_ptr<IRepository> (new DeployedRepository{ path });
+		return std::unique_ptr<IRepository> (new DeployedRepository{ path,
+		allowWrite });
 	}
 }
 

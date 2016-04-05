@@ -239,7 +239,7 @@ int main (int argc, char* argv [])
 		kylaRepository target;
 		if (cmd == "configure") {
 			kylaOpenRepository (vm ["target"].as<std::string> ().c_str (),
-				kylaRepositoryAccessMode_Read,
+				kylaRepositoryAccessMode_ReadWrite,
 				&target);
 		}
 

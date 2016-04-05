@@ -187,12 +187,15 @@ struct LooseRepositoryBuilder final : public IRepositoryBuilder
 		auto db = kyla::Sql::Database::Create (
 			dbFile.string ().c_str ());
 
-		db.Execute (install_db_structure);
+		db.Execute (install_db_structure); 
+		db.Execute ("PRAGMA journal_mode=WAL;");
+		db.Execute ("PRAGMA synchronous=NORMAL;");
 
 		const auto fileToFileSetId = PopulateFileSets (db, fileSets);
 		PopulateContentObjectsAndFiles (db, uniqueFiles, fileToFileSetId,
 			ctx.targetDirectory / ".ky" / "objects");
 
+		db.Execute ("PRAGMA journal_mode=DELETE;");
 		// Necessary to get good index statistics
 		db.Execute ("ANALYZE");
 

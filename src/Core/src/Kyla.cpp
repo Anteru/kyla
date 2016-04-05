@@ -171,11 +171,9 @@ int kylaOpenRepository (const char* path,
 	if (repository == nullptr) {
 		return kylaResult_ErrorInvalidArgument;
 	}
-
-	///@TODO(minor) Pass on the access mode
-
+	
 	kylaRepository repo = new kylaRepositoryImpl;
-	repo->p = kyla::OpenRepository (path);
+	repo->p = kyla::OpenRepository (path, accessMode == kylaRepositoryAccessMode_ReadWrite);
 
 	*repository = repo;
 
@@ -290,8 +288,11 @@ int kylaConfigure (kylaRepository targetRepository,
 		filesetIds [i] = kyla::Uuid{ pFilesetIds [i] };
 	}
 
-	///@TODO(major) Implement configure
-	// Configure here
+	// The target repository must be a deployed repository
+	///@TODO(minor) Fix this to go through a global configure which bails out
+	/// if not supported
+	static_cast<kyla::DeployedRepository*> (targetRepository->p.get ())->Configure (
+		*sourceRepository->p, filesetIds);
 
 	return kylaResult_Ok;
 
