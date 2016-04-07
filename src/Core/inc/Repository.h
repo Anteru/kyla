@@ -40,6 +40,9 @@ struct IRepository
 
 	void Repair (IRepository& source);
 
+	void Configure (IRepository& other,
+		const ArrayRef<Uuid>& filesets);
+
 	std::vector<FilesetInfo> GetFilesetInfos ();
 
 	std::string GetFilesetName (const Uuid& filesetId);
@@ -54,6 +57,8 @@ private:
 	virtual std::vector<FilesetInfo> GetFilesetInfosImpl () = 0;
 	virtual Sql::Database& GetDatabaseImpl () = 0;
 	virtual std::string GetFilesetNameImpl (const Uuid& filesetId) = 0;
+	virtual void ConfigureImpl (IRepository& other,
+		const ArrayRef<Uuid>& filesets) = 0;
 };
 
 std::unique_ptr<IRepository> OpenRepository (const char* path,
@@ -81,6 +86,8 @@ private:
 	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) override;
 	void RepairImpl (IRepository& source) override;
+	void ConfigureImpl (IRepository& other,
+		const ArrayRef<Uuid>& filesets) override;
 
 	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
 	std::string GetFilesetNameImpl (const Uuid& filesetId) override;
@@ -107,14 +114,13 @@ public:
 		const ArrayRef<Uuid>& filesets,
 		const Path& targetDirectory);
 
-	void Configure (IRepository& other,
-		const ArrayRef<Uuid>& filesets);
-
 private:
 	void ValidateImpl (const ValidationCallback& validationCallback) override;
 	void RepairImpl (IRepository& source) override;
 	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) override;
+	void ConfigureImpl (IRepository& other,
+		const ArrayRef<Uuid>& filesets) override;
 
 	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
 	std::string GetFilesetNameImpl (const Uuid& filesetId) override;

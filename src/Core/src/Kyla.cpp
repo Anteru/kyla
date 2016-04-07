@@ -288,11 +288,7 @@ int kylaConfigure (kylaRepository targetRepository,
 		filesetIds [i] = kyla::Uuid{ pFilesetIds [i] };
 	}
 
-	// The target repository must be a deployed repository
-	///@TODO(minor) Fix this to go through a global configure which bails out
-	/// if not supported
-	static_cast<kyla::DeployedRepository*> (targetRepository->p.get ())->Configure (
-		*sourceRepository->p, filesetIds);
+	targetRepository->p->Configure (*sourceRepository->p, filesetIds);
 
 	return kylaResult_Ok;
 

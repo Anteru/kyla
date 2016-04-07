@@ -1,6 +1,7 @@
 #include "Repository.h"
 
 #include "sql/Database.h"
+#include "Exception.h"
 #include "FileIO.h"
 #include "Hash.h"
 #include "Log.h"
@@ -19,9 +20,15 @@ void IRepository::Validate (const ValidationCallback& validationCallback)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void IRepository::Repair (IRepository& other)
+void IRepository::Repair (IRepository& source)
 {
-	RepairImpl (other);
+	RepairImpl (source);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void IRepository::Configure (IRepository& source, const ArrayRef<Uuid>& filesets)
+{
+	ConfigureImpl (source, filesets);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -190,10 +197,10 @@ public:
 		}
 	}
 	
-	void Repair (IRepository& other)
+	void Repair (IRepository& source)
 	{
 		// We use the validation logic here to find missing content objects
-		// and fetch them from the other repository
+		// and fetch them from the source repository
 		///@TODO(major) Handle the case that the database itself is corrupted
 		/// In this case, we should probably prompt and ask what file sets need
 		/// to be recovered.
@@ -207,7 +214,7 @@ public:
 			}
 		});
 
-		other.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
+		source.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
 			const ArrayRef<>& contents) -> void {
 			const auto filePath = Path{ path_ } / Path{ ".ky" }
 				/ Path{ "objects" } / ToString (hash);
@@ -264,9 +271,16 @@ void LooseRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& reque
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void LooseRepository::RepairImpl (IRepository& other)
+void LooseRepository::RepairImpl (IRepository& source)
 {
-	impl_->Repair (other);
+	impl_->Repair (source);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void LooseRepository::ConfigureImpl (IRepository& /*source*/, 
+	const ArrayRef<Uuid>& /*filesets*/)
+{
+	throw RuntimeException ("Not implemented", KYLA_FILE_LINE);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -361,10 +375,10 @@ public:
 		}
 	}
 
-	void Repair (IRepository& other)
+	void Repair (IRepository& source)
 	{
 		// We use the validation logic here to find missing content objects
-		// and fetch them from the other repository
+		// and fetch them from the source repository
 		///@TODO(major) Handle the case that the database itself is corrupted
 		/// In this case, we should probably prompt and ask what file sets need
 		/// to be recovered.
@@ -388,7 +402,7 @@ public:
 			}
 		});
 
-		other.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
+		source.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
 			const ArrayRef<>& contents) -> void {
 			// We lookup all paths from the map here - could do a query as well
 			// but as we built it anyway during validation, we reuse that
@@ -431,16 +445,28 @@ public:
 		}
 	}
 
-	void Configure (IRepository& other,
+	void Configure (IRepository& source,
 		const ArrayRef<Uuid>& filesets)
 	{
 		// This log won't log actually - no filename means it's a null log
 		Log log{ "kyla.Configure", nullptr, LogLevel::Trace };
 
+		// We start by cleaning up all content objects which are not referenced
+		// A deployed repository needs at least one file referencing a
+		// content object, otherwise, the content object is missing. This
+		// allows us to process partially uninstalled repositories (or a
+		// repository that has been recovered.)
+		db_.Execute (
+			"DELETE FROM content_objects WHERE "
+			"Id IN ("
+			"SELECT Id from content_objects_with_reference_count "
+			"WHERE ReferenceCount=0"
+			");");
+
 		// This copies everything over, so we can do joins on source and target
 		// now. Assumes the source contains all file sets, content objects and
 		// files we're about to configure
-		db_.AttachTemporaryCopy ("source",  other.GetDatabase ());
+		db_.AttachTemporaryCopy ("source",  source.GetDatabase ());
 
 		// Store the file sets we're going to install in a temporary table for
 		// joins, etc.
@@ -497,7 +523,7 @@ public:
 		}
 
 		// Fetch the missing ones now and store in the right places
-		other.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
+		source.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
 			const ArrayRef<>& contents) -> void {
 			auto transaction = db_.BeginTransaction ();
 
@@ -611,7 +637,10 @@ public:
 			transaction.Commit ();
 		}
 
-		// Delete files
+		// The order here is files, file_sets, content_objects, to keep
+		// referential integrity at all times
+
+		// files
 		{
 			auto unusedFilesQuery = db_.Prepare (
 				"SELECT Path FROM files WHERE FileSetId NOT IN ("
@@ -620,30 +649,31 @@ public:
 				"    )"
 			);
 
+			auto deleteFileQuery = db_.Prepare (
+				"DELETE FROM files WHERE Path=?");
+
 			while (unusedFilesQuery.Step ()) {
+				deleteFileQuery.BindArguments (unusedFilesQuery.GetText (0));
+				deleteFileQuery.Step ();
+				deleteFileQuery.Reset ();
+
 				boost::filesystem::remove (Path{ unusedFilesQuery.GetText (0) });
 
 				log.Debug () << "Deleted '" << unusedFilesQuery.GetText (0) << "'";
 			}
+
+			log.Debug () << "Deleted unused files from repository";
 		}
 
-		// The order here is files, file_sets, content_objects, to keep
-		// referential integrity at all times
+		// file_sets
+		{
+			db_.Execute ("DELETE FROM file_sets "
+				"WHERE file_sets.Uuid NOT IN (SELECT Uuid FROM pending_file_sets)");
 
-		// Remove all unused files from database, by removing all files which 
-		// are not in a pending fileset, and then all non-pending filesets
-		db_.Execute ("DELETE FROM files "
-			"WHERE FileSetId NOT IN (SELECT Id FROM file_sets WHERE "
-			"file_sets.Uuid IN (SELECT Uuid FROM pending_file_sets))");
+			log.Debug () << "Deleted unused file sets from repository";
+		}
 
-		log.Debug () << "Deleted unused files from repository";
-
-		db_.Execute ("DELETE FROM file_sets "
-			"WHERE file_sets.Uuid NOT IN (SELECT Uuid FROM pending_file_sets)");
-
-		log.Debug () << "Deleted unused file sets from repository";
-
-		// Now we just delete the content objects
+		// content objects
 		db_.Execute ("DELETE FROM content_objects "
 			"WHERE Id IN "
 			"(SELECT Id FROM content_objects_with_reference_count WHERE ReferenceCount = 0)");
@@ -661,7 +691,7 @@ private:
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (IRepository& other,
+std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (IRepository& source,
 	const ArrayRef<Uuid>& filesets,
 	const Path& targetDirectory)
 {
@@ -673,7 +703,7 @@ std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (IRepository&
 
 	std::unique_ptr<DeployedRepository> result (new DeployedRepository{ targetDirectory.string ().c_str (), true });
 
-	result->impl_->Configure (other, filesets);
+	result->impl_->Configure (source, filesets);
 
 	return std::move (result);
 }
@@ -715,9 +745,9 @@ void DeployedRepository::ValidateImpl (const ValidationCallback& validationCallb
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void DeployedRepository::RepairImpl (IRepository& other)
+void DeployedRepository::RepairImpl (IRepository& source)
 {
-	impl_->Repair (other);
+	impl_->Repair (source);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -726,6 +756,13 @@ void DeployedRepository::GetContentObjectsImpl (
 	const GetContentObjectCallback& getCallback)
 {
 	impl_->GetContentObjects (requestedObjects, getCallback);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void DeployedRepository::ConfigureImpl (IRepository& source, 
+	const ArrayRef<Uuid>& filesets)
+{
+	impl_->Configure (source, filesets);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -744,13 +781,6 @@ Sql::Database& DeployedRepository::GetDatabaseImpl ()
 std::string DeployedRepository::GetFilesetNameImpl (const Uuid& id)
 {
 	return GetFilesetNameInternal (impl_->GetDatabase (), id);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-void DeployedRepository::Configure (IRepository& other,
-	const ArrayRef<Uuid>& filesets)
-{
-	impl_->Configure (other, filesets);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
