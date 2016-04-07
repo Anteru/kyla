@@ -152,7 +152,7 @@ int main (int argc, char* argv [])
 			kylaRepositoryAccessMode_ReadWrite,
 			&target);
 
-		kylaRepairRepository (source, target);
+		kylaRepairRepository (source, target, nullptr, nullptr);
 
 		kylaCloseRepository (source);
 		kylaCloseRepository (target);
@@ -260,13 +260,13 @@ int main (int argc, char* argv [])
 				source,
 				static_cast<int> (filesetIds.size ()),
 				filesetPointers.data (),
-				nullptr,
+				nullptr, nullptr,
 				&target);
 		} else {
 			kylaConfigure (target, source,
 				static_cast<int> (filesetIds.size ()),
 				filesetPointers.data (),
-				nullptr);
+				nullptr, nullptr);
 		}
 
 		kylaCloseRepository (source);

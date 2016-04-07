@@ -63,7 +63,9 @@ int kylaValidateRepository (kylaRepository repository,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaRepairRepository (kylaRepository target, kylaRepository source)
+int kylaRepairRepository (kylaRepository target, kylaRepository source,
+	KylaProgressCallback progressCallback,
+	void* progressContext)
 {
 	KYLA_C_API_BEGIN ()
 
@@ -210,6 +212,7 @@ int kylaInstall (const char* targetPath,
 	int filesetCount,
 	const uint8_t* const * pFilesetIds,
 	KylaProgressCallback progressCallback,
+	void* progressContext,
 	kylaRepository* targetRepository)
 {
 	KYLA_C_API_BEGIN ()
@@ -257,7 +260,8 @@ int kylaConfigure (kylaRepository targetRepository,
 	kylaRepository sourceRepository,
 	int filesetCount,
 	const uint8_t* const * pFilesetIds,
-	KylaProgressCallback progressCallback)
+	KylaProgressCallback progressCallback,
+	void* progressContext)
 {
 	KYLA_C_API_BEGIN ()
 

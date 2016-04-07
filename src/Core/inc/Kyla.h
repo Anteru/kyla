@@ -14,7 +14,7 @@ enum kylaResult
 };
 
 typedef void (*KylaProgressCallback)(const int stageCount,
-	const int stageProgress, const char* stageDescription);
+	const int stageProgress, const char* stageDescription, void* context);
 
 struct kylaBuildEnvironment
 {
@@ -61,7 +61,9 @@ int kylaValidateRepository (kylaRepository repository,
 	void* callbackContext);
 
 int kylaRepairRepository (kylaRepository targetRepository,
-	kylaRepository sourceRepository);
+	kylaRepository sourceRepository,
+	KylaProgressCallback progressCallback, 
+	void* progressContext);
 
 enum kylaQueryRepositoryKey
 {
@@ -87,13 +89,15 @@ int kylaInstall (const char* targetPath,
 	int filesetCount,
 	const uint8_t* const * filesetIds,
 	KylaProgressCallback progressCallback,
+	void* context,
 	kylaRepository* repository);
 
 int kylaConfigure (kylaRepository repository,
 	kylaRepository sourceRepository,
 	int filesetCount,
 	const uint8_t* const * filesetIds,
-	KylaProgressCallback progressCallback);
+	KylaProgressCallback progressCallback,
+	void* context);
 
 #ifdef __cplusplus
 }
