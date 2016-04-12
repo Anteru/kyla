@@ -16,6 +16,16 @@ enum kylaResult
 typedef void (*KylaProgressCallback)(const int stageCount,
 	const int stageProgress, const char* stageDescription, void* context);
 
+enum kylaLogSeverity
+{
+	kylaLogSeverity_Debug,
+	kylaLogSeverity_Info,
+	kylaLogSeverity_Warning
+};
+
+typedef void (*KylaLogCallback)(const char* source,
+	const kylaLogSeverity severity, const char* message, void* context);
+
 struct kylaBuildEnvironment
 {
 	const char* sourceDirectory;
@@ -37,67 +47,73 @@ struct kylaValidationItemInfo
 	const char* filename;
 };
 
-typedef struct kylaRepositoryImpl* kylaRepository;
+typedef void (*KylaValidationCallback)(kylaValidationResult result,
+	const kylaValidationItemInfo* info, void* context);
 
-enum kylaRepositoryAccessMode
+typedef struct KylaRepositoryImpl* KylaSourceRepository;
+typedef struct KylaRepositoryImpl* KylaTargetRepository;
+typedef struct KylaRepositoryImpl* KylaRepository;
+
+enum kylaRepositoryOption
 {
-	kylaRepositoryAccessMode_Read,
-	kylaRepositoryAccessMode_ReadWrite
+	kylaRepositoryOption_Create,
+	kylaRepositoryOption_ReadOnly,
+	kylaRepositoryOption_Discover
 };
 
-int kylaOpenRepository (const char* path,
-	kylaRepositoryAccessMode accessMode,
-	kylaRepository* repository);
-
-int kylaCloseRepository (kylaRepository repository);
-
-typedef void (*KylaValidateCallback)(
-	const int validationResult,
-	const struct kylaValidationItemInfo* info,
-	void* callbackContext);
-
-int kylaValidateRepository (kylaRepository repository,
-	KylaValidateCallback validationCallback,
-	void* callbackContext);
-
-int kylaRepairRepository (kylaRepository targetRepository,
-	kylaRepository sourceRepository,
-	KylaProgressCallback progressCallback, 
-	void* progressContext);
-
-enum kylaQueryRepositoryKey
-{
-	kylaQueryRepositoryKey_AvailableFileSets,
-	kylaQueryRepositoryKey_GetFileSetName
-};
-
-struct kylaFileSetInfo
+struct KylaFilesetInfo
 {
 	uint8_t id [16];
 	int64_t fileCount;
 	int64_t fileSize;
 };
 
-int kylaQueryRepository (kylaRepository repository,
-	int query,
-	const void* queryContext,
-	int* queryResultSize,
-	void* queryResult);
+enum kylaAction
+{
+	kylaAction_Install,
+	kylaAction_Configure,
+	kylaAction_Repair,
+	kylaAction_Verify
+};
 
-int kylaInstall (const char* targetPath,
-	kylaRepository sourceRepository,
-	int filesetCount,
-	const uint8_t* const * filesetIds,
-	KylaProgressCallback progressCallback,
-	void* context,
-	kylaRepository* repository);
+struct KylaDesiredState
+{
+	int filesetCount;
+	const uint8_t* const* filesetIds;
+};
 
-int kylaConfigure (kylaRepository repository,
-	kylaRepository sourceRepository,
-	int filesetCount,
-	const uint8_t* const * filesetIds,
-	KylaProgressCallback progressCallback,
-	void* context);
+struct KylaInstaller
+{
+	int (*SetLogCallback)(KylaInstaller* installer, KylaLogCallback logCallback, void* callbackContext);
+	int (*SetProgressCallback)(KylaInstaller* installer, KylaProgressCallback, void* progressContext);
+	int (*SetValidationCallback)(KylaInstaller* installer, KylaValidationCallback validationCallback, void* validationContext);
+	int (*OpenSourceRepository)(KylaInstaller* installer, const char* path,
+		int options, KylaSourceRepository* repository);
+	int (*OpenTargetRepository)(KylaInstaller* installer, const char* path,
+		int options, KylaTargetRepository* repository);
+	
+	int (*CloseRepository)(KylaInstaller* installer,
+		KylaRepository impl);
+	
+	int (*QueryFilesets)(KylaInstaller* installer, KylaSourceRepository repository,
+		int* filesetCount, KylaFilesetInfo* filesetInfos);
+
+	int (*QueryFilesetName)(KylaInstaller* installer,
+		KylaSourceRepository repository,
+		const uint8_t* id,
+		int* length,
+		char* result);
+
+	int (*Execute)(KylaInstaller* installer, kylaAction action,
+		KylaTargetRepository target, KylaSourceRepository source,
+		const KylaDesiredState* desiredState);
+};
+
+#define KYLA_MAKE_API_VERSION(major,minor,patch) (major << 22 | minor << 12 | patch);
+#define KYLA_API_VERSION_1_0 (1<<22)
+
+int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** installer);
+int kylaDestroyInstaller (KylaInstaller* installer);
 
 #ifdef __cplusplus
 }
