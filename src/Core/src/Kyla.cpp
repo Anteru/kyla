@@ -243,7 +243,7 @@ int kylaQueryFilesets (KylaInstaller*,
 	const auto result = repository->p->GetFilesetInfos ();
 
 	if (pFilesetCount) {
-		auto resultSize = static_cast<int> (result.size () * sizeof (KylaFilesetInfo));
+		auto resultSize = static_cast<int> (result.size ());
 		if (resultSize < 0) {
 			// overflow
 			return kylaResult_ErrorInvalidArgument;
