@@ -3,6 +3,12 @@
 
 #include <stdint.h>
 
+#ifdef KYLA_BUILD_LIBRARY
+	#define KYLA_EXPORT __declspec(dllexport)
+#else
+	#define KYLA_EXPORT
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -103,8 +109,8 @@ struct KylaInstaller
 #define KYLA_MAKE_API_VERSION(major,minor,patch) (major << 22 | minor << 12 | patch);
 #define KYLA_API_VERSION_1_0 (1<<22)
 
-int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** installer);
-int kylaDestroyInstaller (KylaInstaller* installer);
+KYLA_EXPORT int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** installer);
+KYLA_EXPORT int kylaDestroyInstaller (KylaInstaller* installer);
 
 #ifdef __cplusplus
 }

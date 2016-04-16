@@ -143,8 +143,6 @@ public:
 			return false;
 		}
 
-		OnSQLiteError (r, sqlite3_errmsg (db_));
-
 		throw RuntimeException ("Error while performing step on statement",
 			KYLA_FILE_LINE);
 	}

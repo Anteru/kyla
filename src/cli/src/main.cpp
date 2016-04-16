@@ -149,7 +149,7 @@ int main (int argc, char* argv [])
 		kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer);
 
 		KylaTargetRepository source;
-		installer->OpenTargetRepository (installer, vm ["source"].as<std::string> ().c_str (),
+		installer->OpenSourceRepository (installer, vm ["source"].as<std::string> ().c_str (),
 			0, &source);
 
 		KylaTargetRepository target;

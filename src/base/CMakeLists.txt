@@ -1,4 +1,4 @@
-PROJECT(kyla_core)
+PROJECT(libkyla)
 
 ADD_CUSTOM_COMMAND(
 	OUTPUT
@@ -31,7 +31,6 @@ SET(HEADERS
 	inc/Exception.h
 	inc/FileIO.h
 	inc/Hash.h
-	inc/Kyla.h
 	inc/Log.h
 	inc/Repository.h
 	inc/RepositoryBuilder.h
@@ -46,7 +45,6 @@ SET(SOURCES
 	src/Exception.cpp
 	src/FileIO.cpp
 	src/Hash.cpp
-	src/Kyla.cpp
 	src/Log.cpp
 	src/Repository.cpp
 	src/RepositoryBuilder.cpp
@@ -62,13 +60,13 @@ ENDIF()
 FIND_PACKAGE(OpenSSL)
 FIND_PACKAGE(Boost 1.59.0 REQUIRED QUIET COMPONENTS filesystem system)
 
-ADD_LIBRARY(kyla.Core STATIC ${SOURCES} ${HEADERS})
-TARGET_LINK_LIBRARIES(kyla.Core ${OPENSSL_LIBRARIES} ${Boost_LIBRARIES}
+ADD_LIBRARY(kylabase STATIC ${SOURCES} ${HEADERS})
+TARGET_LINK_LIBRARIES(kylabase ${OPENSSL_LIBRARIES} ${Boost_LIBRARIES}
 	zlib spdlog sqlite pugixml)
-TARGET_INCLUDE_DIRECTORIES(kyla.Core
+TARGET_INCLUDE_DIRECTORIES(kylabase
 	PUBLIC inc ${Boost_INCLUDE_DIRS}
 	PRIVATE ${OPENSSL_INCLUDE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
-target_compile_definitions(kyla.Core
+target_compile_definitions(kylabase
 	PUBLIC -DBOOST_NO_AUTO_PTR)
-SET_PROPERTY(TARGET kyla.Core PROPERTY CXX_STANDARD 11)
-SET_PROPERTY(TARGET kyla.Core PROPERTY CXX_STANDARD_REQUIRED ON)
+SET_PROPERTY(TARGET kylabase PROPERTY CXX_STANDARD 11)
+SET_PROPERTY(TARGET kylabase PROPERTY CXX_STANDARD_REQUIRED ON)

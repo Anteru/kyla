@@ -162,7 +162,7 @@ public:
 			if (!boost::filesystem::exists (filePath)) {
 				validationCallback (hash,
 					filePath.string ().c_str (),
-					kylaValidationResult_Missing);
+					ValidationResult::Missing);
 
 				continue;
 			}
@@ -176,7 +176,7 @@ public:
 			if (statResult.size != size) {
 				validationCallback (hash,
 					filePath.string ().c_str (),
-					kylaValidationResult_Corrupted);
+					ValidationResult::Corrupted);
 
 				continue;
 			}
@@ -186,14 +186,14 @@ public:
 			if (size != 0 && ComputeSHA256 (filePath) != hash) {
 				validationCallback (hash, 
 					filePath.string ().c_str (),
-					kylaValidationResult_Corrupted);
+					ValidationResult::Corrupted);
 
 				continue;
 			}
 
 			validationCallback (hash, 
 				filePath.string ().c_str (),
-				kylaValidationResult_Ok);
+				ValidationResult::Ok);
 		}
 	}
 	
@@ -207,8 +207,8 @@ public:
 
 		std::vector<SHA256Digest> requiredContentObjects;
 
-		Validate ([&](const SHA256Digest& hash, const char*, kylaValidationResult result) -> void {
-			if (result != kylaValidationResult_Ok) {
+		Validate ([&](const SHA256Digest& hash, const char*, const ValidationResult result) -> void {
+			if (result != ValidationResult::Ok) {
 				// Missing or corrupted
 				requiredContentObjects.push_back (hash);
 			}
@@ -343,7 +343,7 @@ public:
 			const auto filePath = path_ / path;
 			if (!boost::filesystem::exists (filePath)) {
 				validationCallback (hash, filePath.string ().c_str (),
-					kylaValidationResult_Missing);
+					ValidationResult::Missing);
 
 				continue;
 			}
@@ -356,7 +356,7 @@ public:
 
 			if (statResult.size != size) {
 				validationCallback (hash, filePath.string ().c_str (),
-					kylaValidationResult_Corrupted);
+					ValidationResult::Corrupted);
 
 				continue;
 			}
@@ -365,13 +365,13 @@ public:
 			///@TODO Assert hash is the null hash
 			if (size != 0 && ComputeSHA256 (filePath) != hash) {
 				validationCallback (hash, filePath.string ().c_str (),
-					kylaValidationResult_Corrupted);
+					ValidationResult::Corrupted);
 
 				continue;
 			}
 
 			validationCallback (hash, filePath.string ().c_str (),
-				kylaValidationResult_Ok);
+				ValidationResult::Ok);
 		}
 	}
 
@@ -389,8 +389,8 @@ public:
 		// Extract keys
 		std::vector<SHA256Digest> requiredContentObjects;
 
-		Validate ([&](const SHA256Digest& hash, const char* path, kylaValidationResult result) -> void {
-			if (result != kylaValidationResult_Ok) {
+		Validate ([&](const SHA256Digest& hash, const char* path, const ValidationResult result) -> void {
+			if (result != ValidationResult::Ok) {
 				// Missing or corrupted
 
 				// New entry, so put it into the unique content objects as well

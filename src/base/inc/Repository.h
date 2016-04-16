@@ -4,8 +4,6 @@
 #include <functional>
 #include <memory>
 
-#include "Kyla.h"
-
 #include "ArrayRef.h"
 #include "FileIO.h"
 #include "Hash.h"
@@ -22,13 +20,20 @@ struct FilesetInfo
 	int64_t fileSize;
 };
 
+enum class ValidationResult
+{
+	Ok,
+	Corrupted,
+	Missing
+};
+
 struct IRepository
 {
 	virtual ~IRepository () = default;
 
 	using ValidationCallback = std::function<void (const SHA256Digest& contentObject,
 		const char* path,
-		const kylaValidationResult validationResult)>;
+		const ValidationResult validationResult)>;
 
 	void Validate (const ValidationCallback& validationCallback);
 
@@ -62,7 +67,7 @@ private:
 };
 
 std::unique_ptr<IRepository> OpenRepository (const char* path,
-	const bool allowReadAccess);
+	const bool allowWriteAccess);
 
 std::unique_ptr<IRepository> DeployRepository (IRepository& source,
 	const char* targetPath,

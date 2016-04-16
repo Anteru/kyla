@@ -7,7 +7,8 @@ FIND_PACKAGE(Boost 1.55.0 REQUIRED QUIET COMPONENTS program_options filesystem s
 
 ADD_EXECUTABLE(kcl ${SOURCES} ${HEADERS})
 TARGET_LINK_LIBRARIES(kcl
-	kyla.Core pugixml
+	kyla kylabase
+	pugixml
 	${Boost_LIBRARIES})
 TARGET_INCLUDE_DIRECTORIES(kcl
 	PRIVATE ${Boost_INCLUDE_DIRS})

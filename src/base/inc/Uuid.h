@@ -8,7 +8,6 @@
 #include <string>
 
 namespace kyla {
-
 class Uuid final
 {
 public:
@@ -60,7 +59,6 @@ struct ArrayAdapter<Uuid>
 
 	typedef byte Type;
 };
-
 }
 
 #endif

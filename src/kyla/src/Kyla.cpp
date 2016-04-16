@@ -145,31 +145,39 @@ int kylaExecute (
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	if (sourceRepository == nullptr) {
+	if (sourceRepository == nullptr && action != kylaAction_Verify) {
 		return kylaResult_ErrorInvalidArgument;
 	}
 
+	std::vector<kyla::Uuid> filesetIds;
+	
 	if (desiredState == nullptr) {
-		return kylaResult_ErrorInvalidArgument;
-	}
-
-	if (desiredState->filesetCount <= 0) {
-		return kylaResult_ErrorInvalidArgument;
-	}
-
-	if (desiredState->filesetIds == nullptr) {
-		return kylaResult_ErrorInvalidArgument;
-	}
-
-	for (int i = 0; i < desiredState->filesetCount; ++i) {
-		if (desiredState->filesetIds [i] == nullptr) {
+		switch (action) {
+		case kylaAction_Configure:
+		case kylaAction_Install:
 			return kylaResult_ErrorInvalidArgument;
 		}
 	}
 
-	std::vector<kyla::Uuid> filesetIds (desiredState->filesetCount);
-	for (int i = 0; i < desiredState->filesetCount; ++i) {
-		filesetIds [i] = kyla::Uuid{ desiredState->filesetIds [i] };
+	if (desiredState) {
+		if (desiredState->filesetCount <= 0) {
+			return kylaResult_ErrorInvalidArgument;
+		}
+
+		if (desiredState->filesetIds == nullptr) {
+			return kylaResult_ErrorInvalidArgument;
+		}
+
+		for (int i = 0; i < desiredState->filesetCount; ++i) {
+			if (desiredState->filesetIds [i] == nullptr) {
+				return kylaResult_ErrorInvalidArgument;
+			}
+		}
+
+		filesetIds.resize (desiredState->filesetCount);
+		for (int i = 0; i < desiredState->filesetCount; ++i) {
+			filesetIds [i] = kyla::Uuid{ desiredState->filesetIds [i] };
+		}
 	}
 
 	switch (action) {
@@ -197,17 +205,21 @@ int kylaExecute (
 
 	case kylaAction_Verify:
 		targetRepository->p = kyla::OpenRepository (
-			targetRepository->path.string ().c_str (), true);
+			targetRepository->path.string ().c_str (), false);
 
 		///@TODO(minor) Pass through the source file set and fileset ids
 		targetRepository->p->Validate ([&](const kyla::SHA256Digest& object,
-			const char* path, kylaValidationResult result) -> void {
+			const char* path, const kyla::ValidationResult result) -> void {
 			kylaValidationItemInfo info;
 
 			info.filename = path;
 
-			internal->validationCallback (result, &info,
-				internal->validationCallbackContext);
+			if (internal->validationCallback) {
+				internal->validationCallback (
+					static_cast<kylaValidationResult> (result), 
+					&info,
+					internal->validationCallbackContext);
+			}
 		});
 
 		break;
@@ -296,7 +308,7 @@ int kylaQueryFilesetName (KylaInstaller*,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaBuildRepository (const char* descriptorFile,
+KYLA_EXPORT int kylaBuildRepository (const char* descriptorFile,
 	const char* sourceDirectory, const char* targetDirectory)
 {
 	KYLA_C_API_BEGIN ()

@@ -1,4 +1,3 @@
-#include "Kyla.h"
 #include "Hash.h"
 
 #include <boost/filesystem.hpp>
