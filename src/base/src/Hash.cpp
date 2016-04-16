@@ -1,7 +1,5 @@
 #include "Hash.h"
 
-#include <openssl/evp.h>
-#include <openssl/rand.h>
 #include <openssl/sha.h>
 
 #include "FileIO.h"
@@ -52,33 +50,32 @@ struct SHA256StreamHasher::Impl
 public:
 	Impl ()
 	{
-		ctx_ = EVP_MD_CTX_create ();
 	}
 
 	~Impl ()
 	{
-		EVP_MD_CTX_destroy (ctx_);
 	}
 
 	void Initialize ()
 	{
-		EVP_DigestInit_ex (ctx_, EVP_sha256 (), nullptr);
+		SHA256_Init (&ctx_);
 	}
 
 	void Update (const void* p, const std::int64_t size)
 	{
-		EVP_DigestUpdate (ctx_, p, size);
+		assert (size >= 0);
+		SHA256_Update (&ctx_, p, static_cast<size_t> (size));
 	}
 
 	SHA256Digest Finalize ()
 	{
 		SHA256Digest result;
-		EVP_DigestFinal_ex (ctx_, result.bytes, nullptr);
+		SHA256_Final (result.bytes, &ctx_);
 		return result;
 	}
 
 private:
-	EVP_MD_CTX*	ctx_;
+	SHA256_CTX ctx_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
