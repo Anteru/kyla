@@ -6,6 +6,7 @@
 #define KYLA_C_API_BEGIN() try {
 #define KYLA_C_API_END() } catch (...) { return kylaResult_Error; }
 
+///////////////////////////////////////////////////////////////////////////////
 struct KylaRepositoryImpl
 {
 	std::unique_ptr<kyla::IRepository> p;
@@ -18,6 +19,8 @@ struct KylaRepositoryImpl
 	kyla::Path path;
 };
 
+namespace {
+///////////////////////////////////////////////////////////////////////////////
 struct KylaInstallerInternal
 {
 	KylaValidationCallback validationCallback = nullptr;
@@ -30,6 +33,7 @@ struct KylaInstallerInternal
 	KylaInstaller installer;
 };
 
+///////////////////////////////////////////////////////////////////////////////
 KylaInstallerInternal* GetInstallerInternal (KylaInstaller* installer)
 {
 	int offset = offsetof (KylaInstallerInternal, installer);
@@ -38,28 +42,6 @@ KylaInstallerInternal* GetInstallerInternal (KylaInstaller* installer)
 		reinterpret_cast<KylaInstallerInternal*> (reinterpret_cast<ptrdiff_t> (installer) - offset);
 
 	return internal;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-int kylaBuildRepository (const char* descriptorFile,
-	const kylaBuildEnvironment* environment)
-{
-	KYLA_C_API_BEGIN ()
-
-	if (descriptorFile == nullptr) {
-		return kylaResult_ErrorInvalidArgument;
-	}
-
-	if (environment == nullptr) {
-		return kylaResult_ErrorInvalidArgument;
-	}
-
-	kyla::BuildRepository (descriptorFile,
-		environment);
-
-	return kylaResult_Ok;
-
-	KYLA_C_API_END()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -77,7 +59,7 @@ int kylaOpenSourceRepository (
 	if (repository == nullptr) {
 		return kylaResult_ErrorInvalidArgument;
 	}
-	
+
 	KylaSourceRepository repo = new KylaRepositoryImpl;
 	repo->p = kyla::OpenRepository (path, false);
 	repo->repositoryType = KylaRepositoryImpl::RepositoryType::Source;
@@ -93,7 +75,7 @@ int kylaOpenSourceRepository (
 int kylaOpenTargetRepository (
 	KylaInstaller* installer,
 	const char* path, int /* options */,
-	KylaSourceRepository* repository)
+	KylaTargetRepository* repository)
 {
 	KYLA_C_API_BEGIN ()
 
@@ -105,7 +87,7 @@ int kylaOpenTargetRepository (
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	KylaSourceRepository repo = new KylaRepositoryImpl;
+	KylaTargetRepository repo = new KylaRepositoryImpl;
 	repo->repositoryType = KylaRepositoryImpl::RepositoryType::Target;
 	repo->path = path;
 
@@ -143,8 +125,8 @@ int kylaCloseRepository (KylaInstaller* /* installer */,
 int kylaExecute (
 	KylaInstaller* installer,
 	kylaAction action,
-	KylaSourceRepository sourceRepository,
 	KylaTargetRepository targetRepository,
+	KylaSourceRepository sourceRepository,
 	const KylaDesiredState* desiredState)
 {
 	KYLA_C_API_BEGIN ()
@@ -156,6 +138,10 @@ int kylaExecute (
 	auto internal = GetInstallerInternal (installer);
 
 	if (targetRepository == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if (targetRepository->repositoryType != KylaRepositoryImpl::RepositoryType::Target) {
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -187,9 +173,8 @@ int kylaExecute (
 	}
 
 	switch (action) {
-
 	case kylaAction_Install:
-		targetRepository->p = kyla::DeployRepository (*sourceRepository->p, 
+		targetRepository->p = kyla::DeployRepository (*sourceRepository->p,
 			targetRepository->path.string ().c_str (), filesetIds);
 		break;
 
@@ -221,11 +206,14 @@ int kylaExecute (
 
 			info.filename = path;
 
-			internal->validationCallback (result, &info, 
+			internal->validationCallback (result, &info,
 				internal->validationCallbackContext);
 		});
 
 		break;
+
+	default:
+		return kylaResult_ErrorInvalidArgument;
 	}
 
 	return kylaResult_Ok;
@@ -239,6 +227,10 @@ int kylaQueryFilesets (KylaInstaller*,
 	int* pFilesetCount, KylaFilesetInfo* pFilesetInfos)
 {
 	KYLA_C_API_BEGIN ()
+
+	if (repository == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
 
 	const auto result = repository->p->GetFilesetInfos ();
 
@@ -280,20 +272,24 @@ int kylaQueryFilesetName (KylaInstaller*,
 {
 	KYLA_C_API_BEGIN ()
 
+	if (repository == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
 	const kyla::Uuid uuid{ pId };
 	const auto result = repository->p->GetFilesetName (uuid);
-	
+
 	if (pLength) {
 		auto resultSize = static_cast<int> (result.size () + 1 /* trailing zero */);
 		if (resultSize < 0) {
 			// overflow
 			return kylaResult_ErrorInvalidArgument;
-			
+
 		}
-		
+
 		*pLength = resultSize;
 	}
-	
+
 	if (pResult) {
 		::memcpy (pResult, result.c_str (), result.size () + 1);
 	}
@@ -302,12 +298,42 @@ int kylaQueryFilesetName (KylaInstaller*,
 
 	KYLA_C_API_END ()
 }
+}
 
+///////////////////////////////////////////////////////////////////////////////
+int kylaBuildRepository (const char* descriptorFile,
+	const char* sourceDirectory, const char* targetDirectory)
+{
+	KYLA_C_API_BEGIN ()
+
+	if (descriptorFile == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if (sourceDirectory == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if (targetDirectory == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	kyla::BuildRepository (descriptorFile,
+		sourceDirectory, targetDirectory);
+
+	return kylaResult_Ok;
+
+	KYLA_C_API_END()
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 int kylaCreateInstaller (int /* kylaApiVersion */, KylaInstaller** installer)
 {
 	KYLA_C_API_BEGIN ()
+
+	if (installer == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
 
 	KylaInstallerInternal* internal = new KylaInstallerInternal;
 	*installer = &internal->installer;
@@ -364,6 +390,10 @@ int kylaCreateInstaller (int /* kylaApiVersion */, KylaInstaller** installer)
 int kylaDestroyInstaller (KylaInstaller* installer)
 {
 	KYLA_C_API_BEGIN ()
+
+	if (installer == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
 
 	delete GetInstallerInternal (installer);
 

@@ -499,6 +499,69 @@ public:
 			"WHERE source.file_sets.Uuid IN (SELECT Uuid FROM pending_file_sets) "
 			"AND NOT source.file_sets.Uuid IN (SELECT Uuid FROM file_sets)");
 
+		// For files which have the same location and hash as before, update
+		// the fileset id
+		// This long query will find every file where the hash and the path
+		// remained the same, and update it to use the new file set id we just
+		// inserted above
+		{
+			db_.Execute (
+				"UPDATE files "
+				"SET FileSetId=( "
+				"    SELECT main.file_sets.Id FROM main.file_sets "
+				"    WHERE main.file_sets.Uuid = ( "
+				"        SELECT source.file_sets.Uuid FROM source.files "
+				"        INNER JOIN source.file_sets ON source.files.FileSetId = source.file_sets.Id "
+				"        WHERE source.files.Path=main.files.path) "
+				") "
+				"WHERE "
+				"files.Path IN ( "
+				"SELECT main.files.Path FROM files AS MainFiles "
+				"    INNER JOIN main.content_objects ON main.files.ContentObjectId = main.content_objects.Id  "
+				"    INNER JOIN source.files ON source.files.Path = main.files.Path  "
+				"    INNER JOIN source.content_objects ON source.files.ContentObjectId = source.content_objects.Id "
+				"    WHERE main.content_objects.Hash IS source.content_objects.Hash "
+				") ");
+		}
+
+		// First, get rid of all files that are changing
+		// That is, if a file is referencing a different content_object,
+		// we have to remove it (those files will get replaced)
+		{
+			auto changedFiles = db_.Prepare (
+				"SELECT main.files.Path AS Path, main.content_objects.Hash AS CurrentHash, source.content_objects.Hash AS NewHash FROM main.files "
+				"INNER JOIN main.content_objects ON main.files.ContentObjectId = main.content_objects.Id "
+				"INNER JOIN source.files ON source.files.Path = main.files.Path "
+				"INNER JOIN source.content_objects ON source.files.ContentObjectId = source.content_objects.Id "
+				"WHERE CurrentHash IS NOT NewHash "
+				"AND source.files.FileSetId IN "
+				"(SELECT Id FROM source.file_sets "
+				"WHERE Uuid IN (SELECT Uuid FROM pending_file_sets))");
+
+			// files
+			{
+				auto deleteFileQuery = db_.Prepare (
+					"DELETE FROM files WHERE Path=?");
+
+				while (changedFiles.Step ()) {
+					deleteFileQuery.BindArguments (changedFiles.GetText (0));
+					deleteFileQuery.Step ();
+					deleteFileQuery.Reset ();
+
+					boost::filesystem::remove (path_ / Path{ changedFiles.GetText (0) });
+
+					log.Debug () << "Deleted '" << changedFiles.GetText (0) << "'";
+				}
+
+				log.Debug () << "Deleted changed files from repository";
+			}
+
+			// content objects
+			db_.Execute ("DELETE FROM content_objects "
+				"WHERE Id IN "
+				"(SELECT Id FROM content_objects_with_reference_count WHERE ReferenceCount = 0)");
+		}
+
 		// Find all missing content objects in this database
 		std::vector<SHA256Digest> requiredContentObjects;
 
@@ -657,7 +720,7 @@ public:
 				deleteFileQuery.Step ();
 				deleteFileQuery.Reset ();
 
-				boost::filesystem::remove (Path{ unusedFilesQuery.GetText (0) });
+				boost::filesystem::remove (path_ / Path{ unusedFilesQuery.GetText (0) });
 
 				log.Debug () << "Deleted '" << unusedFilesQuery.GetText (0) << "'";
 			}

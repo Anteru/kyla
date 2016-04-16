@@ -277,13 +277,13 @@ private:
 namespace kyla {
 ///////////////////////////////////////////////////////////////////////////////
 void BuildRepository (const char* descriptorFile,
-	const kylaBuildEnvironment* environment)
+	const char* sourceDirectory, const char* targetDirectory)
 {
 	const auto inputFile = descriptorFile;
 
 	BuildContext ctx;
-	ctx.sourceDirectory = environment->sourceDirectory;
-	ctx.targetDirectory = environment->targetDirectory;
+	ctx.sourceDirectory = sourceDirectory;
+	ctx.targetDirectory = targetDirectory;
 
 	boost::filesystem::create_directories (ctx.targetDirectory);
 

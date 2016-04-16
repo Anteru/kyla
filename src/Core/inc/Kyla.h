@@ -26,15 +26,6 @@ enum kylaLogSeverity
 typedef void (*KylaLogCallback)(const char* source,
 	const kylaLogSeverity severity, const char* message, void* context);
 
-struct kylaBuildEnvironment
-{
-	const char* sourceDirectory;
-	const char* targetDirectory;
-};
-
-int kylaBuildRepository (const char* repositoryDescription,
-	const struct kylaBuildEnvironment* buildEnvironment);
-
 enum kylaValidationResult
 {
 	kylaValidationResult_Ok,

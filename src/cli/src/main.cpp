@@ -5,6 +5,9 @@
 #include <iostream>
 #include "Uuid.h"
 
+extern int kylaBuildRepository (const char* repositoryDescription,
+	const char* sourceDirectory, const char* targetDirectory);
+
 ///////////////////////////////////////////////////////////////////////////////
 int main (int argc, char* argv [])
 {
@@ -53,13 +56,10 @@ int main (int argc, char* argv [])
 			.add ("output-directory", 1);
 
 		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
-
-		kylaBuildEnvironment buildEnv;
-		buildEnv.targetDirectory = vm ["output-directory"].as<std::string> ().c_str ();
-		buildEnv.sourceDirectory = vm ["source-directory"].as<std::string> ().c_str ();
-
+		
 		kylaBuildRepository (vm ["input"].as<std::string> ().c_str (),
-			&buildEnv);
+			vm ["source-directory"].as<std::string> ().c_str (),
+			vm ["output-directory"].as<std::string> ().c_str ());
 	} else if (cmd == "validate") {
 		po::options_description build_desc ("validation options");
 		build_desc.add_options ()
@@ -234,8 +234,8 @@ int main (int argc, char* argv [])
 		KylaInstaller* installer;
 		kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer);
 
-		KylaTargetRepository source;
-		installer->OpenTargetRepository (installer, vm ["source"].as<std::string> ().c_str (),
+		KylaSourceRepository source;
+		installer->OpenSourceRepository (installer, vm ["source"].as<std::string> ().c_str (),
 			0, &source);
 
 		KylaTargetRepository target;

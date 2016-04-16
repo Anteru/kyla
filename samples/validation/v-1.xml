@@ -1,0 +1,16 @@
+<?xml version="1.0" ?>
+<FileRespository>
+	<Package>
+		<Type>Loose</Type>
+	</Package>
+	<Properties/>
+	<FileSets>
+		<FileSet Id="25D05924-A2F9-488F-988D-40D6E64706C1" Name="Feature0">
+			<File Source="1.txt" />
+			<File Source="2.txt" />
+		</FileSet>
+		<FileSet Id="23BA19B4-5162-41B3-8FF1-4D104604901E" Name="Feature1">
+			<File Source="3.txt" />
+		</FileSet>
+	</FileSets>
+</FileRespository>
