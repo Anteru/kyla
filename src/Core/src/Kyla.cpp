@@ -239,22 +239,18 @@ int kylaQueryFilesets (KylaInstaller*,
 		if (resultSize < 0) {
 			// overflow
 			return kylaResult_ErrorInvalidArgument;
-
 		}
 
 		*pFilesetCount = resultSize;
-
 	}
 
 	if (pFilesetInfos) {
-
 		for (const auto item : result) {
 			pFilesetInfos->fileCount = item.fileCount;
 			pFilesetInfos->fileSize = item.fileSize;
 			::memcpy (pFilesetInfos->id, item.id.GetData (), sizeof (pFilesetInfos->id));
 
 			++pFilesetInfos;
-
 		}
 	}
 
@@ -284,7 +280,6 @@ int kylaQueryFilesetName (KylaInstaller*,
 		if (resultSize < 0) {
 			// overflow
 			return kylaResult_ErrorInvalidArgument;
-
 		}
 
 		*pLength = resultSize;

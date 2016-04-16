@@ -35,6 +35,7 @@ private:
 	virtual int CompressImpl (const ArrayRef<>& input,
 		const MutableArrayRef<>& output) const = 0;
 };
+
 std::unique_ptr<BlockCompressor> CreateBlockCompressor (CompressionMode compression);
 }
 

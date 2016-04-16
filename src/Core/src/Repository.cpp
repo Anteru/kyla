@@ -468,6 +468,26 @@ public:
 		// files we're about to configure
 		db_.AttachTemporaryCopy ("source",  source.GetDatabase ());
 
+		PreparePendingFilesets (log, filesets);
+		UpdateFilesets ();
+		UpdateFilesetIdsForUnchangedFiles ();
+		RemoveChangedFiles (log);
+		GetNewContentObjects (source, log);
+		CopyExistingFiles (log);
+		Cleanup (log);
+
+		db_.Detach ("source");
+
+		db_.Execute ("ANALYZE");
+	}
+
+private:
+	/**
+	Create a new temporary table pending_file_sets which contains the UUIDs
+	of the file sets we're about to add
+	*/
+	void PreparePendingFilesets (Log& log, const ArrayRef<Uuid>& filesets)
+	{
 		// Store the file sets we're going to install in a temporary table for
 		// joins, etc.
 		db_.Execute ("CREATE TEMPORARY TABLE pending_file_sets "
@@ -490,7 +510,13 @@ public:
 
 			transaction.Commit ();
 		}
+	}
 
+	/**
+	Insert the new filesets we're about to configure from pending_file_sets
+	*/
+	void UpdateFilesets ()
+	{
 		// Insert those we don't have yet into our file_sets, but which are
 		// pending
 		db_.Execute (
@@ -498,70 +524,87 @@ public:
 			"SELECT Name, Uuid FROM source.file_sets "
 			"WHERE source.file_sets.Uuid IN (SELECT Uuid FROM pending_file_sets) "
 			"AND NOT source.file_sets.Uuid IN (SELECT Uuid FROM file_sets)");
+	}
 
+	/**
+	Update the file set ids of all files which remain unchanged, but have moved
+	to a new fileset.
+	*/
+	void UpdateFilesetIdsForUnchangedFiles ()
+	{
 		// For files which have the same location and hash as before, update
 		// the fileset id
 		// This long query will find every file where the hash and the path
 		// remained the same, and update it to use the new file set id we just
 		// inserted above
-		{
-			db_.Execute (
-				"UPDATE files "
-				"SET FileSetId=( "
-				"    SELECT main.file_sets.Id FROM main.file_sets "
-				"    WHERE main.file_sets.Uuid = ( "
-				"        SELECT source.file_sets.Uuid FROM source.files "
-				"        INNER JOIN source.file_sets ON source.files.FileSetId = source.file_sets.Id "
-				"        WHERE source.files.Path=main.files.path) "
-				") "
-				"WHERE "
-				"files.Path IN ( "
-				"SELECT main.files.Path FROM files AS MainFiles "
-				"    INNER JOIN main.content_objects ON main.files.ContentObjectId = main.content_objects.Id  "
-				"    INNER JOIN source.files ON source.files.Path = main.files.Path  "
-				"    INNER JOIN source.content_objects ON source.files.ContentObjectId = source.content_objects.Id "
-				"    WHERE main.content_objects.Hash IS source.content_objects.Hash "
-				") ");
-		}
+		db_.Execute (
+			"UPDATE files "
+			"SET FileSetId=( "
+			"    SELECT main.file_sets.Id FROM main.file_sets "
+			"    WHERE main.file_sets.Uuid = ( "
+			"        SELECT source.file_sets.Uuid FROM source.files "
+			"        INNER JOIN source.file_sets ON source.files.FileSetId = source.file_sets.Id "
+			"        WHERE source.files.Path=main.files.path) "
+			") "
+			"WHERE "
+			"files.Path IN ( "
+			"SELECT main.files.Path FROM files AS MainFiles "
+			"    INNER JOIN main.content_objects ON main.files.ContentObjectId = main.content_objects.Id  "
+			"    INNER JOIN source.files ON source.files.Path = main.files.Path  "
+			"    INNER JOIN source.content_objects ON source.files.ContentObjectId = source.content_objects.Id "
+			"    WHERE main.content_objects.Hash IS source.content_objects.Hash "
+			") ");
+	}
 
+	/**
+	Remove all files which reference a different content object now.
+	*/
+	void RemoveChangedFiles (Log& log)
+	{
 		// First, get rid of all files that are changing
 		// That is, if a file is referencing a different content_object,
 		// we have to remove it (those files will get replaced)
+
+		auto changedFiles = db_.Prepare (
+			"SELECT main.files.Path AS Path, main.content_objects.Hash AS CurrentHash, source.content_objects.Hash AS NewHash FROM main.files "
+			"INNER JOIN main.content_objects ON main.files.ContentObjectId = main.content_objects.Id "
+			"INNER JOIN source.files ON source.files.Path = main.files.Path "
+			"INNER JOIN source.content_objects ON source.files.ContentObjectId = source.content_objects.Id "
+			"WHERE CurrentHash IS NOT NewHash "
+			"AND source.files.FileSetId IN "
+			"(SELECT Id FROM source.file_sets "
+			"WHERE Uuid IN (SELECT Uuid FROM pending_file_sets))");
+
+		// files
 		{
-			auto changedFiles = db_.Prepare (
-				"SELECT main.files.Path AS Path, main.content_objects.Hash AS CurrentHash, source.content_objects.Hash AS NewHash FROM main.files "
-				"INNER JOIN main.content_objects ON main.files.ContentObjectId = main.content_objects.Id "
-				"INNER JOIN source.files ON source.files.Path = main.files.Path "
-				"INNER JOIN source.content_objects ON source.files.ContentObjectId = source.content_objects.Id "
-				"WHERE CurrentHash IS NOT NewHash "
-				"AND source.files.FileSetId IN "
-				"(SELECT Id FROM source.file_sets "
-				"WHERE Uuid IN (SELECT Uuid FROM pending_file_sets))");
+			auto deleteFileQuery = db_.Prepare (
+				"DELETE FROM files WHERE Path=?");
 
-			// files
-			{
-				auto deleteFileQuery = db_.Prepare (
-					"DELETE FROM files WHERE Path=?");
+			while (changedFiles.Step ()) {
+				deleteFileQuery.BindArguments (changedFiles.GetText (0));
+				deleteFileQuery.Step ();
+				deleteFileQuery.Reset ();
 
-				while (changedFiles.Step ()) {
-					deleteFileQuery.BindArguments (changedFiles.GetText (0));
-					deleteFileQuery.Step ();
-					deleteFileQuery.Reset ();
+				boost::filesystem::remove (path_ / Path{ changedFiles.GetText (0) });
 
-					boost::filesystem::remove (path_ / Path{ changedFiles.GetText (0) });
-
-					log.Debug () << "Deleted '" << changedFiles.GetText (0) << "'";
-				}
-
-				log.Debug () << "Deleted changed files from repository";
+				log.Debug () << "Deleted '" << changedFiles.GetText (0) << "'";
 			}
 
-			// content objects
-			db_.Execute ("DELETE FROM content_objects "
-				"WHERE Id IN "
-				"(SELECT Id FROM content_objects_with_reference_count WHERE ReferenceCount = 0)");
+			log.Debug () << "Deleted changed files from repository";
 		}
 
+		// content objects
+		db_.Execute ("DELETE FROM content_objects "
+			"WHERE Id IN "
+			"(SELECT Id FROM content_objects_with_reference_count WHERE ReferenceCount = 0)");
+	}
+
+	/**
+	Get new content objects, but only for those files, for which we don't
+	have a content object already.
+	*/
+	void GetNewContentObjects (IRepository& source, Log& log)
+	{
 		// Find all missing content objects in this database
 		std::vector<SHA256Digest> requiredContentObjects;
 
@@ -644,62 +687,73 @@ public:
 
 			transaction.Commit ();
 		});
+	}
 
+	/**
+	Copy existing files when needed - we don't fetch content objects we
+	still have.
+	*/
+	void CopyExistingFiles (Log& log)
+	{
 		// We may have files that only require local copies - find those
 		// and execute them now
 		// That is, we search for all files, that are in a pending_file_set,
 		// but not present in our local copy yet (those haven't been added in
 		// the loop above because we specifically excluded objects for which
 		// we already have the content.)
-		{
-			auto transaction = db_.BeginTransaction ();
+		auto transaction = db_.BeginTransaction ();
 
-			auto diffQuery = db_.Prepare (
-				"SELECT Path, Hash FROM source.content_objects "
-				"INNER JOIN source.files ON "
-				"source.content_objects.Id = source.files.ContentObjectId "
-				"WHERE source.files.FileSetId IN "
-				"(SELECT Id FROM source.file_sets "
-				"WHERE Uuid IN (SELECT Uuid FROM pending_file_sets)) "
-				"AND NOT Path IN (SELECT Path FROM main.files)");
+		auto diffQuery = db_.Prepare (
+			"SELECT Path, Hash FROM source.content_objects "
+			"INNER JOIN source.files ON "
+			"source.content_objects.Id = source.files.ContentObjectId "
+			"WHERE source.files.FileSetId IN "
+			"(SELECT Id FROM source.file_sets "
+			"WHERE Uuid IN (SELECT Uuid FROM pending_file_sets)) "
+			"AND NOT Path IN (SELECT Path FROM main.files)");
 
-			auto exemplarQuery = db_.Prepare (
-				"SELECT Path, Id FROM files "
-				"INNER JOIN content_objects ON files.ContentObjectId = content_objects.Id "
-				"WHERE Hash=?");
+		auto exemplarQuery = db_.Prepare (
+			"SELECT Path, Id FROM files "
+			"INNER JOIN content_objects ON files.ContentObjectId = content_objects.Id "
+			"WHERE Hash=?");
 
-			auto insertFileQuery = db_.Prepare (
-				"INSERT INTO main.files (Path, ContentObjectId, FileSetId) "
-				"SELECT ?, ?, main.file_sets.Id FROM source.files "
-				"INNER JOIN source.file_sets ON source.file_sets.Id = source.files.FileSetId "
-				"INNER JOIN file_sets ON source.file_sets.Uuid = main.file_sets.Uuid "
-				"WHERE source.files.path = ?"
-			);
+		auto insertFileQuery = db_.Prepare (
+			"INSERT INTO main.files (Path, ContentObjectId, FileSetId) "
+			"SELECT ?, ?, main.file_sets.Id FROM source.files "
+			"INNER JOIN source.file_sets ON source.file_sets.Id = source.files.FileSetId "
+			"INNER JOIN file_sets ON source.file_sets.Uuid = main.file_sets.Uuid "
+			"WHERE source.files.path = ?"
+		);
 
-			while (diffQuery.Step ()) {
-				SHA256Digest hash;
-				diffQuery.GetBlob (1, hash);
+		while (diffQuery.Step ()) {
+			SHA256Digest hash;
+			diffQuery.GetBlob (1, hash);
 
-				const Path path{ diffQuery.GetText (0) };
-				boost::filesystem::create_directories (path_ / path.parent_path ());
+			const Path path{ diffQuery.GetText (0) };
+			boost::filesystem::create_directories (path_ / path.parent_path ());
 
-				exemplarQuery.BindArguments (hash);
-				exemplarQuery.Step ();
+			exemplarQuery.BindArguments (hash);
+			exemplarQuery.Step ();
 
-				const Path exemplarPath{ exemplarQuery.GetText (0) };
-				boost::filesystem::copy_file (path_ / exemplarPath, path_ / path);
+			const Path exemplarPath{ exemplarQuery.GetText (0) };
+			boost::filesystem::copy_file (path_ / exemplarPath, path_ / path);
 
-				insertFileQuery.BindArguments (path.string (), 
-					exemplarQuery.GetInt64 (1), path.string ());
+			insertFileQuery.BindArguments (path.string (),
+				exemplarQuery.GetInt64 (1), path.string ());
 
-				exemplarQuery.Reset ();
+			exemplarQuery.Reset ();
 
-				log.Debug () << "Copied file '" << exemplarPath.string () << "' to '" << path.string () << "'";
-			}
-
-			transaction.Commit ();
+			log.Debug () << "Copied file '" << exemplarPath.string () << "' to '" << path.string () << "'";
 		}
 
+		transaction.Commit ();
+	}
+
+	/**
+	Remove unused file_sets, files and content objects.
+	*/
+	void Cleanup (Log& log)
+	{
 		// The order here is files, file_sets, content_objects, to keep
 		// referential integrity at all times
 
@@ -742,13 +796,8 @@ public:
 			"(SELECT Id FROM content_objects_with_reference_count WHERE ReferenceCount = 0)");
 
 		log.Debug () << "Deleted unused content objects from repository";
-
-		db_.Detach ("source");
-
-		db_.Execute ("ANALYZE");
 	}
 
-private:
 	Sql::Database db_;
 	Path path_;
 };
