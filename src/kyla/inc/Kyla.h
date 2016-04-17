@@ -4,7 +4,13 @@
 #include <stdint.h>
 
 #ifdef KYLA_BUILD_LIBRARY
-	#define KYLA_EXPORT __declspec(dllexport)
+	#if defined(_WIN32)
+		#define KYLA_EXPORT __declspec(dllexport)
+	#elif __GNUC__ >= 4
+		#define KYLA_EXPORT __attribute__ ((visibility ("default")))
+	#else
+		#error unsupported platform
+	#endif
 #else
 	#define KYLA_EXPORT
 #endif
@@ -88,10 +94,10 @@ struct KylaInstaller
 		int options, KylaSourceRepository* repository);
 	int (*OpenTargetRepository)(KylaInstaller* installer, const char* path,
 		int options, KylaTargetRepository* repository);
-	
+
 	int (*CloseRepository)(KylaInstaller* installer,
 		KylaRepository impl);
-	
+
 	int (*QueryFilesets)(KylaInstaller* installer, KylaSourceRepository repository,
 		int* filesetCount, KylaFilesetInfo* filesetInfos);
 

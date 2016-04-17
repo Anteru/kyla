@@ -67,14 +67,14 @@ struct LinuxFile final : public File
 		fd_ = -1;
 	}
 
-	void WriteImpl (const void* buffer, const std::int64_t size) override
+	void WriteImpl (const ArrayRef<>& buffer) override
 	{
-		write (fd_, buffer, size);
+		write (fd_, buffer.GetData (), buffer.GetSize ());
 	}
 
-	std::int64_t ReadImpl (void* buffer, const std::int64_t size) override
+	std::int64_t ReadImpl (const MutableArrayRef<>& buffer) override
 	{
-		return read (fd_, buffer, size);
+		return read (fd_, buffer.GetData (), buffer.GetSize ());
 	}
 
 	void SeekImpl (const std::int64_t offset) override
@@ -121,12 +121,20 @@ private:
 	std::unordered_map<const void*, std::int64_t> mappings_;
 };
 
+////////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<File> CreateFile (const char* path)
 {
 	auto fd = open (path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
 	return std::unique_ptr<File> (new LinuxFile (fd));
 }
 
+////////////////////////////////////////////////////////////////////////////////
+std::unique_ptr<File> CreateFile (const Path& path)
+{
+	return CreateFile (path.c_str ());
+}
+
+////////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode)
 {
 	int mode;
@@ -146,6 +154,12 @@ std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode)
 
 	auto fd = open (path, mode, S_IRUSR | S_IWUSR);
 	return std::unique_ptr<File> (new LinuxFile (fd));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode)
+{
+	return OpenFile (path.c_str (), openMode);
 }
 #elif KYLA_PLATFORM_WINDOWS
 struct WindowsFile final : public File
