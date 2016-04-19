@@ -6,6 +6,8 @@
 #include "Hash.h"
 #include "Log.h"
 
+#include <boost/format.hpp>
+
 #include "install-db-structure.h"
 #include "temp-db-structure.h"
 
@@ -26,9 +28,10 @@ void IRepository::Repair (IRepository& source)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void IRepository::Configure (IRepository& source, const ArrayRef<Uuid>& filesets)
+void IRepository::Configure (IRepository& source, const ArrayRef<Uuid>& filesets,
+	Log& log)
 {
-	ConfigureImpl (source, filesets);
+	ConfigureImpl (source, filesets, log);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -278,7 +281,8 @@ void LooseRepository::RepairImpl (IRepository& source)
 
 ///////////////////////////////////////////////////////////////////////////////
 void LooseRepository::ConfigureImpl (IRepository& /*source*/, 
-	const ArrayRef<Uuid>& /*filesets*/)
+	const ArrayRef<Uuid>& /*filesets*/,
+	Log& /*log*/)
 {
 	throw RuntimeException ("Not implemented", KYLA_FILE_LINE);
 }
@@ -446,11 +450,9 @@ public:
 	}
 
 	void Configure (IRepository& source,
-		const ArrayRef<Uuid>& filesets)
+		const ArrayRef<Uuid>& filesets,
+		Log& log)
 	{
-		// This log won't log actually - no filename means it's a null log
-		Log log{ "kyla.Configure", nullptr, LogLevel::Trace };
-
 		// We start by cleaning up all content objects which are not referenced
 		// A deployed repository needs at least one file referencing a
 		// content object, otherwise, the content object is missing. This
@@ -498,14 +500,14 @@ private:
 			auto insertFilesetQuery = db_.Prepare (
 				"INSERT INTO pending_file_sets (Uuid) VALUES (?);");
 
-			log.Debug () << "Configuring filesets";
+			log.Debug ("Configure", "Selecting filesets for configure");
 
 			for (const auto& fileset : filesets) {
 				insertFilesetQuery.BindArguments (fileset);
 				insertFilesetQuery.Step ();
 				insertFilesetQuery.Reset ();
 
-				log.Debug () << "Preparing to configure fileset: '" << ToString (fileset) << "'";
+				log.Debug ("Configure", boost::format ("Selected fileset: '%1%'") % ToString (fileset));
 			}
 
 			transaction.Commit ();
@@ -587,10 +589,10 @@ private:
 
 				boost::filesystem::remove (path_ / Path{ changedFiles.GetText (0) });
 
-				log.Debug () << "Deleted '" << changedFiles.GetText (0) << "'";
+				log.Debug ("Configure", boost::format ("Deleted file '%1%'") % changedFiles.GetText (0));
 			}
 
-			log.Debug () << "Deleted changed files from repository";
+			log.Debug ("Configure", "Deleted changed files from repository");
 		}
 
 		// content objects
@@ -624,7 +626,7 @@ private:
 				diffQuery.GetBlob (0, contentObjectHash);
 				requiredContentObjects.push_back (contentObjectHash);
 
-				log.Debug () << "Discovered content object '" << ToString (contentObjectHash) << "'";
+				log.Debug ("Configure", boost::format ("Discovered content object '%1%'") % ToString (contentObjectHash));
 			}
 		}
 
@@ -633,7 +635,7 @@ private:
 			const ArrayRef<>& contents) -> void {
 			auto transaction = db_.BeginTransaction ();
 
-			log.Debug () << "Received content object '" << ToString (hash) << "'";
+			log.Debug ("Configure", boost::format ("Received content object '%1%'") % ToString (hash));
 
 			int64 contentObjectId = -1;
 			{
@@ -646,7 +648,7 @@ private:
 
 				contentObjectId = db_.GetLastRowId ();
 
-				log.Debug () << "Stored content object in database with id " << contentObjectId;
+				log.Debug ("Configure", boost::format ("Stored content object '%1%' with id %2%") % ToString (hash) % contentObjectId);
 			}
 
 			auto insertFileQuery = db_.Prepare (
@@ -666,7 +668,7 @@ private:
 			while (getTargetFilesQuery.Step ()) {
 				const Path targetPath{ getTargetFilesQuery.GetText (0) };
 
-				log.Debug () << "Creating file '" << targetPath.string () << "'";
+				log.Debug ("Configure", boost::format ("Creating file '%1%'") % targetPath);
 
 				boost::filesystem::create_directories (path_ / targetPath.parent_path ());
 
@@ -682,7 +684,7 @@ private:
 				insertFileQuery.Step ();
 				insertFileQuery.Reset ();
 
-				log.Debug () << "Stored file '" << targetPath.string () << "'";
+				log.Debug ("Configure", boost::format ("Wrote file '%1%'") % targetPath);
 			}
 
 			transaction.Commit ();
@@ -743,7 +745,7 @@ private:
 
 			exemplarQuery.Reset ();
 
-			log.Debug () << "Copied file '" << exemplarPath.string () << "' to '" << path.string () << "'";
+			log.Debug ("Configure", boost::format ("Copied file '%1%' to '%2%'") % exemplarPath.string () % path.string ());
 		}
 
 		transaction.Commit ();
@@ -776,10 +778,11 @@ private:
 
 				boost::filesystem::remove (path_ / Path{ unusedFilesQuery.GetText (0) });
 
-				log.Debug () << "Deleted '" << unusedFilesQuery.GetText (0) << "'";
+
+				log.Debug ("Configure", boost::format ("Deleted file '%1%'") % unusedFilesQuery.GetText (0));
 			}
 
-			log.Debug () << "Deleted unused files from repository";
+			log.Debug ("Configure", "Deleted unused files from repository");
 		}
 
 		// file_sets
@@ -787,7 +790,7 @@ private:
 			db_.Execute ("DELETE FROM file_sets "
 				"WHERE file_sets.Uuid NOT IN (SELECT Uuid FROM pending_file_sets)");
 
-			log.Debug () << "Deleted unused file sets from repository";
+			log.Debug ("Configure", "Deleted unused file sets from repository");
 		}
 
 		// content objects
@@ -795,7 +798,7 @@ private:
 			"WHERE Id IN "
 			"(SELECT Id FROM content_objects_with_reference_count WHERE ReferenceCount = 0)");
 
-		log.Debug () << "Deleted unused content objects from repository";
+		log.Debug ("Configure", "Deleted unused content objects from repository");
 	}
 
 	Sql::Database db_;
@@ -805,7 +808,8 @@ private:
 ///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (IRepository& source,
 	const ArrayRef<Uuid>& filesets,
-	const Path& targetDirectory)
+	const Path& targetDirectory,
+	Log& log)
 {
 	auto db = Sql::Database::Create ((targetDirectory / "k.db").string ().c_str ());
 
@@ -815,7 +819,7 @@ std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (IRepository&
 
 	std::unique_ptr<DeployedRepository> result (new DeployedRepository{ targetDirectory.string ().c_str (), true });
 
-	result->impl_->Configure (source, filesets);
+	result->impl_->Configure (source, filesets, log);
 
 	return std::move (result);
 }
@@ -872,9 +876,10 @@ void DeployedRepository::GetContentObjectsImpl (
 
 ///////////////////////////////////////////////////////////////////////////////
 void DeployedRepository::ConfigureImpl (IRepository& source, 
-	const ArrayRef<Uuid>& filesets)
+	const ArrayRef<Uuid>& filesets,
+	Log& log)
 {
-	impl_->Configure (source, filesets);
+	impl_->Configure (source, filesets, log);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -912,11 +917,12 @@ std::unique_ptr<IRepository> OpenRepository (const char* path,
 ///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<IRepository> DeployRepository (IRepository& source,
 	const char* destinationPath,
-	const ArrayRef<Uuid>& filesets)
+	const ArrayRef<Uuid>& filesets,
+	Log& log)
 {
 	Path targetPath{ destinationPath };
 	boost::filesystem::create_directories (destinationPath);
 
-	return DeployedRepository::CreateFrom (source, filesets, targetPath);
+	return DeployedRepository::CreateFrom (source, filesets, targetPath, log);
 }
 }

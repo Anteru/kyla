@@ -3,6 +3,8 @@
 #include "Repository.h"
 #include "RepositoryBuilder.h"
 
+#include "Log.h"
+
 #define KYLA_C_API_BEGIN() try {
 #define KYLA_C_API_END() } catch (...) { return kylaResult_Error; }
 
@@ -25,10 +27,15 @@ struct KylaInstallerInternal
 {
 	KylaValidationCallback validationCallback = nullptr;
 	void* validationCallbackContext = nullptr;
-	KylaLogCallback logCallback = nullptr;
-	void* logCallbackContext = nullptr;
+	std::unique_ptr<kyla::Log> log;
 	KylaProgressCallback progressCallback = nullptr;
 	void* progressCallbackContext = nullptr;
+
+	KylaInstallerInternal ()
+		: log (new kyla::Log ([](kyla::LogLevel, const char*, const char*) -> void {
+	}))
+	{
+	}
 
 	KylaInstaller installer;
 };
@@ -183,14 +190,14 @@ int kylaExecute (
 	switch (action) {
 	case kylaAction_Install:
 		targetRepository->p = kyla::DeployRepository (*sourceRepository->p,
-			targetRepository->path.string ().c_str (), filesetIds);
+			targetRepository->path.string ().c_str (), filesetIds, *internal->log);
 		break;
 
 	case kylaAction_Configure:
 		targetRepository->p = kyla::OpenRepository (
 			targetRepository->path.string ().c_str (), true);
 		targetRepository->p->Configure (
-			*sourceRepository->p, filesetIds);
+			*sourceRepository->p, filesetIds, *internal->log);
 
 		break;
 
@@ -356,9 +363,30 @@ int kylaCreateInstaller (int /* kylaApiVersion */, KylaInstaller** installer)
 		KYLA_C_API_BEGIN ()
 
 		auto internal = GetInstallerInternal (installer);
-		internal->logCallback = logCallback;
-		internal->logCallbackContext = callbackContext;
 
+		internal->log->SetCallback (
+			[=](kyla::LogLevel level, const char* source, const char* message) -> void {
+			kylaLogSeverity severity;
+			switch (level) {
+			case kyla::LogLevel::Debug:
+				severity = kylaLogSeverity_Debug; break;
+
+			case kyla::LogLevel::Warning:
+				severity = kylaLogSeverity_Warning; break;
+
+			case kyla::LogLevel::Info:
+				severity = kylaLogSeverity_Warning; break;
+
+			case kyla::LogLevel::Error:
+				severity = kylaLogSeverity_Error; break;
+
+			default:
+				severity = kylaLogSeverity_Debug; break;
+			}
+
+			logCallback (source, severity, message, callbackContext);
+		});
+	
 		return kylaResult_Ok;
 
 		KYLA_C_API_END ()

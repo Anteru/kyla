@@ -32,7 +32,8 @@ enum kylaLogSeverity
 {
 	kylaLogSeverity_Debug,
 	kylaLogSeverity_Info,
-	kylaLogSeverity_Warning
+	kylaLogSeverity_Warning,
+	kylaLogSeverity_Error
 };
 
 typedef void (*KylaLogCallback)(const char* source,

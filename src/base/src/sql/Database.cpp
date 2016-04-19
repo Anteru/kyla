@@ -1,14 +1,13 @@
 #include "sql/Database.h"
 
-#include <spdlog.h>
 #include <sqlite3.h>
 
 #include "Exception.h"
 
 namespace {
-void OnSQLiteError (const int errorCode, const char* errorMessage)
+void OnSQLiteError (const int /*errorCode*/, const char* /*errorMessage*/)
 {
-	std::cerr << sqlite3_errstr (errorCode) << " : " << errorMessage << std::endl;
+	// std::cerr << sqlite3_errstr (errorCode) << " : " << errorMessage << std::endl;
 }
 }
 

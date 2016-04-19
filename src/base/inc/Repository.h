@@ -13,6 +13,9 @@ namespace kyla {
 namespace Sql {
 	class Database;
 }
+
+class Log;
+
 struct FilesetInfo
 {
 	Uuid id;
@@ -46,7 +49,8 @@ struct IRepository
 	void Repair (IRepository& source);
 
 	void Configure (IRepository& other,
-		const ArrayRef<Uuid>& filesets);
+		const ArrayRef<Uuid>& filesets,
+		Log& log);
 
 	std::vector<FilesetInfo> GetFilesetInfos ();
 
@@ -63,7 +67,8 @@ private:
 	virtual Sql::Database& GetDatabaseImpl () = 0;
 	virtual std::string GetFilesetNameImpl (const Uuid& filesetId) = 0;
 	virtual void ConfigureImpl (IRepository& other,
-		const ArrayRef<Uuid>& filesets) = 0;
+		const ArrayRef<Uuid>& filesets,
+		Log& log) = 0;
 };
 
 std::unique_ptr<IRepository> OpenRepository (const char* path,
@@ -71,7 +76,8 @@ std::unique_ptr<IRepository> OpenRepository (const char* path,
 
 std::unique_ptr<IRepository> DeployRepository (IRepository& source,
 	const char* targetPath,
-	const ArrayRef<Uuid>& selectedFilesets);
+	const ArrayRef<Uuid>& selectedFilesets,
+	Log& log);
 
 /**
 Content files stored directly, not deployed
@@ -92,7 +98,8 @@ private:
 		const GetContentObjectCallback& getCallback) override;
 	void RepairImpl (IRepository& source) override;
 	void ConfigureImpl (IRepository& other,
-		const ArrayRef<Uuid>& filesets) override;
+		const ArrayRef<Uuid>& filesets,
+		Log& log) override;
 
 	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
 	std::string GetFilesetNameImpl (const Uuid& filesetId) override;
@@ -117,7 +124,8 @@ public:
 
 	static std::unique_ptr<DeployedRepository> CreateFrom (IRepository& other,
 		const ArrayRef<Uuid>& filesets,
-		const Path& targetDirectory);
+		const Path& targetDirectory,
+		Log& log);
 
 private:
 	void ValidateImpl (const ValidationCallback& validationCallback) override;
@@ -125,7 +133,8 @@ private:
 	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) override;
 	void ConfigureImpl (IRepository& other,
-		const ArrayRef<Uuid>& filesets) override;
+		const ArrayRef<Uuid>& filesets,
+		Log& log) override;
 
 	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
 	std::string GetFilesetNameImpl (const Uuid& filesetId) override;

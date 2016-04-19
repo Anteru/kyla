@@ -1,16 +1,13 @@
 #ifndef KYLA_CORE_INTERNAL_LOG_H
 #define KYLA_CORE_INTERNAL_LOG_H
 
-#include <spdlog.h>
-
-#ifdef CreateFile
-#undef CreateFile
-#endif
+#include <functional>
+#include <string>
+#include <boost/format.hpp>
 
 namespace kyla {
 enum class LogLevel
 {
-	Trace,
 	Debug,
 	Info,
 	Warning,
@@ -20,36 +17,43 @@ enum class LogLevel
 class Log
 {
 public:
-	Log (const char* name, const char* filename = nullptr,
-		const LogLevel logLevel = LogLevel::Info);
+	using LogCallback = std::function<void (LogLevel logLevel, const char* source, const char* message)>;
 
-	spdlog::details::line_logger Trace ()
+	Log (const LogCallback& callback);
+
+	void SetCallback (const LogCallback& callback);
+
+	void Debug (const char* source, const std::string& message);
+	void Info (const char* source, const std::string& message);
+	void Warning (const char* source, const std::string& message);
+	void Error (const char* source, const std::string& message);
+	
+	template<class charT, class Traits> 
+	void Debug (const char* source, const boost::basic_format<charT, Traits>& message)
 	{
-		return log_->trace ();
+		Debug (source, str (message));
 	}
 
-	spdlog::details::line_logger Debug ()
+	template<class charT, class Traits>
+	void Info (const char* source, const boost::basic_format<charT, Traits>& message)
 	{
-		return log_->debug ();
+		Info (source, str (message));
 	}
 
-	spdlog::details::line_logger Info ()
+	template<class charT, class Traits>
+	void Warning (const char* source, const boost::basic_format<charT, Traits>& message)
 	{
-		return log_->info ();
+		Warning (source, str (message));
 	}
 
-	spdlog::details::line_logger Warning ()
+	template<class charT, class Traits>
+	void Error (const char* source, const boost::basic_format<charT, Traits>& message)
 	{
-		return log_->warn ();
-	}
-
-	spdlog::details::line_logger Error ()
-	{
-		return log_->error ();
+		Error (source, str (message));
 	}
 
 private:
-	std::shared_ptr<spdlog::logger> log_;
+	std::function<void (LogLevel logLevel, const char* source, const char* message)> callback_;
 };
 }
 

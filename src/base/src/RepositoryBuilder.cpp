@@ -30,8 +30,6 @@ struct BuildContext
 {
 	kyla::Path sourceDirectory;
 	kyla::Path targetDirectory;
-
-	std::unique_ptr<kyla::Log> log;
 };
 
 struct File
@@ -82,8 +80,6 @@ std::vector<FileSet> GetFileSets (const pugi::xml_document& doc,
 		result.emplace_back (std::move (fileSet));
 	}
 
-	ctx.log->Info () << "Found " << filesFound << " files";
-
 	return result;
 }
 
@@ -92,13 +88,8 @@ void HashFiles (std::vector<FileSet>& fileSets,
 	const BuildContext& ctx)
 {
 	for (auto& fileSet : fileSets) {
-		ctx.log->Trace () << "Hashing file set " << ToString (fileSet.id) << " with "
-			<< fileSet.files.size () << " files";
-
 		for (auto& file : fileSet.files) {
-			ctx.log->Trace () << "Hashing file '" << file.source.string () << "'";
 			file.hash = kyla::ComputeSHA256 (ctx.sourceDirectory / file.source);
-			ctx.log->Trace () << " ... " << ToString (file.hash);
 		}
 	}
 }
@@ -131,8 +122,6 @@ std::vector<UniqueContentObjects> FindUniqueFileContents (std::vector<FileSet>& 
 		}
 	}
 
-	ctx.log->Info () << "Found " << uniqueContents.size () << " unique files";
-
 	std::vector<UniqueContentObjects> result;
 	result.reserve (uniqueContents.size ());
 
@@ -143,12 +132,6 @@ std::vector<UniqueContentObjects> FindUniqueFileContents (std::vector<FileSet>& 
 		uf.sourceFile = ctx.sourceDirectory / kv.second.front ();
 
 		uf.size = kyla::Stat (uf.sourceFile.string ().c_str ()).size;
-
-		if (kv.second.size () > 1) {
-			ctx.log->Trace () << "File '" << uf.sourceFile.string () << "' has " <<
-				(kv.second.size () - 1) << " duplicates";
-		}
-
 		uf.duplicates.assign (kv.second.begin (), kv.second.end ());
 
 		result.push_back (uf);
@@ -285,8 +268,6 @@ void BuildRepository (const char* descriptorFile,
 	ctx.targetDirectory = targetDirectory;
 
 	boost::filesystem::create_directories (ctx.targetDirectory);
-
-	ctx.log.reset (new kyla::Log ("Generator", "build.log", kyla::LogLevel::Trace));
 
 	pugi::xml_document doc;
 	doc.load_file (inputFile);
