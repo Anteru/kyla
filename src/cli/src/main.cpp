@@ -8,12 +8,26 @@
 extern int kylaBuildRepository (const char* repositoryDescription,
 	const char* sourceDirectory, const char* targetDirectory);
 
+void StdcoutLog (const char* source, const kylaLogSeverity severity,
+	const char* message, void*)
+{
+	switch (severity) {
+	case kylaLogSeverity_Debug: std::cout	<< "Debug:   "; break;
+	case kylaLogSeverity_Info: std::cout	<< "Info:    "; break;
+	case kylaLogSeverity_Warning: std::cout << "Warning: "; break;
+	case kylaLogSeverity_Error: std::cout	<< "Error:   "; break;
+	}
+
+	std::cout << source << ":" << message << "\n";
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 int main (int argc, char* argv [])
 {
 	namespace po = boost::program_options;
 	po::options_description global ("Global options");
 	global.add_options ()
+		("log,l", po::bool_switch ()->default_value (false), "Show log output")
 		("command", po::value<std::string> (), "command to execute")
 		("subargs", po::value<std::vector<std::string> > (), "Arguments for command");
 
@@ -119,6 +133,10 @@ int main (int argc, char* argv [])
 		KylaInstaller* installer;
 		kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer);
 
+		if (vm ["log"].as<bool> ()) {
+			installer->SetLogCallback (installer, StdcoutLog, nullptr);
+		}
+
 		KylaTargetRepository repository;
 		installer->OpenTargetRepository (installer, vm ["input"].as<std::string> ().c_str (),
 			0, &repository);
@@ -147,6 +165,10 @@ int main (int argc, char* argv [])
 
 		KylaInstaller* installer;
 		kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer);
+
+		if (vm ["log"].as<bool> ()) {
+			installer->SetLogCallback (installer, StdcoutLog, nullptr);
+		}
 
 		KylaTargetRepository source;
 		installer->OpenSourceRepository (installer, vm ["source"].as<std::string> ().c_str (),
@@ -177,6 +199,10 @@ int main (int argc, char* argv [])
 
 		KylaInstaller* installer;
 		kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer);
+
+		if (vm ["log"].as<bool> ()) {
+			installer->SetLogCallback (installer, StdcoutLog, nullptr);
+		}
 
 		KylaTargetRepository source;
 		installer->OpenSourceRepository (installer, vm ["source"].as<std::string> ().c_str (),
@@ -233,6 +259,10 @@ int main (int argc, char* argv [])
 
 		KylaInstaller* installer;
 		kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer);
+
+		if (vm ["log"].as<bool> ()) {
+			installer->SetLogCallback (installer, StdcoutLog, nullptr);
+		}
 
 		KylaSourceRepository source;
 		installer->OpenSourceRepository (installer, vm ["source"].as<std::string> ().c_str (),

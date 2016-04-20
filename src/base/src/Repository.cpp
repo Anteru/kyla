@@ -453,6 +453,9 @@ public:
 		const ArrayRef<Uuid>& filesets,
 		Log& log)
 	{
+		// We do this in WAL mode for performance
+		db_.Execute ("PRAGMA journal_mode = WAL");
+
 		// We start by cleaning up all content objects which are not referenced
 		// A deployed repository needs at least one file referencing a
 		// content object, otherwise, the content object is missing. This
@@ -479,6 +482,8 @@ public:
 		Cleanup (log);
 
 		db_.Detach ("source");
+
+		db_.Execute ("PRAGMA journal_mode = DELETE");
 
 		db_.Execute ("ANALYZE");
 	}
@@ -668,7 +673,7 @@ private:
 			while (getTargetFilesQuery.Step ()) {
 				const Path targetPath{ getTargetFilesQuery.GetText (0) };
 
-				log.Debug ("Configure", boost::format ("Creating file '%1%'") % targetPath);
+				log.Debug ("Configure", boost::format ("Creating file %1%") % targetPath);
 
 				boost::filesystem::create_directories (path_ / targetPath.parent_path ());
 
@@ -684,7 +689,7 @@ private:
 				insertFileQuery.Step ();
 				insertFileQuery.Reset ();
 
-				log.Debug ("Configure", boost::format ("Wrote file '%1%'") % targetPath);
+				log.Debug ("Configure", boost::format ("Wrote file %1%") % targetPath);
 			}
 
 			transaction.Commit ();
