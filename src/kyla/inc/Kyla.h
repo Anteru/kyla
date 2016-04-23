@@ -22,7 +22,8 @@ enum kylaResult
 {
 	kylaResult_Ok = 0,
 	kylaResult_Error = 1,
-	kylaResult_ErrorInvalidArgument = 2
+	kylaResult_ErrorInvalidArgument = 2,
+	kylaResult_ErrorUnsupportedApiVersion = 3
 };
 
 typedef void (*KylaProgressCallback)(const int stageCount,
@@ -60,9 +61,9 @@ typedef struct KylaRepositoryImpl* KylaRepository;
 
 enum kylaRepositoryOption
 {
-	kylaRepositoryOption_Create,
-	kylaRepositoryOption_ReadOnly,
-	kylaRepositoryOption_Discover
+	kylaRepositoryOption_Create		= 1 << 0,
+	kylaRepositoryOption_ReadOnly	= 1 << 1,
+	kylaRepositoryOption_Discover	= 1 << 2
 };
 
 struct KylaFilesetInfo
@@ -88,9 +89,12 @@ struct KylaDesiredState
 
 struct KylaInstaller
 {
-	int (*SetLogCallback)(KylaInstaller* installer, KylaLogCallback logCallback, void* callbackContext);
-	int (*SetProgressCallback)(KylaInstaller* installer, KylaProgressCallback, void* progressContext);
-	int (*SetValidationCallback)(KylaInstaller* installer, KylaValidationCallback validationCallback, void* validationContext);
+	int (*SetLogCallback)(KylaInstaller* installer, 
+		KylaLogCallback logCallback, void* callbackContext);
+	int (*SetProgressCallback)(KylaInstaller* installer, 
+		KylaProgressCallback, void* progressContext);
+	int (*SetValidationCallback)(KylaInstaller* installer, 
+		KylaValidationCallback validationCallback, void* validationContext);
 	int (*OpenSourceRepository)(KylaInstaller* installer, const char* path,
 		int options, KylaSourceRepository* repository);
 	int (*OpenTargetRepository)(KylaInstaller* installer, const char* path,
@@ -99,7 +103,8 @@ struct KylaInstaller
 	int (*CloseRepository)(KylaInstaller* installer,
 		KylaRepository impl);
 
-	int (*QueryFilesets)(KylaInstaller* installer, KylaSourceRepository repository,
+	int (*QueryFilesets)(KylaInstaller* installer, 
+		KylaSourceRepository repository,
 		int* filesetCount, KylaFilesetInfo* filesetInfos);
 
 	int (*QueryFilesetName)(KylaInstaller* installer,
