@@ -5,8 +5,8 @@
     "setup" : [
         {
             "generate-repository" : {
-                "source" : "data/basic_install/basic_install.xml",
-                "source-directory" : "data/basic_install",
+                "source" : "data/basic.xml",
+                "source-directory" : "data/shared",
                 "target" : "test"
             }
         }
@@ -25,8 +25,8 @@
     "test" : [
         {
             "check-hash" : {
-                "deploy/1.txt" : "96b2a470cc37c389a10e06e44336bf2cd20b0db76b9161783d3c676f316cd8e8",
-                "deploy/2.txt" : "1fa785981761a77df359f2f60a4a05073a8f06bed14e49327d19a01526391f38"
+                "deploy/1.txt" : "7f91985fcec377b3ad31c6eba837c8af0f0ad48973795edd33089ec2ad5d9372",
+                "deploy/2.txt" : "928af6ea40cc9728d511a140a552389bec6daa9a3252f65845ec48c861eb4dc3"
             }
         }
     ]

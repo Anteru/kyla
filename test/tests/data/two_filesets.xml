@@ -1,0 +1,14 @@
+<?xml version="1.0" ?>
+<FileRepository>
+	<Package>
+		<Type>Loose</Type>
+	</Package>
+	<FileSets>
+		<FileSet Id="5d195f63-f424-431f-b7c5-8d57cd32f57b" Name="F0">
+			<File Source="1.txt" />
+		</FileSet>
+		<FileSet Id="c8bed51b-cbba-4699-953a-834930704d89" Name="F1">
+			<File Source="2.txt" />
+		</FileSet>
+	</FileSets>
+</FileRepository>
