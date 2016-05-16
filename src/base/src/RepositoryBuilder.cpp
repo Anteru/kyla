@@ -24,6 +24,7 @@
 #include <map>
 
 #include "sql/Database.h"
+#include "Exception.h"
 
 namespace {
 struct BuildContext
@@ -270,7 +271,10 @@ void BuildRepository (const char* descriptorFile,
 	boost::filesystem::create_directories (ctx.targetDirectory);
 
 	pugi::xml_document doc;
-	doc.load_file (inputFile);
+	if (!doc.load_file (inputFile)) {
+		throw RuntimeException ("Could not parse input file.",
+			KYLA_FILE_LINE);
+	}
 
 	auto fileSets = GetFileSets (doc, ctx);
 
@@ -290,6 +294,9 @@ void BuildRepository (const char* descriptorFile,
 
 	if (builder) {
 		builder->Build (ctx, fileSets, uniqueFiles);
+	} else {
+		throw RuntimeException ("Package type not specified.",
+			KYLA_FILE_LINE);
 	}
 }
 }
