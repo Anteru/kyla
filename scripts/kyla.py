@@ -23,7 +23,7 @@ class PackageType(Enum):
 class FileRepositoryBuilder:
 	def __init__ (self):
 		self._propertyNode = etree.Element ('Properties')
-		self._root = etree.Element ('FileRespository')
+		self._root = etree.Element ('FileRepository')
 		self._package = etree.SubElement (self._root, 'Package')
 		self._fileSets = []
 		self._packageType = PackageType.Loose
