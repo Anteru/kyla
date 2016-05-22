@@ -113,13 +113,13 @@ and merging the results on the hash.
 std::vector<UniqueContentObjects> FindUniqueFileContents (std::vector<FileSet>& fileSets,
 	const BuildContext& ctx)
 {
-	std::unordered_map<kyla::SHA256Digest, std::vector<kyla::Path>,
+	std::unordered_map<kyla::SHA256Digest, std::vector<std::pair<kyla::Path, kyla::Path>>,
 		kyla::HashDigestHash, kyla::HashDigestEqual> uniqueContents;
 
 	for (const auto& fileSet : fileSets) {
 		for (const auto& file : fileSet.files) {
 			// This assumes the hashes are up-to-date, i.e. initialized
-			uniqueContents [file.hash].push_back (file.source);
+			uniqueContents [file.hash].push_back (std::make_pair (file.source, file.target));
 		}
 	}
 
@@ -130,10 +130,13 @@ std::vector<UniqueContentObjects> FindUniqueFileContents (std::vector<FileSet>& 
 		UniqueContentObjects uf;
 
 		uf.hash = kv.first;
-		uf.sourceFile = ctx.sourceDirectory / kv.second.front ();
+		uf.sourceFile = ctx.sourceDirectory / kv.second.front ().first;
 
 		uf.size = kyla::Stat (uf.sourceFile.string ().c_str ()).size;
-		uf.duplicates.assign (kv.second.begin (), kv.second.end ());
+
+		for (const auto& sourceTargetPair : kv.second){
+			uf.duplicates.push_back (sourceTargetPair.second);
+		}
 
 		result.push_back (uf);
 	}
