@@ -6,10 +6,13 @@ import json
 import tempfile
 from collections import OrderedDict
 import glob
+from multiprocessing import Pool
+from functools import partial
 
 class KylaRunner:
-    def __init__(self, kclBinaryPath):
+    def __init__(self, kclBinaryPath, verbose):
         self._kcl = kclBinaryPath
+        self._verbose = verbose
 
     def BuildRepository(self, desc, targetDirectory, sourceDirectory=None):
         args = [self._kcl, 'build']
@@ -21,19 +24,41 @@ class KylaRunner:
         args.append (desc)
         args.append (targetDirectory)
 
-        return subprocess.check_call (args) == 0
+        if self._verbose:
+            print ('Executing: "{}"'.format (' '.join (args)))
+
+        try:
+            result = subprocess.check_call (args)
+            if self._verbose:
+                print ('Result:', result)
+            return result == 0
+        except:
+            if self._verbose:
+                print ('Result:', 'ERROR')
+            return False
 
     def Install(self, source, target, filesets=[]):
-        return self._ExecuteAction ('install', source, target, filesets) == 0
+        return self._ExecuteAction ('install', source, target, filesets)
 
     def Configure(self, source, target, filesets=[]):
-        return self._ExecuteAction ('configure', source, target, filesets) == 0
+        return self._ExecuteAction ('configure', source, target, filesets)
 
     def _ExecuteAction(self, action, source, target, filesets):
         args = [self._kcl, action, source, target] + filesets
 
         #TODO handle validate
-        return subprocess.check_call (args)
+        if self._verbose:
+            print ('Executing: "{}"'.format (' '.join (args)))
+
+        try:
+            result = subprocess.check_call (args)
+            if self._verbose:
+                print ('Result:', result)
+            return result == 0
+        except:
+            if self._verbose:
+                print ('Result:', 'ERROR')
+            return False
 
 class TestEnvironment:
     def __init__(self, kyla : KylaRunner, testDirectory):
@@ -73,9 +98,12 @@ class CheckHash:
     def Execute (self, env : TestEnvironment, args):
         for k,v in args.items ():
             try:
-                if hashlib.sha256 (open (os.path.join (env.testDirectory, k), 'rb').read()).digest().hex() != v:
+                actualHash = hashlib.sha256 (open (os.path.join (env.testDirectory, k), 'rb').read()).digest().hex()
+                if actualHash != v:
+                    print ('Wrong hash', k, 'expected', v, 'actual', actualHash)
                     return False
             except:
+                print ('Could not hash', k)
                 return False
         return True
 
@@ -94,7 +122,7 @@ hooks = {
     "check-not-existant" : CheckNotExistant
 }
 
-class TestRunner:
+class Test:
     def __init__(self, kyla, testDescription):
         self.__kyla = kyla
         self.__test = json.load (open(testDescription, 'r'),
@@ -112,17 +140,46 @@ class TestRunner:
                     r = hook.Execute (env, v)
 
                     if r == False:
+                        print (hook, 'failed')
                         return False
         return True
 
-if __name__ == '__main__':
-    kyla = r"F:\Build\kyla\bin\Debug\kcl.exe"
+def check_negative(invalue):
+    v = int(invalue)
+    if v < 0:
+         raise argparse.ArgumentTypeError("{} is not a valid - must be an integer greater than or equal 0".format (invalue))
+    return v
 
-    for test in glob.glob ('tests/*.json'):
-        testName = os.path.splitext (os.path.basename (test))[0]
-        tr = TestRunner (KylaRunner (kyla), test)
-        r = tr.Execute ()
-        if r:
-            print (testName, 'PASS')
-        else:
-            print (testName, 'FAIL')
+def ExecuteTest (testFilename, kyla, verbose):
+    testName = os.path.splitext (os.path.basename (testFilename))[0]
+    tr = Test (KylaRunner (kyla, verbose=verbose), testFilename)
+    return (testName, tr.Execute (),)
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument ('binary', metavar='BINARY', type=str,
+        help='Path to kcl binary')
+    parser.add_argument ('-v', '--verbose', action='store_true',
+        default=False,
+        help='Enable verbose output')
+    parser.add_argument ('-r', '--regex', default='*',
+        help='Only execute tests matching this regex')
+    parser.add_argument ('-p', '--parallel', type=check_negative,
+        default=1,
+        help="Run tests in parallel. Set to 0 to use as many threads as available on the machine.")
+
+    args = parser.parse_args ()
+    tests = glob.glob ('tests/' + args.regex + '.json')
+    results = []
+
+    func = partial (ExecuteTest, kyla=args.binary, verbose=args.verbose)
+
+    if args.parallel == 1:
+        results = map (func, tests)
+    else:
+        processCount = args.parallel if args.parallel != 0 else None
+        with Pool(processCount) as p:
+            results = p.map (func, tests)
+
+    for r in results:
+        print (r[0], 'PASS' if r[1] else 'FAIL')
