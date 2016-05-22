@@ -374,9 +374,10 @@ std::unique_ptr<File> CreateFile (const char* path)
 std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode)
 {
 	const int mode = ConvertOpenMode (openMode);
+	const int shareMode = openMode == FileOpenMode::Read ? FILE_SHARE_READ : 0;
 
 	auto fd = ::CreateFileA (path, mode,
-		0, nullptr, OPEN_EXISTING, 0, 0);
+		shareMode, nullptr, OPEN_EXISTING, 0, 0);
 
 	if (fd == INVALID_HANDLE_VALUE) {
 		throw std::exception ("Could not open file");
@@ -400,9 +401,10 @@ std::unique_ptr<File> CreateFile (const Path& path)
 std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode)
 {
 	const int mode = ConvertOpenMode (openMode);
+	const int shareMode = openMode == FileOpenMode::Read ? FILE_SHARE_READ : 0;
 
 	auto fd = ::CreateFileW (path.c_str (), mode,
-		0, nullptr, OPEN_EXISTING, 0, 0);
+		shareMode, nullptr, OPEN_EXISTING, 0, 0);
 
 	if (fd == INVALID_HANDLE_VALUE) {
 		throw std::exception ("Could not open file");
