@@ -27,7 +27,6 @@ SET(HEADERS
 	inc/ArrayRef.h
 
 	inc/Compression.h
-	inc/Config.h
 	inc/Exception.h
 	inc/FileIO.h
 	inc/Hash.h

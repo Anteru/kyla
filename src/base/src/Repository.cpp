@@ -1,3 +1,22 @@
+/**
+[LICENSE BEGIN]
+kyla Copyright (C) 2016 Matthäus G. Chajdas
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+[LICENSE END]
+*/
+
 #include "Repository.h"
 
 #include "sql/Database.h"
@@ -141,7 +160,7 @@ public:
 	{
 		// Get a list of (file, hash, size)
 		// We sort by size first so we get small objects out of the way first
-		// (slower progress, but more things getting processed) and speed up 
+		// (slower progress, but more things getting processed) and speed up
 		// towards the end (larger files, higher throughput)
 		static const char* querySql =
 			"SELECT Hash, Size "
@@ -159,7 +178,7 @@ public:
 			query.GetBlob (0, hash);
 			const auto size = query.GetInt64 (1);
 
-			const auto filePath = Path{ path_ } / Path{ ".ky" } 
+			const auto filePath = Path{ path_ } / Path{ ".ky" }
 				/ Path{ "objects" } / ToString (hash);
 
 			if (!boost::filesystem::exists (filePath)) {
@@ -187,19 +206,19 @@ public:
 			// For size 0 files, don't bother checking the hash
 			///@TODO Assert hash is the null hash
 			if (size != 0 && ComputeSHA256 (filePath) != hash) {
-				validationCallback (hash, 
+				validationCallback (hash,
 					filePath.string ().c_str (),
 					ValidationResult::Corrupted);
 
 				continue;
 			}
 
-			validationCallback (hash, 
+			validationCallback (hash,
 				filePath.string ().c_str (),
 				ValidationResult::Ok);
 		}
 	}
-	
+
 	void Repair (IRepository& source)
 	{
 		// We use the validation logic here to find missing content objects
@@ -280,7 +299,7 @@ void LooseRepository::RepairImpl (IRepository& source)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void LooseRepository::ConfigureImpl (IRepository& /*source*/, 
+void LooseRepository::ConfigureImpl (IRepository& /*source*/,
 	const ArrayRef<Uuid>& /*filesets*/,
 	Log& /*log*/)
 {
@@ -324,9 +343,9 @@ public:
 	{
 		// Get a list of (file, hash, size)
 		// We sort by size first so we get small objects out of the way first
-		// (slower progress, but more things getting processed) and speed up 
+		// (slower progress, but more things getting processed) and speed up
 		// towards the end (larger files, higher throughput)
-		static const char* querySql = 
+		static const char* querySql =
 			"SELECT files.path, content_objects.Hash, content_objects.Size "
 			"FROM files "
 			"LEFT JOIN content_objects ON content_objects.Id = files.ContentObjectId "
@@ -880,7 +899,7 @@ void DeployedRepository::GetContentObjectsImpl (
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void DeployedRepository::ConfigureImpl (IRepository& source, 
+void DeployedRepository::ConfigureImpl (IRepository& source,
 	const ArrayRef<Uuid>& filesets,
 	Log& log)
 {

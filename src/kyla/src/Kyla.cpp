@@ -1,3 +1,22 @@
+/**
+[LICENSE BEGIN]
+kyla Copyright (C) 2016 Matthäus G. Chajdas
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+[LICENSE END]
+*/
+
 #include "Kyla.h"
 
 #include "Repository.h"
@@ -93,7 +112,7 @@ int kylaOpenTargetRepository (
 	if (installer == nullptr) {
 		return kylaResult_ErrorInvalidArgument;
 	}
-	
+
 	if (path == nullptr) {
 		return kylaResult_ErrorInvalidArgument;
 	}
@@ -175,7 +194,7 @@ int kylaExecute (
 	}
 
 	std::vector<kyla::Uuid> filesetIds;
-	
+
 	if (desiredState == nullptr) {
 		switch (action) {
 		case kylaAction_Configure:
@@ -241,7 +260,7 @@ int kylaExecute (
 
 			if (internal->validationCallback) {
 				internal->validationCallback (
-					static_cast<kylaValidationResult> (result), 
+					static_cast<kylaValidationResult> (result),
 					&info,
 					internal->validationCallbackContext);
 			}
@@ -431,7 +450,7 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** installer)
 	internal->installer.OpenTargetRepository = kylaOpenTargetRepository;
 	internal->installer.QueryFilesetName = kylaQueryFilesetName;
 	internal->installer.QueryFilesets = kylaQueryFilesets;
-	internal->installer.SetLogCallback = 
+	internal->installer.SetLogCallback =
 	[](KylaInstaller* installer, KylaLogCallback logCallback, void* callbackContext) -> int {
 		KYLA_C_API_BEGIN ()
 
@@ -463,11 +482,11 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** installer)
 
 			logCallback (source, severity, message, callbackContext);
 		});
-	
+
 		return kylaResult_Ok;
 
 		KYLA_C_API_END ()
-	}; 
+	};
 	internal->installer.SetProgressCallback =
 		[](KylaInstaller* installer, KylaProgressCallback progressCallback, void* callbackContext) -> int {
 		KYLA_C_API_BEGIN ()
@@ -475,7 +494,7 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** installer)
 		if (installer == nullptr) {
 			return kylaResult_ErrorInvalidArgument;
 		}
-			
+
 		auto internal = GetInstallerInternal (installer);
 		internal->progressCallback = progressCallback;
 		internal->progressCallbackContext = callbackContext;

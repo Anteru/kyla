@@ -1,3 +1,22 @@
+/**
+[LICENSE BEGIN]
+kyla Copyright (C) 2016 Matthäus G. Chajdas
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+[LICENSE END]
+*/
+
 #include <boost/program_options.hpp>
 
 #include "Kyla.h"
@@ -70,7 +89,7 @@ int main (int argc, char* argv [])
 			.add ("output-directory", 1);
 
 		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
-		
+
 		kylaBuildRepository (vm ["input"].as<std::string> ().c_str (),
 			vm ["source-directory"].as<std::string> ().c_str (),
 			vm ["output-directory"].as<std::string> ().c_str ());
@@ -82,7 +101,7 @@ int main (int argc, char* argv [])
 			("summary,s", po::bool_switch ()->default_value (true),
 				"show summary")
 			("input", po::value<std::string> ());
-		
+
 		po::positional_options_description posBuild;
 		posBuild
 			.add ("input", 1);
