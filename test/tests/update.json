@@ -1,0 +1,48 @@
+{
+    "info" : {
+        "description" : "Update one file"
+    },
+    "setup" : [
+        {
+            "generate-repository" : {
+                "source" : "data/version_one.xml",
+                "source-directory" : "data/shared",
+                "target" : "v1"
+            }
+        },
+        {
+            "generate-repository" : {
+                "source" : "data/version_two.xml",
+                "source-directory" : "data/shared",
+                "target" : "v2"
+            }
+        }
+    ],
+    "execute" : [
+        {
+            "install" : {
+                "source" : "v1",
+                "target" : "deploy",
+                "filesets" : [
+                    "e8e1043b-e4b0-4ebb-bee0-807c5c92d480"
+                ]
+            }
+        },
+        {
+            "configure" : {
+                "source" : "v2",
+                "target" : "deploy",
+                "filesets" : [
+                    "2151452d-70d5-4b5a-9be6-b5501cf72f20"
+                ]
+            }
+        }
+    ],
+    "test" : [
+        {
+            "check-hash" : {
+                "deploy/base.txt" : "928af6ea40cc9728d511a140a552389bec6daa9a3252f65845ec48c861eb4dc3"
+            }
+        }
+    ]
+}
