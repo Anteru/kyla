@@ -155,6 +155,9 @@ def ExecuteTest (testFilename, kyla, verbose):
     tr = Test (KylaRunner (kyla, verbose=verbose), testFilename)
     return (testName, tr.Execute (),)
 
+def FormatResult(r):
+    return ('{} {}'.format (r[0], 'PASS' if r[1] else 'FAIL'))
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Process some integers.')
     parser.add_argument ('binary', metavar='BINARY', type=str,
@@ -175,11 +178,10 @@ if __name__ == '__main__':
     func = partial (ExecuteTest, kyla=args.binary, verbose=args.verbose)
 
     if args.parallel == 1:
-        results = map (func, tests)
+        for i, test in enumerate (tests, 1):
+            print ('{}/{}'.format (i, len (tests)), FormatResult (func (test)))
     else:
         processCount = args.parallel if args.parallel != 0 else None
         with Pool(processCount) as p:
-            results = p.map (func, tests)
-
-    for r in results:
-        print (r[0], 'PASS' if r[1] else 'FAIL')
+            for i, r in enumerate(p.imap (func, tests), 1):
+                print ('{}/{}'.format (i, len (tests)), FormatResult (r))
