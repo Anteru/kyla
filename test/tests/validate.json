@@ -1,0 +1,42 @@
+{
+    "info" : {
+        "description" : "Basic validation test"
+    },
+    "setup" : [
+        {
+            "generate-repository" : {
+                "source" : "data/basic.xml",
+                "source-directory" : "data/shared",
+                "target" : "test"
+            }
+        }
+    ],
+    "execute" : [
+        {
+            "install" : {
+                "source" : "test",
+                "target" : "deploy",
+                "filesets" : [
+                    "cc3f60a7-7b24-4a54-8dfa-6f811efd4af0"
+                ]
+            }
+        },
+        {
+            "zero-file" : [
+                "deploy/1.txt"
+            ]
+        }
+    ],
+    "test" : [
+        {
+            "validate" : {
+                "source" : "test",
+                "target" : "deploy",
+                "filesets" : [
+                    "cc3f60a7-7b24-4a54-8dfa-6f811efd4af0"
+                ],
+                "result" : "fail"
+            }
+        }
+    ]
+}

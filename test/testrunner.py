@@ -44,18 +44,25 @@ class KylaRunner:
     def Configure(self, source, target, filesets=[]):
         return self._ExecuteAction ('configure', source, target, filesets)
 
+    def Validate(self, source, target, filesets=[]):
+        return self._ExecuteAction ('validate', source, target, filesets)
+
     def _ExecuteAction(self, action, source, target, filesets):
         args = [self._kcl, action, source, target] + filesets
 
-        #TODO handle validate
+        # validate doesn't handle source and filesets yet, so we need to strip
+        # those
+        if action == 'validate':
+            args = args[0:2] + ['--summary=false', args[3]]
+
         if self._verbose:
             print ('Executing: "{}"'.format (' '.join (args)))
 
         try:
-            result = subprocess.check_call (args)
+            result = subprocess.run (args,stdout=subprocess.PIPE)
             if self._verbose:
-                print ('Result:', result)
-            return result == 0
+                print ('Result:', result.returncode)
+            return result.returncode == 0
         except:
             if self._verbose:
                 print ('Result:', 'ERROR')
@@ -95,6 +102,36 @@ class ExecuteConfigure:
 
         return env.kyla.Configure (source, target, filesets)
 
+class ExecuteValidate:
+    def Execute(self, env : TestEnvironment, args):
+        source = os.path.join (env.testDirectory, args ['source'])
+        target = os.path.join (env.testDirectory, args ['target'])
+        filesets = args ['filesets']
+
+        result = env.kyla.Validate (source, target, filesets)
+        if args.get ('result', 'pass') == 'pass':
+            return result
+        else:
+            return not result
+
+class ZeroFile:
+    def Execute (self, env : TestEnvironment, args):
+        blockSize = 1 << 20 # 1 MiB sized blocks
+        nullBuffer = bytes([0 for _ in range (blockSize)])
+
+        for f in args:
+            filePath = os.path.join (env.testDirectory, f)
+            fileSize = os.stat (filePath).st_size
+            bytesToWrite = fileSize
+            with open (filePath, 'wb') as outputFile:
+                while bytesToWrite > 0:
+                    # we write blockSize null bytes in one go
+                    nextBlockSize = min (bytesToWrite, blockSize)
+                    outputFile.write (nullBuffer [:nextBlockSize])
+                    bytesToWrite -= nextBlockSize
+
+        return True
+
 class CheckHash:
     def Execute (self, env : TestEnvironment, args):
         for k,v in args.items ():
@@ -116,11 +153,13 @@ class CheckNotExistant:
         return True
 
 hooks = {
-    "generate-repository" : SetupGenerateRepository,
-    "install" : ExecuteInstall,
-    "configure" : ExecuteConfigure,
-    "check-hash" : CheckHash,
-    "check-not-existant" : CheckNotExistant
+    'generate-repository' : SetupGenerateRepository,
+    'install' : ExecuteInstall,
+    'configure' : ExecuteConfigure,
+    'validate' : ExecuteValidate,
+    'check-hash' : CheckHash,
+    'check-not-existant' : CheckNotExistant,
+    'zero-file' : ZeroFile
 }
 
 class Test:
