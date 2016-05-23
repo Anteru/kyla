@@ -98,7 +98,7 @@ int main (int argc, char* argv [])
 		build_desc.add_options ()
 			("verbose,v", po::bool_switch ()->default_value (false),
 				"verbose output")
-			("summary,s", po::bool_switch ()->default_value (true),
+			("summary,s", po::value<bool> ()->default_value (true),
 				"show summary")
 			("input", po::value<std::string> ());
 
@@ -169,6 +169,12 @@ int main (int argc, char* argv [])
 		if (vm ["summary"].as<bool> ()) {
 			std::cout << "OK " << ok << " CORRUPTED/MISSING " << errors << std::endl;
 		}
+
+        if (errors != 0) {
+            return 1;
+        } else {
+            return 0;
+        }
 	} else if (cmd == "repair") {
 		po::options_description build_desc ("repair options");
 		build_desc.add_options ()
