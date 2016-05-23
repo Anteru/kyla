@@ -8,6 +8,7 @@ from collections import OrderedDict
 import glob
 from multiprocessing import Pool
 from functools import partial
+import time
 
 class KylaRunner:
     def __init__(self, kclBinaryPath, verbose):
@@ -172,6 +173,8 @@ if __name__ == '__main__':
         help="Run tests in parallel. Set to 0 to use as many threads as available on the machine.")
 
     args = parser.parse_args ()
+    startTime = time.time ()
+
     tests = glob.glob ('tests/' + args.regex + '.json')
     results = []
 
@@ -185,3 +188,6 @@ if __name__ == '__main__':
         with Pool(processCount) as p:
             for i, r in enumerate(p.imap (func, tests), 1):
                 print ('{}/{}'.format (i, len (tests)), FormatResult (r))
+
+    endTime = time.time ()
+    print ('Elapsed time: {0:.3} sec'.format (endTime - startTime))
