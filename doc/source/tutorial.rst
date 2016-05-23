@@ -100,7 +100,7 @@ Configuring a repository means adding or removing file sets from it. We'll creat
 
     $ .\kcl query-filesets -n source-fs
 
-This yiels::
+This yields::
 
     82511c20-841a-49c5-9388-41ca8a068f93 docs 268 2594580
     aa1bc840-5432-45cc-8880-ab4f8fc3ce87 core 101 1982061
