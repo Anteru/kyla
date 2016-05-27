@@ -124,6 +124,9 @@ std::unique_ptr<File> CreateFile (const char* path);
 
 std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode);
 std::unique_ptr<File> CreateFile (const Path& path);
+
+void BlockCopy (File& input, File& output);
+void BlockCopy (File& input, File& output, const MutableArrayRef<byte>& buffer);
 }
 
 #endif // FILEIO_H

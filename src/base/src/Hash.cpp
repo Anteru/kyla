@@ -38,8 +38,9 @@ SHA256Digest ComputeSHA256 (const ArrayRef<>& data)
 ////////////////////////////////////////////////////////////////////////////////
 SHA256Digest ComputeSHA256 (const boost::filesystem::path& p)
 {
-	std::vector<unsigned char> buffer (4 << 20 /* 4 MiB */);
-	return ComputeSHA256 (p, buffer);
+	static const int BufferSize = 1 << 20; /* 1 MiB */
+	std::unique_ptr<unsigned char []> buffer{ new unsigned char [BufferSize] };
+	return ComputeSHA256 (p, MutableArrayRef<unsigned char> (buffer.get (), BufferSize));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
