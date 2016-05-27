@@ -170,11 +170,7 @@ int main (int argc, char* argv [])
 			std::cout << "OK " << ok << " CORRUPTED/MISSING " << errors << std::endl;
 		}
 
-        if (errors != 0) {
-            return 1;
-        } else {
-            return 0;
-        }
+		return (errors == 0) ? 0 : 1;
 	} else if (cmd == "repair") {
 		po::options_description build_desc ("repair options");
 		build_desc.add_options ()
