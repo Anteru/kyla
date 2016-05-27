@@ -168,8 +168,29 @@ Everything packed into per-file-set files
 */
 class PackedRepository final : public IRepository
 {
+public:
+	PackedRepository (const char* path);
+	~PackedRepository ();
+
+	PackedRepository (PackedRepository&& other);
+	PackedRepository& operator= (PackedRepository&& other);
 
 private:
+	void ValidateImpl (const ValidationCallback& validationCallback) override;
+
+	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
+		const GetContentObjectCallback& getCallback) override;
+	void RepairImpl (IRepository& source) override;
+	void ConfigureImpl (IRepository& other,
+		const ArrayRef<Uuid>& filesets,
+		Log& log) override;
+
+	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
+	std::string GetFilesetNameImpl (const Uuid& filesetId) override;
+	Sql::Database& GetDatabaseImpl () override;
+
+	struct Impl;
+	std::unique_ptr<Impl> impl_;
 };
 
 /**

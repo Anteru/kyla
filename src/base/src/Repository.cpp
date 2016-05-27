@@ -120,6 +120,7 @@ std::string GetFilesetNameInternal (Sql::Database& db, const Uuid& id)
 	return query.GetText (0);
 }
 
+///////////////////////////////////////////////////////////////////////////////
 struct LooseRepository::Impl
 {
 public:
@@ -925,13 +926,191 @@ std::string DeployedRepository::GetFilesetNameImpl (const Uuid& id)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+struct PackedRepository::Impl
+{
+public:
+	Impl (const char* path)
+		: db_ (Sql::Database::Open (Path (path) / "repository.db"))
+		, path_ (path)
+	{
+	}
+
+	Sql::Database& GetDatabase ()
+	{
+		return db_;
+	}
+
+	void GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjects,
+		const IRepository::GetContentObjectCallback& getCallback)
+	{
+		// We will request the objects in order, so we need a temporary table
+		// for that
+		db_.Execute ("CREATE TEMPORARY TABLE requested_content_objects "
+			"(Hash BLOB NOT NULL UNIQUE);");
+
+		auto tempObjectInsert = db_.Prepare ("INSERT INTO requested_content_objects "
+			"(Hash) VALUES (?)");
+
+		for (const auto& obj : requestedObjects) {
+			tempObjectInsert.BindArguments (obj);
+			tempObjectInsert.Step ();
+			tempObjectInsert.Reset ();
+		}
+
+		// Find all source packages we need to handle
+		auto findSourcePackagesQuery = db_.Prepare (
+			"SELECT DISTINCT "
+			"   source_packages.Filename AS Filename, "
+			"   source_packages.Id AS Id "
+			"FROM storage_mapping "
+			"    INNER JOIN content_objects ON storage_mapping.ContentObjectId = content_objects.Id "
+			"    INNER JOIN source_packages ON storage_mapping.SourcePackageId = source_packages.Id "
+			"WHERE content_objects.Hash IN (SELECT Hash FROM requested_content_objects) "
+		);
+
+		auto contentObjectsInPackageQuery = db_.Prepare ("SELECT  "
+			"    storage_mapping.PackageOffset AS PackageOffset,  "
+			"    storage_mapping.PackageSize AS PackageSize, "
+			"    storage_mapping.SourceOffset AS SourceOffset,  "
+			"    content_objects.Hash AS Hash, "
+			"    storage_mapping.Compression AS Compression "
+			"FROM storage_mapping "
+			"INNER JOIN content_objects ON storage_mapping.ContentObjectId = content_objects.Id "
+			"INNER JOIN source_packages ON storage_mapping.SourcePackageId = source_packages.Id "
+			"WHERE content_objects.Hash IN (SELECT Hash FROM requested_content_objects) "
+			"    AND source_packages.Id = ? "
+			"ORDER BY PackageOffset ");
+
+		while (findSourcePackagesQuery.Step ()) {
+			const auto filename = findSourcePackagesQuery.GetText (0);
+			const auto id = findSourcePackagesQuery.GetInt64 (1);
+
+			auto packageFile = OpenFile (
+				path_ / filename, FileOpenMode::Read
+			);
+
+			///@TODO(minor) Validate it's a valid file
+
+			byte* fileMapping = static_cast<byte*> (packageFile->Map ());
+
+			contentObjectsInPackageQuery.BindArguments (id);
+
+			while (contentObjectsInPackageQuery.Step ()) {
+				const auto packageOffset = contentObjectsInPackageQuery.GetInt64 (0);
+				const auto packageSize = contentObjectsInPackageQuery.GetInt64 (1);
+				const auto sourceOffset = contentObjectsInPackageQuery.GetInt64 (2);
+				SHA256Digest hash;
+				contentObjectsInPackageQuery.GetBlob (3, hash);
+				const char* compression = contentObjectsInPackageQuery.GetText (4);
+
+				// For now, compression should be null
+				getCallback (hash,
+					ArrayRef<byte> {fileMapping + packageOffset,
+						packageSize});
+			}
+
+			packageFile->Unmap (fileMapping);
+
+			contentObjectsInPackageQuery.Reset ();
+		}
+	}
+
+	void Validate (const IRepository::ValidationCallback& validationCallback)
+	{
+		// Get a list of (file, hash, size)
+		// We sort by size first so we get small objects out of the way first
+		// (slower progress, but more things getting processed) and speed up
+		// towards the end (larger files, higher throughput)
+		static const char* querySql =
+			"SELECT Hash, Size "
+			"FROM content_objects "
+			"ORDER BY Size";
+	}
+
+private:
+	Sql::Database db_;
+	Path path_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+PackedRepository::~PackedRepository ()
+{
+}
+
+///////////////////////////////////////////////////////////////////////////////
+PackedRepository::PackedRepository (const char* path)
+	: impl_ (new Impl{ path })
+{
+}
+
+///////////////////////////////////////////////////////////////////////////////
+PackedRepository::PackedRepository (PackedRepository&& other)
+	: impl_ (std::move (other.impl_))
+{
+}
+
+///////////////////////////////////////////////////////////////////////////////
+PackedRepository& PackedRepository::operator= (PackedRepository&& other)
+{
+	impl_ = std::move (other.impl_);
+	return *this;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void PackedRepository::ValidateImpl (const ValidationCallback& validationCallback)
+{
+	impl_->Validate (validationCallback);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void PackedRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
+	const IRepository::GetContentObjectCallback& getCallback)
+{
+	impl_->GetContentObjects (requestedObjects, getCallback);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void PackedRepository::RepairImpl (IRepository& source)
+{
+	throw RuntimeException ("Not implemented", KYLA_FILE_LINE);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void PackedRepository::ConfigureImpl (IRepository& /*source*/,
+	const ArrayRef<Uuid>& /*filesets*/,
+	Log& /*log*/)
+{
+	throw RuntimeException ("Not implemented", KYLA_FILE_LINE);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::vector<FilesetInfo> PackedRepository::GetFilesetInfosImpl ()
+{
+	return GetFilesetInfoInternal (impl_->GetDatabase ());
+}
+
+///////////////////////////////////////////////////////////////////////////////
+Sql::Database& PackedRepository::GetDatabaseImpl ()
+{
+	return impl_->GetDatabase ();
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::string PackedRepository::GetFilesetNameImpl (const Uuid& id)
+{
+	return GetFilesetNameInternal (impl_->GetDatabase (), id);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<IRepository> OpenRepository (const char* path,
 	const bool allowWrite)
 {
 	if (boost::filesystem::exists (Path{ path } / Path{ ".ky" })) {
 		// .ky indicates a loose repository
 		return std::unique_ptr<IRepository> (new LooseRepository{ path });
-	} else {
+	} else if (boost::filesystem::exists (Path{ path } / "repository.db")) {
+		return std::unique_ptr<IRepository> (new PackedRepository{ path });
+	}  else {
 		// Assume deployed repository for now
 		return std::unique_ptr<IRepository> (new DeployedRepository{ path,
 		allowWrite });
