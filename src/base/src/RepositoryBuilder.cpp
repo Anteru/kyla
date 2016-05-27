@@ -277,6 +277,156 @@ private:
 		contentObjectInsert.Commit ();
 	}
 };
+
+/**
+Store all files into one or more source packages. A source package can be
+compressed as well.
+*/
+struct PackedRepositoryBuilder final : public IRepositoryBuilder
+{
+	void Build (const BuildContext& ctx,
+		const std::vector<FileSet>& fileSets,
+		const std::vector<UniqueContentObjects>& uniqueFiles) override
+	{
+		auto dbFile = ctx.targetDirectory / "repository.db";
+		boost::filesystem::remove (dbFile);
+
+		auto db = kyla::Sql::Database::Create (
+			dbFile.string ().c_str ());
+
+		db.Execute (install_db_structure);
+		db.Execute ("PRAGMA journal_mode=WAL;");
+		db.Execute ("PRAGMA synchronous=NORMAL;");
+
+		const auto fileToFileSetId = PopulateFileSets (db, fileSets);
+		PopulateContentObjectsAndFiles (db, uniqueFiles, fileToFileSetId,
+			ctx.targetDirectory);
+
+		db.Execute ("PRAGMA journal_mode=DELETE;");
+		// Necessary to get good index statistics
+		db.Execute ("ANALYZE");
+
+		db.Close ();
+	}
+
+private:
+	std::map<kyla::Path, std::int64_t> PopulateFileSets (kyla::Sql::Database& db,
+		const std::vector<FileSet>& fileSets)
+	{
+		auto fileSetsInsert = db.BeginTransaction ();
+		auto fileSetsInsertQuery = db.Prepare (
+			"INSERT INTO file_sets (Uuid, Name) VALUES (?, ?);");
+
+		std::map<kyla::Path, std::int64_t> result;
+
+		for (const auto& fileSet : fileSets) {
+			fileSetsInsertQuery.BindArguments (
+				fileSet.id, fileSet.name);
+
+			fileSetsInsertQuery.Step ();
+			fileSetsInsertQuery.Reset ();
+
+			const auto fileSetId = db.GetLastRowId ();
+
+			for (const auto& file : fileSet.files) {
+				result [file.target] = fileSetId;
+			}
+		}
+
+		fileSetsInsert.Commit ();
+
+		return result;
+	}
+
+	void PopulateContentObjectsAndFiles (kyla::Sql::Database& db,
+		const std::vector<UniqueContentObjects>& uniqueFiles,
+		const std::map<kyla::Path, std::int64_t>& fileToFileSetId,
+		const kyla::Path& packagePath)
+	{
+		auto contentObjectInsert = db.BeginTransaction ();
+		auto contentObjectInsertQuery = db.Prepare (
+			"INSERT INTO content_objects (Hash, Size) VALUES (?, ?);");
+		auto filesInsertQuery = db.Prepare (
+			"INSERT INTO files (Path, ContentObjectId, FileSetId) VALUES (?, ?, ?);");
+		auto packageInsertQuery = db.Prepare (
+			"INSERT INTO source_packages (Name, Filename, Uuid) VALUES (?, ?, ?)");
+		auto storageMappingInsertQuery = db.Prepare (
+			"INSERT INTO storage_mapping "
+			"(ContentObjectId, SourcePackageId, PackageOffset, PackageSize, SourceOffset, Compression) "
+			"VALUES (?, ?, ?, ?, ?, ?)");
+
+		auto package = kyla::CreateFile (packagePath / "data.kypkg");
+
+		// The file starts with a header followed by all content objects.
+		// The database is stored separately
+		struct PackageHeader
+		{
+			char id [8];
+			std::uint64_t version;
+			char reserved [48];
+
+			static void Initialize (PackageHeader& header)
+			{
+				memset (&header, 0, sizeof (header));
+
+				memcpy (header.id, "KYLAPKG", 8);
+				header.version = 0x0001000000000000ULL;
+			}
+		};
+
+		PackageHeader packageHeader;
+		PackageHeader::Initialize (packageHeader);
+
+		package->Write (kyla::ArrayRef<PackageHeader> (packageHeader));
+
+		packageInsertQuery.BindArguments ("package", "data.kypkg",
+			kyla::Uuid::CreateRandom ());
+		packageInsertQuery.Step ();
+		packageInsertQuery.Reset ();
+
+		const auto packageId = db.GetLastRowId ();
+
+		// For now we support only a single package
+
+		// We can insert content objects directly - every unique file is one
+		for (const auto& kv : uniqueFiles) {
+			contentObjectInsertQuery.BindArguments (
+				kv.hash,
+				kv.size);
+			contentObjectInsertQuery.Step ();
+			contentObjectInsertQuery.Reset ();
+
+			const auto contentObjectId = db.GetLastRowId ();
+
+			for (const auto& reference : kv.duplicates) {
+				const auto fileSetId = fileToFileSetId.find (reference)->second;
+
+				filesInsertQuery.BindArguments (
+					reference.string ().c_str (),
+					contentObjectId,
+					fileSetId);
+				filesInsertQuery.Step ();
+				filesInsertQuery.Reset ();
+			}
+
+			///@TODO(minor) Chunk the input file here based on uncompressed size
+
+			auto startOffset = package->Tell ();
+			
+			auto inputFile = kyla::OpenFile (kv.sourceFile, kyla::FileOpenMode::Read);
+			BlockCopy (*inputFile, *package);
+			auto endOffset = package->Tell ();
+
+			storageMappingInsertQuery.BindArguments (contentObjectId, packageId,
+				startOffset, endOffset - startOffset, 0 /* offset inside the content object */,
+				kyla::Sql::Null () /* no compression for now */);
+			storageMappingInsertQuery.Step ();
+			storageMappingInsertQuery.Reset ();
+		}
+
+		contentObjectInsert.Commit ();
+	}
+};
 }
 
 namespace kyla {
@@ -311,6 +461,8 @@ void BuildRepository (const char* descriptorFile,
 	if (packageTypeNode) {
 		if (strcmp (packageTypeNode.node ().text ().as_string (), "Loose") == 0) {
 			builder.reset (new LooseRepositoryBuilder);
+		} else if (strcmp (packageTypeNode.node ().text ().as_string (), "Packed") == 0) {
+			builder.reset (new PackedRepositoryBuilder);
 		}
 	}
 

@@ -12,27 +12,31 @@ CREATE TABLE file_sets (
 	Uuid BLOB NOT NULL UNIQUE,
 	Name VARCHAR);
 
-CREATE TABLE files (Path TEXT PRIMARY KEY NOT NULL,
+CREATE TABLE files (
+	Path TEXT PRIMARY KEY NOT NULL,
 	ContentObjectId INTEGER NOT NULL,
 	FileSetId INTEGER NOT NULL,
 	FOREIGN KEY(ContentObjectId) REFERENCES content_objects(Id),
 	FOREIGN KEY(FileSetId) REFERENCES file_sets(Id));
 
-CREATE TABLE source_packages (Id INTEGER PRIMARY KEY NOT NULL,
+CREATE TABLE source_packages (
+	Id INTEGER PRIMARY KEY NOT NULL,
 	Name VARCHAR NOT NULL UNIQUE,
 	Filename VARCHAR NOT NULL UNIQUE,
-	Uuid BLOB NOT NULL,
-	Hash BLOB NOT NULL);
+	Uuid BLOB NOT NULL UNIQUE);
 
 -- Maps one content object to one or more source packages
--- If a content object is not found here, the file itself is the content
--- object. This can happen if the repository is "loose", i.e. installed
 CREATE TABLE storage_mapping (
-	ContentObjectId INTEGER NOT NULL,
-	-- if NULL the content object is not stored in this repository
-	-- useful for patches, which rely on content being present in the
-	-- target already
+	ContentObjectId INTEGER,
 	SourcePackageId INTEGER,
+	-- Offset inside the source package
+	PackageOffset INTEGER NOT NULL,
+	-- Size inside a package may be non-zero if the file is compressed
+	PackageSize INTEGER NOT NULL,
+	-- Offset in the output file, in case one content object is split
+	SourceOffset INTEGER NOT NULL,
+	-- None if uncompressed
+	Compression VARCHAR,
 	FOREIGN KEY(ContentObjectId) REFERENCES content_objects(Id),
 	FOREIGN KEY(SourcePackageId) REFERENCES source_packages(Id));
 
