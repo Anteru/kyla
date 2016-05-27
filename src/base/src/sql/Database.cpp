@@ -24,17 +24,24 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Exception.h"
 
 namespace {
-void OnSQLiteError (const int /*errorCode*/, const char* /*errorMessage*/)
+class SQLException : public kyla::RuntimeException
 {
-	// std::cerr << sqlite3_errstr (errorCode) << " : " << errorMessage << std::endl;
-}
+public:
+	SQLException (const std::string& what, const char* file, const int line)
+		: RuntimeException (what.c_str (), file, line)
+	{
+	}
+
+	SQLException (sqlite3* db, const int r, const char* file, const int line)
+		: SQLException (std::string (sqlite3_errstr (r)) + ":" + std::string (sqlite3_errmsg (db)), file, line)
+	{
+	}
+};
 }
 
-#define SAFE_SQLITE_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_OK) { OnSQLiteError (r_, sqlite3_errmsg (db_)); } } while (0)
-#define SAFE_SQLITE_INSERT_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_DONE) { spdlog::get ("log")->error () << file << ":" << line << " " << sqlite3_errstr(r_); exit (1); } } while (0)
+#define SAFE_SQLITE_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_OK) { throw  SQLException (db_, r_, file, line); } } while (0)
 
 #define K_S(expr) SAFE_SQLITE_INTERNAL(expr, __FILE__, __LINE__)
-#define K_S_INSERT(expr) SAFE_SQLITE_INSERT_INTERNAL(expr, __FILE__, __LINE__)
 
 namespace kyla {
 namespace Sql {
@@ -161,8 +168,7 @@ public:
 			return false;
 		}
 
-		throw RuntimeException ("Error while performing step on statement",
-			KYLA_FILE_LINE);
+		throw SQLException (db_, r, KYLA_FILE_LINE);
 	}
 
 	void StatementReset (void* statement)
@@ -253,7 +259,7 @@ public:
 		auto backup = sqlite3_backup_init (db_, name, other->db_, "main");
 
 		if (backup == nullptr) {
-			OnSQLiteError (sqlite3_errcode (db_), sqlite3_errmsg (db_));
+			throw SQLException (db_, sqlite3_errcode (db_), KYLA_FILE_LINE);
 		}
 
 		K_S (sqlite3_backup_step (backup, -1));
