@@ -262,8 +262,8 @@ public:
 			throw SQLException (db_, sqlite3_errcode (db_), KYLA_FILE_LINE);
 		}
 
-		K_S (sqlite3_backup_step (backup, -1));
-		K_S (sqlite3_backup_finish (backup));
+		sqlite3_backup_step (backup, -1);
+		sqlite3_backup_finish (backup);
 	}
 
 	void Detach (const char* name)
