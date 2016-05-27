@@ -83,10 +83,9 @@ std::vector<FilesetInfo> GetFilesetInfoInternal (Sql::Database& db)
 {
 	static const char* querySql =
 		"SELECT file_sets.Uuid, COUNT(content_objects.Id), SUM(content_objects.size) "
-		"FROM file_sets INNER JOIN files "
-		"ON file_sets.Id = files.FileSetId "
-		"INNER JOIN content_objects "
-		"ON content_objects.Id = files.ContentObjectId "
+		"FROM file_sets "
+		"INNER JOIN files ON file_sets.Id = files.FileSetId "
+		"INNER JOIN content_objects ON content_objects.Id = files.ContentObjectId "
 		"GROUP BY file_sets.Uuid";
 
 	auto query = db.Prepare (querySql);
@@ -192,7 +191,7 @@ public:
 
 			const auto statResult = Stat (filePath);
 
-			///@TODO Try/catch here and report corrupted if something goes wrong?
+			///@TODO(minor) Try/catch here and report corrupted if something goes wrong?
 			/// This would indicate the file got deleted or is read-protected
 			/// while the validation is running
 
@@ -205,7 +204,7 @@ public:
 			}
 
 			// For size 0 files, don't bother checking the hash
-			///@TODO Assert hash is the null hash
+			///@TODO(minor) Assert hash is the null hash
 			if (size != 0 && ComputeSHA256 (filePath) != hash) {
 				validationCallback (hash,
 					filePath.string ().c_str (),
@@ -374,7 +373,7 @@ public:
 
 			const auto statResult = Stat (filePath);
 
-			///@TODO Try/catch here and report corrupted if something goes wrong?
+			///@TODO(minor) Try/catch here and report corrupted if something goes wrong?
 			/// This would indicate the file got deleted or is read-protected
 			/// while the validation is running
 
@@ -386,7 +385,7 @@ public:
 			}
 
 			// For size 0 files, don't bother checking the hash
-			///@TODO Assert hash is the null hash
+			///@TODO(minor) Assert hash is the null hash
 			if (size != 0 && ComputeSHA256 (filePath) != hash) {
 				validationCallback (hash, filePath.string ().c_str (),
 					ValidationResult::Corrupted);
@@ -945,6 +944,8 @@ public:
 	{
 		// We will request the objects in order, so we need a temporary table
 		// for that
+
+		///@TODO(minor) Drop the table using RAII
 		db_.Execute ("CREATE TEMPORARY TABLE requested_content_objects "
 			"(Hash BLOB NOT NULL UNIQUE);");
 
@@ -1002,8 +1003,8 @@ public:
 				SHA256Digest hash;
 				contentObjectsInPackageQuery.GetBlob (3, hash);
 				const char* compression = contentObjectsInPackageQuery.GetText (4);
-
-				// For now, compression should be null
+				assert (compression == nullptr);
+				
 				getCallback (hash,
 					ArrayRef<byte> {fileMapping + packageOffset,
 						packageSize});
@@ -1013,18 +1014,70 @@ public:
 
 			contentObjectsInPackageQuery.Reset ();
 		}
+
+		db_.Execute ("DROP TABLE requested_content_objects;");
 	}
 
 	void Validate (const IRepository::ValidationCallback& validationCallback)
 	{
-		// Get a list of (file, hash, size)
-		// We sort by size first so we get small objects out of the way first
-		// (slower progress, but more things getting processed) and speed up
-		// towards the end (larger files, higher throughput)
-		static const char* querySql =
-			"SELECT Hash, Size "
-			"FROM content_objects "
-			"ORDER BY Size";
+		// Find all source packages we need to handle
+		auto findSourcePackagesQuery = db_.Prepare (
+			"SELECT DISTINCT "
+			"   source_packages.Filename AS Filename, "
+			"   source_packages.Id AS Id "
+			"FROM storage_mapping "
+			"    INNER JOIN content_objects ON storage_mapping.ContentObjectId = content_objects.Id "
+			"    INNER JOIN source_packages ON storage_mapping.SourcePackageId = source_packages.Id"
+		);
+
+		auto contentObjectsInPackageQuery = db_.Prepare (
+			"SELECT  "
+			"    storage_mapping.PackageOffset AS PackageOffset,  "
+			"    storage_mapping.PackageSize AS PackageSize, "
+			"    storage_mapping.SourceOffset AS SourceOffset,  "
+			"    content_objects.Hash AS Hash, "
+			"    storage_mapping.Compression AS Compression "
+			"FROM storage_mapping "
+			"INNER JOIN content_objects ON storage_mapping.ContentObjectId = content_objects.Id "
+			"INNER JOIN source_packages ON storage_mapping.SourcePackageId = source_packages.Id "
+			"WHERE source_packages.Id = ? "
+			"ORDER BY PackageOffset ");
+
+		while (findSourcePackagesQuery.Step ()) {
+			auto packageFile = OpenFile (
+				path_ / findSourcePackagesQuery.GetText (1), FileOpenMode::Read
+			);
+
+			///@TODO(minor) Validate it's a valid file
+
+			byte* fileMapping = static_cast<byte*> (packageFile->Map ());
+			
+			contentObjectsInPackageQuery.BindArguments (
+				findSourcePackagesQuery.GetInt64 (0));
+
+			while (contentObjectsInPackageQuery.Step ()) {
+				const auto packageOffset = contentObjectsInPackageQuery.GetInt64 (0);
+				const auto packageSize = contentObjectsInPackageQuery.GetInt64 (1);
+				SHA256Digest hash;
+				contentObjectsInPackageQuery.GetBlob (3, hash);
+				const char* compression = contentObjectsInPackageQuery.GetText (4);
+				assert (compression == nullptr);
+
+				// Assume for now the content object is not chunked
+				if (hash != ComputeSHA256 (ArrayRef<byte> (fileMapping + packageOffset,
+					packageSize))) {
+					// We don't have filenames here - we could fine one if 
+					// needed
+					validationCallback (hash, nullptr, ValidationResult::Corrupted);
+				} else {
+					validationCallback (hash, nullptr, ValidationResult::Ok);
+				}
+			}
+
+			packageFile->Unmap (fileMapping);
+
+			contentObjectsInPackageQuery.Reset ();
+		}
 	}
 
 private:
