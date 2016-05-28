@@ -45,8 +45,8 @@ enum kylaResult
 	kylaResult_ErrorUnsupportedApiVersion = 3
 };
 
-typedef void (*KylaProgressCallback)(const int stageCount,
-	const int stageProgress, const char* stageDescription, void* context);
+typedef void (*KylaProgressCallback)(const int currentStage, const int stageCount,
+	const float stageProgress, const char* stageName, const char* action, void* context);
 
 enum kylaLogSeverity
 {

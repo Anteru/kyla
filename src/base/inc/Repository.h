@@ -35,6 +35,91 @@ namespace Sql {
 
 class Log;
 
+class Progress
+{
+public:
+	using ProgressCallback = std::function<void (const int sc, const int cs, const float p, const char* s, const char* a)>;
+
+	Progress (ProgressCallback callback)
+		: callback_ (callback)
+	{
+	}
+
+	void operator () (const int currentStage, const int stageCount, const float p, const char* s, const char* a)
+	{
+		callback_ (currentStage, stageCount, p, s, a);
+	}
+
+private:
+	ProgressCallback callback_;
+};
+
+class ProgressHelper
+{
+public:
+	ProgressHelper (Progress progressCallback)
+		: progressCallback_ (progressCallback)
+	{
+	}
+
+	void Start (const int stageCount)
+	{
+		stageCount_ = stageCount;
+		currentStage_ = -1;
+	}
+
+	void AdvanceStage (const char* stageName)
+	{
+		++currentStage_;
+		stageName_ = stageName;
+		currentStageTarget_ = 0;
+		current_ = 0;
+		progressCallback_ (currentStage_, stageCount_, 0,
+			stageName_.c_str (), nullptr);
+	}
+
+	void SetStageTarget (const int64 target)
+	{
+		currentStageTarget_ = target;
+	}
+
+	void SetAction (const char* action)
+	{
+		action_ = action;
+	}
+
+	void operator++()
+	{
+		++current_;
+
+		progressCallback_ (currentStage_, stageCount_, GetInStageProgress (),
+			stageName_.c_str (), action_.c_str ());
+	}
+
+	void operator++(int)
+	{
+		++current_;
+
+		progressCallback_ (currentStage_, stageCount_, GetInStageProgress (), 
+			stageName_.c_str (), action_.c_str ());
+	}
+
+private:
+	float GetInStageProgress () const
+	{
+		assert (current_ <= currentStageTarget_);
+		return static_cast<float> (current_) / static_cast<float> (currentStageTarget_);
+	}
+
+	Progress progressCallback_;
+	int64 current_ = 0;
+	int64 currentStageTarget_ = 0;
+	int64 stageCount_ = 1;
+	int64 currentStage_ = 0;
+	std::string action_;
+	std::string stageName_;
+};
+
 struct FilesetInfo
 {
 	Uuid id;
@@ -69,7 +154,7 @@ struct IRepository
 
 	void Configure (IRepository& other,
 		const ArrayRef<Uuid>& filesets,
-		Log& log);
+		Log& log, Progress& progress);
 
 	std::vector<FilesetInfo> GetFilesetInfos ();
 
@@ -87,7 +172,7 @@ private:
 	virtual std::string GetFilesetNameImpl (const Uuid& filesetId) = 0;
 	virtual void ConfigureImpl (IRepository& other,
 		const ArrayRef<Uuid>& filesets,
-		Log& log) = 0;
+		Log& log, Progress& progress) = 0;
 };
 
 std::unique_ptr<IRepository> OpenRepository (const char* path,
@@ -96,7 +181,7 @@ std::unique_ptr<IRepository> OpenRepository (const char* path,
 std::unique_ptr<IRepository> DeployRepository (IRepository& source,
 	const char* targetPath,
 	const ArrayRef<Uuid>& selectedFilesets,
-	Log& log);
+	Log& log, Progress& progressHelper);
 
 /**
 Content files stored directly, not deployed
@@ -118,7 +203,7 @@ private:
 	void RepairImpl (IRepository& source) override;
 	void ConfigureImpl (IRepository& other,
 		const ArrayRef<Uuid>& filesets,
-		Log& log) override;
+		Log& log, Progress& progress) override;
 
 	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
 	std::string GetFilesetNameImpl (const Uuid& filesetId) override;
@@ -144,7 +229,7 @@ public:
 	static std::unique_ptr<DeployedRepository> CreateFrom (IRepository& other,
 		const ArrayRef<Uuid>& filesets,
 		const Path& targetDirectory,
-		Log& log);
+		Log& log, Progress& progress);
 
 private:
 	void ValidateImpl (const ValidationCallback& validationCallback) override;
@@ -153,7 +238,7 @@ private:
 		const GetContentObjectCallback& getCallback) override;
 	void ConfigureImpl (IRepository& other,
 		const ArrayRef<Uuid>& filesets,
-		Log& log) override;
+		Log& log, Progress& progress) override;
 
 	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
 	std::string GetFilesetNameImpl (const Uuid& filesetId) override;
@@ -183,7 +268,7 @@ private:
 	void RepairImpl (IRepository& source) override;
 	void ConfigureImpl (IRepository& other,
 		const ArrayRef<Uuid>& filesets,
-		Log& log) override;
+		Log& log, Progress& progress) override;
 
 	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
 	std::string GetFilesetNameImpl (const Uuid& filesetId) override;
@@ -191,15 +276,6 @@ private:
 
 	struct Impl;
 	std::unique_ptr<Impl> impl_;
-};
-
-/**
-Repository bundled into a single file
-*/
-class BundledRepository final : public IRepository
-{
-
-private:
 };
 }
 

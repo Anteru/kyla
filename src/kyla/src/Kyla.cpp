@@ -47,11 +47,13 @@ struct KylaInstallerInternal
 	KylaValidationCallback validationCallback = nullptr;
 	void* validationCallbackContext = nullptr;
 	std::unique_ptr<kyla::Log> log;
-	KylaProgressCallback progressCallback = nullptr;
-	void* progressCallbackContext = nullptr;
+	std::unique_ptr<kyla::Progress> progress;
 
 	KylaInstallerInternal ()
 		: log (new kyla::Log ([](kyla::LogLevel, const char*, const char*) -> void {
+	}))
+		, progress (new kyla::Progress ([](const int currentStage, const int stageCount, 
+			const float stageProgress, const char* stageName, const char* action) -> void {
 	}))
 	{
 	}
@@ -227,14 +229,15 @@ int kylaExecute (
 	switch (action) {
 	case kylaAction_Install:
 		targetRepository->p = kyla::DeployRepository (*sourceRepository->p,
-			targetRepository->path.string ().c_str (), filesetIds, *internal->log);
+			targetRepository->path.string ().c_str (), filesetIds, 
+			*internal->log, *internal->progress);
 		break;
 
 	case kylaAction_Configure:
 		targetRepository->p = kyla::OpenRepository (
 			targetRepository->path.string ().c_str (), true);
 		targetRepository->p->Configure (
-			*sourceRepository->p, filesetIds, *internal->log);
+			*sourceRepository->p, filesetIds, *internal->log, *internal->progress);
 
 		break;
 
@@ -496,8 +499,11 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** installer)
 		}
 
 		auto internal = GetInstallerInternal (installer);
-		internal->progressCallback = progressCallback;
-		internal->progressCallbackContext = callbackContext;
+
+		internal->progress.reset (new kyla::Progress ([=](
+			const int currentStage, const int stageCount, const float f, const char* s, const char* a) -> void {
+			progressCallback (currentStage, stageCount, f, s, a, callbackContext);
+		}));
 
 		return kylaResult_Ok;
 

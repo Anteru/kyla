@@ -28,14 +28,15 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "ArrayRef.h"
 
 namespace kyla {
-enum class CompressionMode : std::uint8_t
+enum class CompressionAlgorithm : std::uint8_t
 {
 	Uncompressed,
-	Zip,
-	LZMA,
-	LZ4,
-	LZHAM
+	Zip
+	// Brotli
 };
+
+const char* IdFromCompressionAlgorithm (CompressionAlgorithm algorithm);
+CompressionAlgorithm CompressionAlgorithmFromId (const char* id);
 
 struct BlockCompressor
 {
@@ -48,14 +49,17 @@ public:
 
 	int GetCompressionBound (const int inputSize) const;
 	int Compress (const ArrayRef<>& input, const MutableArrayRef<>& output);
+	void Decompress (const ArrayRef<>& input, const MutableArrayRef<>& output);
 
 private:
 	virtual int GetCompressionBoundImpl (const int inputSize) const = 0;
 	virtual int CompressImpl (const ArrayRef<>& input,
 		const MutableArrayRef<>& output) const = 0;
+	virtual void DecompressImpl (const ArrayRef<>& input,
+		const MutableArrayRef<>& output) const = 0;
 };
 
-std::unique_ptr<BlockCompressor> CreateBlockCompressor (CompressionMode compression);
+std::unique_ptr<BlockCompressor> CreateBlockCompressor (CompressionAlgorithm compression);
 }
 
 #endif

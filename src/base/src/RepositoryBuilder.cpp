@@ -45,19 +45,23 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "sql/Database.h"
 #include "Exception.h"
 
+#include "Compression.h"
+
 namespace {
+using namespace kyla;
+
 struct BuildContext
 {
-	kyla::Path sourceDirectory;
-	kyla::Path targetDirectory;
+	Path sourceDirectory;
+	Path targetDirectory;
 };
 
 struct File
 {
-	kyla::Path source;
-	kyla::Path target;
+	Path source;
+	Path target;
 
-	kyla::SHA256Digest hash;
+	SHA256Digest hash;
 };
 
 struct FileSet
@@ -65,7 +69,7 @@ struct FileSet
 	std::vector<File> files;
 
 	std::string name;
-	kyla::Uuid id;
+	Uuid id;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -79,7 +83,7 @@ std::vector<FileSet> GetFileSets (const pugi::xml_document& doc,
 	for (const auto& fileSetNode : doc.select_nodes ("//FileSet")) {
 		FileSet fileSet;
 
-		fileSet.id = kyla::Uuid::Parse (fileSetNode.node ().attribute ("Id").as_string ());
+		fileSet.id = Uuid::Parse (fileSetNode.node ().attribute ("Id").as_string ());
 		fileSet.name = fileSetNode.node ().attribute ("Name").as_string ();
 
 		for (const auto& fileNode : fileSetNode.node ().children ("File")) {
@@ -109,7 +113,7 @@ void HashFiles (std::vector<FileSet>& fileSets,
 {
 	for (auto& fileSet : fileSets) {
 		for (auto& file : fileSet.files) {
-			file.hash = kyla::ComputeSHA256 (ctx.sourceDirectory / file.source);
+			file.hash = ComputeSHA256 (ctx.sourceDirectory / file.source);
 		}
 	}
 }
@@ -117,11 +121,11 @@ void HashFiles (std::vector<FileSet>& fileSets,
 ///////////////////////////////////////////////////////////////////////////////
 struct UniqueContentObjects
 {
-	kyla::Path sourceFile;
-	kyla::SHA256Digest hash;
+	Path sourceFile;
+	SHA256Digest hash;
 	std::size_t size;
 
-	std::vector<kyla::Path> duplicates;
+	std::vector<Path> duplicates;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -132,8 +136,8 @@ and merging the results on the hash.
 std::vector<UniqueContentObjects> FindUniqueFileContents (std::vector<FileSet>& fileSets,
 	const BuildContext& ctx)
 {
-	std::unordered_map<kyla::SHA256Digest, std::vector<std::pair<kyla::Path, kyla::Path>>,
-		kyla::HashDigestHash, kyla::HashDigestEqual> uniqueContents;
+	std::unordered_map<SHA256Digest, std::vector<std::pair<Path, Path>>,
+		HashDigestHash, HashDigestEqual> uniqueContents;
 
 	for (const auto& fileSet : fileSets) {
 		for (const auto& file : fileSet.files) {
@@ -151,7 +155,7 @@ std::vector<UniqueContentObjects> FindUniqueFileContents (std::vector<FileSet>& 
 		uf.hash = kv.first;
 		uf.sourceFile = ctx.sourceDirectory / kv.second.front ().first;
 
-		uf.size = kyla::Stat (uf.sourceFile.string ().c_str ()).size;
+		uf.size = Stat (uf.sourceFile.string ().c_str ()).size;
 
 		for (const auto& sourceTargetPair : kv.second){
 			uf.duplicates.push_back (sourceTargetPair.second);
@@ -189,7 +193,7 @@ struct LooseRepositoryBuilder final : public IRepositoryBuilder
 		auto dbFile = ctx.targetDirectory / ".ky" / "repository.db";
 		boost::filesystem::remove (dbFile);
 
-		auto db = kyla::Sql::Database::Create (
+		auto db = Sql::Database::Create (
 			dbFile.string ().c_str ());
 
 		db.Execute (install_db_structure);
@@ -208,14 +212,14 @@ struct LooseRepositoryBuilder final : public IRepositoryBuilder
 	}
 
 private:
-	std::map<kyla::Path, std::int64_t> PopulateFileSets (kyla::Sql::Database& db,
+	std::map<Path, std::int64_t> PopulateFileSets (Sql::Database& db,
 		const std::vector<FileSet>& fileSets)
 	{
 		auto fileSetsInsert = db.BeginTransaction ();
 		auto fileSetsInsertQuery = db.Prepare (
 			"INSERT INTO file_sets (Uuid, Name) VALUES (?, ?);");
 
-		std::map<kyla::Path, std::int64_t> result;
+		std::map<Path, std::int64_t> result;
 
 		for (const auto& fileSet : fileSets) {
 			fileSetsInsertQuery.BindArguments (
@@ -236,10 +240,10 @@ private:
 		return result;
 	}
 
-	void PopulateContentObjectsAndFiles (kyla::Sql::Database& db,
+	void PopulateContentObjectsAndFiles (Sql::Database& db,
 		const std::vector<UniqueContentObjects>& uniqueFiles,
-		const std::map<kyla::Path, std::int64_t>& fileToFileSetId,
-		const kyla::Path& contentObjectPath)
+		const std::map<Path, std::int64_t>& fileToFileSetId,
+		const Path& contentObjectPath)
 	{
 		auto contentObjectInsert = db.BeginTransaction ();
 		auto contentObjectInsertQuery = db.Prepare (
@@ -291,7 +295,7 @@ struct PackedRepositoryBuilder final : public IRepositoryBuilder
 		auto dbFile = ctx.targetDirectory / "repository.db";
 		boost::filesystem::remove (dbFile);
 
-		auto db = kyla::Sql::Database::Create (
+		auto db = Sql::Database::Create (
 			dbFile.string ().c_str ());
 
 		db.Execute (install_db_structure);
@@ -310,14 +314,14 @@ struct PackedRepositoryBuilder final : public IRepositoryBuilder
 	}
 
 private:
-	std::map<kyla::Path, std::int64_t> PopulateFileSets (kyla::Sql::Database& db,
+	std::map<Path, std::int64_t> PopulateFileSets (Sql::Database& db,
 		const std::vector<FileSet>& fileSets)
 	{
 		auto fileSetsInsert = db.BeginTransaction ();
 		auto fileSetsInsertQuery = db.Prepare (
 			"INSERT INTO file_sets (Uuid, Name) VALUES (?, ?);");
 
-		std::map<kyla::Path, std::int64_t> result;
+		std::map<Path, std::int64_t> result;
 
 		for (const auto& fileSet : fileSets) {
 			fileSetsInsertQuery.BindArguments (
@@ -338,10 +342,10 @@ private:
 		return result;
 	}
 
-	void PopulateContentObjectsAndFiles (kyla::Sql::Database& db,
+	void PopulateContentObjectsAndFiles (Sql::Database& db,
 		const std::vector<UniqueContentObjects>& uniqueFiles,
-		const std::map<kyla::Path, std::int64_t>& fileToFileSetId,
-		const kyla::Path& packagePath)
+		const std::map<Path, std::int64_t>& fileToFileSetId,
+		const Path& packagePath)
 	{
 		auto contentObjectInsert = db.BeginTransaction ();
 		auto contentObjectInsertQuery = db.Prepare (
@@ -352,10 +356,10 @@ private:
 			"INSERT INTO source_packages (Name, Filename, Uuid) VALUES (?, ?, ?)");
 		auto storageMappingInsertQuery = db.Prepare (
 			"INSERT INTO storage_mapping "
-			"(ContentObjectId, SourcePackageId, PackageOffset, PackageSize, SourceOffset, Compression) "
-			"VALUES (?, ?, ?, ?, ?, ?)");
+			"(ContentObjectId, SourcePackageId, PackageOffset, PackageSize, SourceOffset, SourceSize, Compression) "
+			"VALUES (?, ?, ?, ?, ?, ?, ?)");
 
-		auto package = kyla::CreateFile (packagePath / "data.kypkg");
+		auto package = CreateFile (packagePath / "data.kypkg");
 
 		// The file starts with a header followed by all content objects.
 		// The database is stored separately
@@ -377,16 +381,21 @@ private:
 		PackageHeader packageHeader;
 		PackageHeader::Initialize (packageHeader);
 
-		package->Write (kyla::ArrayRef<PackageHeader> (packageHeader));
+		package->Write (ArrayRef<PackageHeader> (packageHeader));
 
 		packageInsertQuery.BindArguments ("package", "data.kypkg",
-			kyla::Uuid::CreateRandom ());
+			Uuid::CreateRandom ());
 		packageInsertQuery.Step ();
 		packageInsertQuery.Reset ();
 
 		const auto packageId = db.GetLastRowId ();
 
 		// For now we support only a single package
+
+		auto compressor = CreateBlockCompressor (CompressionAlgorithm::Zip);
+		auto compressorId = IdFromCompressionAlgorithm (CompressionAlgorithm::Zip);
+
+		std::vector<byte> compressionInputBuffer, compressionOutputBuffer;
 
 		// We can insert content objects directly - every unique file is one
 		for (const auto& kv : uniqueFiles) {
@@ -410,16 +419,24 @@ private:
 			}
 
 			///@TODO(minor) Chunk the input file here based on uncompressed size
-
+			///@TODO(minor) Ensure chunk size is < 2 GiB
+			///@TODO(minor) Check this handles 0-byte files
 			auto startOffset = package->Tell ();
 			
-			auto inputFile = kyla::OpenFile (kv.sourceFile, kyla::FileOpenMode::Read);
-			BlockCopy (*inputFile, *package);
+			auto inputFile = OpenFile (kv.sourceFile, FileOpenMode::Read);
+			
+			// Read complete file, compress, write compressed file
+			compressionInputBuffer.resize (inputFile->GetSize ());
+			inputFile->Read (compressionInputBuffer);
+			compressionOutputBuffer.resize (compressor->GetCompressionBound (inputFile->GetSize ()));
+			auto compressedSize = compressor->Compress (compressionInputBuffer, compressionOutputBuffer);
+			package->Write (ArrayRef<byte> (compressionOutputBuffer.data (), compressedSize));
 			auto endOffset = package->Tell ();
 
 			storageMappingInsertQuery.BindArguments (contentObjectId, packageId,
 				startOffset, endOffset - startOffset, 0 /* offset inside the content object */,
-				kyla::Sql::Null () /* no compression for now */);
+				inputFile->GetSize () /* source size */,
+				compressorId);
 			storageMappingInsertQuery.Step ();
 			storageMappingInsertQuery.Reset ();
 		}

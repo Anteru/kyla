@@ -25,6 +25,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Hash.h"
 #include "Log.h"
 
+#include "Compression.h"
+
 #include <boost/format.hpp>
 
 #include "install-db-structure.h"
@@ -48,9 +50,9 @@ void IRepository::Repair (IRepository& source)
 
 ///////////////////////////////////////////////////////////////////////////////
 void IRepository::Configure (IRepository& source, const ArrayRef<Uuid>& filesets,
-	Log& log)
+	Log& log, Progress& progress)
 {
-	ConfigureImpl (source, filesets, log);
+	ConfigureImpl (source, filesets, log, progress);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -301,7 +303,7 @@ void LooseRepository::RepairImpl (IRepository& source)
 ///////////////////////////////////////////////////////////////////////////////
 void LooseRepository::ConfigureImpl (IRepository& /*source*/,
 	const ArrayRef<Uuid>& /*filesets*/,
-	Log& /*log*/)
+	Log& /*log*/, Progress& /*progress*/)
 {
 	throw RuntimeException ("Not implemented", KYLA_FILE_LINE);
 }
@@ -470,7 +472,7 @@ public:
 
 	void Configure (IRepository& source,
 		const ArrayRef<Uuid>& filesets,
-		Log& log)
+		Log& log, Progress& progress)
 	{
 		// We do this in WAL mode for performance
 		db_.Execute ("PRAGMA journal_mode = WAL");
@@ -492,11 +494,17 @@ public:
 		// files we're about to configure
 		db_.AttachTemporaryCopy ("source",  source.GetDatabase ());
 
-		PreparePendingFilesets (log, filesets);
+		ProgressHelper progressHelper (progress);
+		progressHelper.Start (2);
+
+		progressHelper.AdvanceStage ("Setup");
+		PreparePendingFilesets (log, filesets, progressHelper);
 		UpdateFilesets ();
 		UpdateFilesetIdsForUnchangedFiles ();
 		RemoveChangedFiles (log);
-		GetNewContentObjects (source, log);
+
+		progressHelper.AdvanceStage ("Install");
+		GetNewContentObjects (source, log, progressHelper);
 		CopyExistingFiles (log);
 		Cleanup (log);
 
@@ -512,7 +520,8 @@ private:
 	Create a new temporary table pending_file_sets which contains the UUIDs
 	of the file sets we're about to add
 	*/
-	void PreparePendingFilesets (Log& log, const ArrayRef<Uuid>& filesets)
+	void PreparePendingFilesets (Log& log, const ArrayRef<Uuid>& filesets,
+		ProgressHelper& progress)
 	{
 		// Store the file sets we're going to install in a temporary table for
 		// joins, etc.
@@ -526,12 +535,15 @@ private:
 
 			log.Debug ("Configure", "Selecting filesets for configure");
 
+			progress.SetStageTarget (filesets.GetCount ());
+			progress.SetAction ("Configuring filesets");
 			for (const auto& fileset : filesets) {
 				insertFilesetQuery.BindArguments (fileset);
 				insertFilesetQuery.Step ();
 				insertFilesetQuery.Reset ();
 
 				log.Debug ("Configure", boost::format ("Selected fileset: '%1%'") % ToString (fileset));
+				++progress;
 			}
 
 			transaction.Commit ();
@@ -629,7 +641,8 @@ private:
 	Get new content objects, but only for those files, for which we don't
 	have a content object already.
 	*/
-	void GetNewContentObjects (IRepository& source, Log& log)
+	void GetNewContentObjects (IRepository& source, Log& log, 
+		ProgressHelper& progress)
 	{
 		// Find all missing content objects in this database
 		std::vector<SHA256Digest> requiredContentObjects;
@@ -654,12 +667,15 @@ private:
 			}
 		}
 
+		progress.SetStageTarget (requiredContentObjects.size ());
+
 		// Fetch the missing ones now and store in the right places
 		source.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
 			const ArrayRef<>& contents) -> void {
 			auto transaction = db_.BeginTransaction ();
 
-			log.Debug ("Configure", boost::format ("Received content object '%1%'") % ToString (hash));
+			const auto hashString = ToString (hash);
+			log.Debug ("Configure", boost::format ("Received content object '%1%'") % hashString);
 
 			int64 contentObjectId = -1;
 			{
@@ -672,7 +688,7 @@ private:
 
 				contentObjectId = db_.GetLastRowId ();
 
-				log.Debug ("Configure", boost::format ("Stored content object '%1%' with id %2%") % ToString (hash) % contentObjectId);
+				log.Debug ("Configure", boost::format ("Stored content object '%1%' with id %2%") % hashString % contentObjectId);
 			}
 
 			auto insertFileQuery = db_.Prepare (
@@ -712,6 +728,9 @@ private:
 			}
 
 			transaction.Commit ();
+
+			progress.SetAction (hashString.c_str ());
+			++progress;
 		});
 	}
 
@@ -833,7 +852,7 @@ private:
 std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (IRepository& source,
 	const ArrayRef<Uuid>& filesets,
 	const Path& targetDirectory,
-	Log& log)
+	Log& log, Progress& progress)
 {
 	auto db = Sql::Database::Create ((targetDirectory / "k.db").string ().c_str ());
 
@@ -843,7 +862,7 @@ std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (IRepository&
 
 	std::unique_ptr<DeployedRepository> result (new DeployedRepository{ targetDirectory.string ().c_str (), true });
 
-	result->impl_->Configure (source, filesets, log);
+	result->impl_->Configure (source, filesets, log, progress);
 
 	return std::move (result);
 }
@@ -901,9 +920,9 @@ void DeployedRepository::GetContentObjectsImpl (
 ///////////////////////////////////////////////////////////////////////////////
 void DeployedRepository::ConfigureImpl (IRepository& source,
 	const ArrayRef<Uuid>& filesets,
-	Log& log)
+	Log& log, Progress& progress)
 {
-	impl_->Configure (source, filesets, log);
+	impl_->Configure (source, filesets, log, progress);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -974,13 +993,16 @@ public:
 			"    storage_mapping.PackageSize AS PackageSize, "
 			"    storage_mapping.SourceOffset AS SourceOffset,  "
 			"    content_objects.Hash AS Hash, "
-			"    storage_mapping.Compression AS Compression "
+			"    storage_mapping.Compression AS Compression, "
+			"	 storage_mapping.SourceSize AS SourceSize "
 			"FROM storage_mapping "
 			"INNER JOIN content_objects ON storage_mapping.ContentObjectId = content_objects.Id "
 			"INNER JOIN source_packages ON storage_mapping.SourcePackageId = source_packages.Id "
 			"WHERE content_objects.Hash IN (SELECT Hash FROM requested_content_objects) "
 			"    AND source_packages.Id = ? "
 			"ORDER BY PackageOffset ");
+
+		std::vector<byte> compressionOutputBuffer;
 
 		while (findSourcePackagesQuery.Step ()) {
 			const auto filename = findSourcePackagesQuery.GetText (0);
@@ -996,6 +1018,9 @@ public:
 
 			contentObjectsInPackageQuery.BindArguments (id);
 
+			std::string currentCompressorId;
+			std::unique_ptr<BlockCompressor> compressor;
+
 			while (contentObjectsInPackageQuery.Step ()) {
 				const auto packageOffset = contentObjectsInPackageQuery.GetInt64 (0);
 				const auto packageSize = contentObjectsInPackageQuery.GetInt64 (1);
@@ -1003,11 +1028,27 @@ public:
 				SHA256Digest hash;
 				contentObjectsInPackageQuery.GetBlob (3, hash);
 				const char* compression = contentObjectsInPackageQuery.GetText (4);
-				assert (compression == nullptr);
-				
-				getCallback (hash,
-					ArrayRef<byte> {fileMapping + packageOffset,
+				const auto sourceSize = contentObjectsInPackageQuery.GetInt64 (5);
+
+				if (compression == nullptr) {
+					getCallback (hash,
+						ArrayRef<byte> {fileMapping + packageOffset,
 						packageSize});
+					continue;
+				}
+				
+				if (compression != currentCompressorId) {
+					compressor = CreateBlockCompressor (
+						CompressionAlgorithmFromId (compression)
+					);
+				}
+
+				compressionOutputBuffer.resize (sourceSize);
+				compressor->Decompress (ArrayRef<byte> {
+					fileMapping + packageOffset, packageSize}, 
+					compressionOutputBuffer);
+
+				getCallback (hash, compressionOutputBuffer);
 			}
 
 			packageFile->Unmap (fileMapping);
@@ -1036,7 +1077,8 @@ public:
 			"    storage_mapping.PackageSize AS PackageSize, "
 			"    storage_mapping.SourceOffset AS SourceOffset,  "
 			"    content_objects.Hash AS Hash, "
-			"    storage_mapping.Compression AS Compression "
+			"    storage_mapping.Compression AS Compression, "
+			"	 storage_mapping.SourceSize AS SourceSize "
 			"FROM storage_mapping "
 			"INNER JOIN content_objects ON storage_mapping.ContentObjectId = content_objects.Id "
 			"INNER JOIN source_packages ON storage_mapping.SourcePackageId = source_packages.Id "
@@ -1061,6 +1103,8 @@ public:
 				SHA256Digest hash;
 				contentObjectsInPackageQuery.GetBlob (3, hash);
 				const char* compression = contentObjectsInPackageQuery.GetText (4);
+
+				///@TODO(minor) Handle compression here
 				assert (compression == nullptr);
 
 				// Assume for now the content object is not chunked
@@ -1131,7 +1175,7 @@ void PackedRepository::RepairImpl (IRepository& source)
 ///////////////////////////////////////////////////////////////////////////////
 void PackedRepository::ConfigureImpl (IRepository& /*source*/,
 	const ArrayRef<Uuid>& /*filesets*/,
-	Log& /*log*/)
+	Log& /*log*/, Progress& /*progress*/)
 {
 	throw RuntimeException ("Not implemented", KYLA_FILE_LINE);
 }
@@ -1174,11 +1218,11 @@ std::unique_ptr<IRepository> OpenRepository (const char* path,
 std::unique_ptr<IRepository> DeployRepository (IRepository& source,
 	const char* destinationPath,
 	const ArrayRef<Uuid>& filesets,
-	Log& log)
+	Log& log, Progress& progress)
 {
 	Path targetPath{ destinationPath };
 	boost::filesystem::create_directories (destinationPath);
 
-	return DeployedRepository::CreateFrom (source, filesets, targetPath, log);
+	return DeployedRepository::CreateFrom (source, filesets, targetPath, log, progress);
 }
 }

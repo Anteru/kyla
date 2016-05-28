@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Kyla.h"
 
 #include <iostream>
+#include <iomanip>
 #include "Uuid.h"
 
 extern int kylaBuildRepository (const char* repositoryDescription,
@@ -38,6 +39,24 @@ void StdcoutLog (const char* source, const kylaLogSeverity severity,
 	}
 
 	std::cout << source << ":" << message << "\n";
+}
+
+void StdcoutProgress (const int currentStage, const int stageCount,
+	const float progress, const char* stageName, const char* action, void* context)
+{
+	static const char* padding = 
+		"                                        ";
+	//   0123456789012345678901234567890123456879
+
+	if (progress > 0) {
+		std::cout << std::fixed << std::setprecision (3) << progress * 100 << " : " << action << (padding + std::min (::strlen (padding), ::strlen (action))) << "\r";
+
+		if (progress == 1.0) {
+			std::cout << "\n";
+		}
+	} else {
+		std::cout << (currentStage + 1) << "/" << stageCount << " - " << stageName << "\n";
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -284,6 +303,8 @@ int main (int argc, char* argv [])
 		if (vm ["log"].as<bool> ()) {
 			installer->SetLogCallback (installer, StdcoutLog, nullptr);
 		}
+
+		installer->SetProgressCallback (installer, StdcoutProgress, nullptr);
 
 		KylaSourceRepository source;
 		installer->OpenSourceRepository (installer, vm ["source"].as<std::string> ().c_str (),

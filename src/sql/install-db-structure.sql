@@ -31,10 +31,12 @@ CREATE TABLE storage_mapping (
 	SourcePackageId INTEGER,
 	-- Offset inside the source package
 	PackageOffset INTEGER NOT NULL,
-	-- Size inside a package may be non-zero if the file is compressed
+	-- Size inside a package with compression etc.
 	PackageSize INTEGER NOT NULL,
 	-- Offset in the output file, in case one content object is split
 	SourceOffset INTEGER NOT NULL,
+	-- Source size, in case a chunk is split or compressed
+	SourceSize INTEGER NOT NULL,
 	-- None if uncompressed
 	Compression VARCHAR,
 	FOREIGN KEY(ContentObjectId) REFERENCES content_objects(Id),

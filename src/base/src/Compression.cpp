@@ -29,12 +29,16 @@ struct NullBlockCompressor final : public BlockCompressor
 	int GetCompressionBoundImpl (const int inputSize) const override;
 	int CompressImpl (const ArrayRef<>& input,
 		const MutableArrayRef<>& output) const override;
+	void DecompressImpl (const ArrayRef<>& input,
+		const MutableArrayRef<>& output) const override;
 };
 
 struct ZipBlockCompressor final : public BlockCompressor
 {
 	int GetCompressionBoundImpl (const int inputSize) const override;
 	int CompressImpl (const ArrayRef<>& input,
+		const MutableArrayRef<>& output) const override;
+	void DecompressImpl (const ArrayRef<>& input,
 		const MutableArrayRef<>& output) const override;
 };
 
@@ -62,6 +66,13 @@ int BlockCompressor::Compress (const ArrayRef<>& input,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+void BlockCompressor::Decompress (const ArrayRef<>& input,
+	const MutableArrayRef<>& output)
+{
+	DecompressImpl (input, output);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 int ZipBlockCompressor::GetCompressionBoundImpl (const int inputSize) const
 {
 	return ::compressBound (inputSize);
@@ -82,6 +93,19 @@ int ZipBlockCompressor::CompressImpl (const ArrayRef<>& input,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+void ZipBlockCompressor::DecompressImpl (const ArrayRef<>& input,
+	const MutableArrayRef<>& output) const
+{
+	///@TODO(minor) Check for overflow
+	::uLongf decompressedSize = static_cast<uLongf> (output.GetSize ());
+	::uncompress (
+		static_cast<::Bytef*> (output.GetData ()),
+		&decompressedSize,
+		static_cast<const ::Bytef*> (input.GetData ()),
+		static_cast<uLong> (input.GetSize ()));
+}
+
+////////////////////////////////////////////////////////////////////////////////
 int NullBlockCompressor::GetCompressionBoundImpl (const int inputSize) const
 {
 	return inputSize;
@@ -97,16 +121,48 @@ int NullBlockCompressor::CompressImpl (const ArrayRef<>& input,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<BlockCompressor> CreateBlockCompressor (CompressionMode compression)
+void NullBlockCompressor::DecompressImpl (const ArrayRef<>& input,
+	const MutableArrayRef<>& output) const
+{
+	::memcpy (output.GetData (), input.GetData (), input.GetSize ());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+std::unique_ptr<BlockCompressor> CreateBlockCompressor (CompressionAlgorithm compression)
 {
 	switch (compression) {
-	case CompressionMode::Zip:
+	case CompressionAlgorithm::Zip:
 		return std::unique_ptr<BlockCompressor> (new ZipBlockCompressor);
 
-	case CompressionMode::Uncompressed:
+	case CompressionAlgorithm::Uncompressed:
 		return std::unique_ptr<BlockCompressor> (new NullBlockCompressor);
 	}
 
 	return std::unique_ptr<BlockCompressor> ();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+const char* IdFromCompressionAlgorithm (CompressionAlgorithm algorithm)
+{
+	switch (algorithm) {
+	case CompressionAlgorithm::Uncompressed:
+		return nullptr;
+	case CompressionAlgorithm::Zip:
+		return "ZIP";
+	default:
+		return nullptr;
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+CompressionAlgorithm CompressionAlgorithmFromId (const char* id)
+{
+	if (id == nullptr) {
+		return CompressionAlgorithm::Uncompressed;
+	} else if (strcmp (id, "ZIP") == 0) {
+		return CompressionAlgorithm::Zip;
+	}
+
+	return CompressionAlgorithm::Uncompressed;
 }
 }
