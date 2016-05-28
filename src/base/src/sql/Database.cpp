@@ -112,6 +112,19 @@ public:
 		K_S(sqlite3_exec (db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr));
 	}
 
+	void TransactionBegin (TransactionType type)
+	{
+		switch (type) {
+		case TransactionType::Deferred:
+			K_S (sqlite3_exec (db_, "BEGIN DEFERRED TRANSACTION;", nullptr, nullptr, nullptr));
+			return;
+
+		case TransactionType::Immediate:
+			K_S (sqlite3_exec (db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr, nullptr));
+			return;
+		}
+	}
+
 	void TransactionCommit ()
 	{
 		K_S(sqlite3_exec (db_, "COMMIT;", nullptr, nullptr, nullptr));
@@ -379,11 +392,34 @@ Transaction::Transaction (Database::Impl* impl)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+Transaction::Transaction (Database::Impl* impl, TransactionType type)
+	: impl_ (impl)
+{
+	impl_->TransactionBegin (type);
+}
+
+////////////////////////////////////////////////////////////////////////////////
 Transaction::~Transaction ()
 {
 	if (impl_) {
 		impl_->TransactionRollback ();
 	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+Transaction::Transaction (Transaction&& other)
+	: impl_ (other.impl_)
+{
+	other.impl_ = nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+Transaction& Transaction::operator=(Transaction&& other)
+{
+	impl_ = other.impl_;
+	other.impl_ = nullptr;
+
+	return *this;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -512,7 +548,7 @@ Type Statement::GetColumnType (const int index) const
 ////////////////////////////////////////////////////////////////////////////////
 Transaction Database::BeginTransaction(TransactionType type)
 {
-	return Transaction (impl_.get ());
+	return Transaction (impl_.get (), type);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -543,22 +579,6 @@ void Database::AttachTemporaryCopy (const char* name, Database & source)
 void Database::Detach (const char * name)
 {
 	impl_->Detach (name);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-Transaction::Transaction (Transaction&& other)
-	: impl_ (other.impl_)
-{
-	other.impl_ = nullptr;
-}
-
-////////////////////////////////////////////////////////////////////////////////
-Transaction& Transaction::operator=(Transaction&& other)
-{
-	impl_ = other.impl_;
-	other.impl_ = nullptr;
-
-	return *this;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

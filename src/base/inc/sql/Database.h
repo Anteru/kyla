@@ -97,7 +97,8 @@ public:
 	Transaction (Transaction&& statement);
 	Transaction& operator=(Transaction&& statement);
 
-	Transaction (Database::Impl* impl);
+	explicit Transaction (Database::Impl* impl);
+	Transaction (Database::Impl* impl, TransactionType type);
 	~Transaction ();
 
 	void Commit ();
