@@ -476,6 +476,7 @@ public:
 	{
 		// We do this in WAL mode for performance
 		db_.Execute ("PRAGMA journal_mode = WAL");
+		db_.Execute ("PRAGMA synchronous = NORMAL");
 
 		// We start by cleaning up all content objects which are not referenced
 		// A deployed repository needs at least one file referencing a
@@ -685,6 +686,7 @@ private:
 
 				insertContentObjectQuery.BindArguments (hash, contents.GetSize ());
 				insertContentObjectQuery.Step ();
+				insertContentObjectQuery.Reset ();
 
 				contentObjectId = db_.GetLastRowId ();
 
@@ -713,12 +715,7 @@ private:
 				boost::filesystem::create_directories (path_ / targetPath.parent_path ());
 
 				auto file = CreateFile (path_ / targetPath);
-
-				file->SetSize (contents.GetSize ());
-
-				auto pointer = file->Map ();
-				::memcpy (pointer, contents.GetData (), contents.GetSize ());
-				file->Unmap (pointer);
+				file->Write (contents);
 
 				insertFileQuery.BindArguments (targetPath.string (), contentObjectId, targetPath.string ());
 				insertFileQuery.Step ();
