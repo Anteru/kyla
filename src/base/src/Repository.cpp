@@ -499,6 +499,12 @@ public:
 		progressHelper.Start (2);
 
 		progressHelper.AdvanceStage ("Setup");
+
+		// Store the file sets we're going to install in a temporary table for
+		// joins, etc.
+		auto pendingFileSetTable = db_.CreateTemporaryTable ("pending_file_sets",
+			"Uuid BLOB NOT NULL UNIQUE");
+
 		PreparePendingFilesets (log, filesets, progressHelper);
 		UpdateFilesets ();
 		UpdateFilesetIdsForUnchangedFiles ();
@@ -524,11 +530,6 @@ private:
 	void PreparePendingFilesets (Log& log, const ArrayRef<Uuid>& filesets,
 		ProgressHelper& progress)
 	{
-		// Store the file sets we're going to install in a temporary table for
-		// joins, etc.
-		db_.Execute ("CREATE TEMPORARY TABLE pending_file_sets "
-			"(Uuid BLOB NOT NULL UNIQUE);");
-
 		{
 			auto transaction = db_.BeginTransaction ();
 			auto insertFilesetQuery = db_.Prepare (
@@ -958,12 +959,10 @@ public:
 	void GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjects,
 		const IRepository::GetContentObjectCallback& getCallback)
 	{
-		// We will request the objects in order, so we need a temporary table
-		// for that
-
-		///@TODO(minor) Drop the table using RAII
-		db_.Execute ("CREATE TEMPORARY TABLE requested_content_objects "
-			"(Hash BLOB NOT NULL UNIQUE);");
+		// We need to join the requested objects on our existing data, so
+		// store them in a temporary table
+		auto requestedContentObjects = db_.CreateTemporaryTable (
+			"requested_content_objects", "Hash BLOB NOT NULL UNIQUE");
 
 		auto tempObjectInsert = db_.Prepare ("INSERT INTO requested_content_objects "
 			"(Hash) VALUES (?)");

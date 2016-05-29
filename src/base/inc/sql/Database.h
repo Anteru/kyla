@@ -35,6 +35,7 @@ enum class OpenMode
 };
 
 class Statement;
+class TemporaryTable;
 class Transaction;
 
 enum class TransactionType
@@ -43,7 +44,7 @@ enum class TransactionType
 	Immediate
 };
 
-class Database
+class Database final
 {
 	Database (const Database& other) = delete;
 	Database& operator= (const Database&) = delete;
@@ -81,6 +82,9 @@ public:
 	void AttachTemporaryCopy (const char* name, Database& source);
 	void Detach (const char* name);
 
+	TemporaryTable CreateTemporaryTable (const char* name,
+		const char* columnDefinition);
+
 public:
 	struct Impl;
 
@@ -88,7 +92,7 @@ private:
 	std::unique_ptr<Impl> impl_;
 };
 
-class Transaction
+class Transaction final
 {
 public:
 	Transaction (const Transaction&) = delete;
@@ -126,7 +130,7 @@ enum class Type
 	Blob
 };
 
-class Statement
+class Statement final
 {
 public:
 	Statement (const Statement&) = delete;
@@ -178,6 +182,24 @@ private:
 	Database::Impl* impl_ = nullptr;
 	void*			p_ = nullptr;
 };
+
+class TemporaryTable final
+{
+public:
+	TemporaryTable (Database::Impl* impl, const char* name);
+	~TemporaryTable ();
+
+	TemporaryTable (const TemporaryTable&) = delete;
+	TemporaryTable& operator=(const TemporaryTable&) = delete;
+
+	TemporaryTable (TemporaryTable&& other);
+	TemporaryTable& operator=(TemporaryTable&& other);
+
+private:
+	Database::Impl* impl_ = nullptr;
+	std::string name_;
+};
+
 }
 }
 

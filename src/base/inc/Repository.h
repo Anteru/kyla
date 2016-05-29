@@ -114,8 +114,8 @@ private:
 	Progress progressCallback_;
 	int64 current_ = 0;
 	int64 currentStageTarget_ = 0;
-	int64 stageCount_ = 1;
-	int64 currentStage_ = 0;
+	int stageCount_ = 1;
+	int currentStage_ = 0;
 	std::string action_;
 	std::string stageName_;
 };

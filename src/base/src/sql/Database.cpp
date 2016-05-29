@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include <sqlite3.h>
 
+#include <boost/format.hpp>
 #include "Exception.h"
 
 namespace {
@@ -286,6 +287,14 @@ public:
 		sqlite3_exec (db_, sql.c_str (), nullptr, nullptr, nullptr);
 	}
 
+	TemporaryTable CreateTemporaryTable (const char* name, const char* columnDefinition)
+	{
+		sqlite3_exec (db_, (boost::format ("CREATE TEMPORARY TABLE %1% (%2%);") % name % columnDefinition).str ().c_str (),
+			nullptr, nullptr, nullptr);
+
+		return TemporaryTable (this, name);
+	}
+
 private:
 	// Returns a function pointer to a void (void*) function
 	static void(*SQLiteValueBinding(const ValueBinding binding))(void*)
@@ -546,6 +555,39 @@ Type Statement::GetColumnType (const int index) const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+TemporaryTable::TemporaryTable (Database::Impl* impl, const char* name)
+	: impl_ (impl)
+	, name_ (name)
+{
+}
+
+////////////////////////////////////////////////////////////////////////////////
+TemporaryTable::~TemporaryTable ()
+{
+	if (impl_) {
+		impl_->Execute ((boost::format ("DROP TABLE %1%;") % name_).str ().c_str ());
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+TemporaryTable::TemporaryTable (TemporaryTable&& other)
+	: impl_ (other.impl_)
+	, name_ (std::move (other.name_))
+{
+	other.impl_ = nullptr;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+TemporaryTable& TemporaryTable::operator=(TemporaryTable&& other)
+{
+	impl_ = other.impl_;
+	name_ = std::move (other.name_);
+	other.impl_ = nullptr;
+
+	return *this;
+}
+
+////////////////////////////////////////////////////////////////////////////////
 Transaction Database::BeginTransaction(TransactionType type)
 {
 	return Transaction (impl_.get (), type);
@@ -573,6 +615,13 @@ std::int64_t Database::GetLastRowId()
 void Database::AttachTemporaryCopy (const char* name, Database & source)
 {
 	impl_->AttachTemporaryCopy (source.impl_.get (), name);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+TemporaryTable Database::CreateTemporaryTable (const char* name,
+	const char* columnDefinition)
+{
+	return impl_->CreateTemporaryTable (name, columnDefinition);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
