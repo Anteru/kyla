@@ -17,7 +17,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 [LICENSE END]
 */
 
-#ifndef KYLA_CORA_INTERNAL_REPOSITORY_H
+#ifndef KYLA_CORE_INTERNAL_REPOSITORY_H
 #define KYLA_CORE_INTERNAL_REPOSITORY_H
 
 #include <functional>
@@ -157,7 +157,6 @@ struct Repository
 		Log& log, Progress& progress);
 
 	std::vector<FilesetInfo> GetFilesetInfos ();
-
 	std::string GetFilesetName (const Uuid& filesetId);
 
 	Sql::Database& GetDatabase ();
@@ -168,11 +167,11 @@ private:
 		const GetContentObjectCallback& getCallback) = 0;
 	virtual void RepairImpl (Repository& source) = 0;
 	virtual std::vector<FilesetInfo> GetFilesetInfosImpl () = 0;
-	virtual Sql::Database& GetDatabaseImpl () = 0;
 	virtual std::string GetFilesetNameImpl (const Uuid& filesetId) = 0;
 	virtual void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& filesets,
 		Log& log, Progress& progress) = 0;
+	virtual Sql::Database& GetDatabaseImpl () = 0;
 };
 
 std::unique_ptr<Repository> OpenRepository (const char* path,

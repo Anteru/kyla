@@ -26,29 +26,39 @@ SET(HEADERS
 	inc/ArrayAdapter.h
 	inc/ArrayRef.h
 
+	inc/BaseRepository.h
 	inc/Compression.h
+	inc/DeployedRepository.h
 	inc/Exception.h
 	inc/FileIO.h
 	inc/Hash.h
 	inc/Log.h
+	inc/LooseRepository.h
+	inc/PackedRepository.h
 	inc/Repository.h
 	inc/RepositoryBuilder.h
 	inc/StringRef.h
 	inc/Types.h
-	inc/Uuid.h)
+	inc/Uuid.h
+)
 
 SET(SOURCES
 	src/sql/Database.cpp
 
+	src/BaseRepository.cpp
 	src/Compression.cpp
+	src/DeployedRepository.cpp
 	src/Exception.cpp
 	src/FileIO.cpp
 	src/Hash.cpp
 	src/Log.cpp
+	src/LooseRepository.cpp
+	src/PackedRepository.cpp
 	src/Repository.cpp
 	src/RepositoryBuilder.cpp
 	src/StringRef.cpp
-	src/Uuid.cpp)
+	src/Uuid.cpp
+)
 
 IF(WIN32)
 	ADD_DEFINITIONS(-DKYLA_PLATFORM_WINDOWS=1)
