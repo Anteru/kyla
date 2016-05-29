@@ -121,6 +121,103 @@ std::string GetFilesetNameInternal (Sql::Database& db, const Uuid& id)
 	return query.GetText (0);
 }
 
+
+
+/**
+Content files stored directly, not deployed
+*/
+class LooseRepository final : public Repository
+{
+public:
+	LooseRepository (const char* path);
+	~LooseRepository ();
+
+	LooseRepository (LooseRepository&& other);
+	LooseRepository& operator= (LooseRepository&& other);
+
+private:
+	void ValidateImpl (const ValidationCallback& validationCallback) override;
+
+	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
+		const GetContentObjectCallback& getCallback) override;
+	void RepairImpl (Repository& source) override;
+	void ConfigureImpl (Repository& other,
+		const ArrayRef<Uuid>& filesets,
+		Log& log, Progress& progress) override;
+
+	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
+	std::string GetFilesetNameImpl (const Uuid& filesetId) override;
+	Sql::Database& GetDatabaseImpl () override;
+
+	struct Impl;
+	std::unique_ptr<Impl> impl_;
+};
+
+/**
+Files as if the repository has been deployed
+*/
+class DeployedRepository final : public Repository
+{
+public:
+	DeployedRepository (const char* path);
+	DeployedRepository (const char* path, const bool enableWriteAccess);
+	~DeployedRepository ();
+
+	DeployedRepository (DeployedRepository&& other);
+	DeployedRepository& operator= (DeployedRepository&& other);
+
+	static std::unique_ptr<DeployedRepository> CreateFrom (Repository& other,
+		const ArrayRef<Uuid>& filesets,
+		const Path& targetDirectory,
+		Log& log, Progress& progress);
+
+private:
+	void ValidateImpl (const ValidationCallback& validationCallback) override;
+	void RepairImpl (Repository& source) override;
+	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
+		const GetContentObjectCallback& getCallback) override;
+	void ConfigureImpl (Repository& other,
+		const ArrayRef<Uuid>& filesets,
+		Log& log, Progress& progress) override;
+
+	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
+	std::string GetFilesetNameImpl (const Uuid& filesetId) override;
+	Sql::Database& GetDatabaseImpl () override;
+
+	struct Impl;
+	std::unique_ptr<Impl> impl_;
+};
+
+/**
+Everything packed into per-file-set files
+*/
+class PackedRepository final : public Repository
+{
+public:
+	PackedRepository (const char* path);
+	~PackedRepository ();
+
+	PackedRepository (PackedRepository&& other);
+	PackedRepository& operator= (PackedRepository&& other);
+
+private:
+	void ValidateImpl (const ValidationCallback& validationCallback) override;
+
+	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
+		const GetContentObjectCallback& getCallback) override;
+	void RepairImpl (Repository& source) override;
+	void ConfigureImpl (Repository& other,
+		const ArrayRef<Uuid>& filesets,
+		Log& log, Progress& progress) override;
+
+	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
+	std::string GetFilesetNameImpl (const Uuid& filesetId) override;
+	Sql::Database& GetDatabaseImpl () override;
+
+	struct Impl;
+	std::unique_ptr<Impl> impl_;
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 struct LooseRepository::Impl
 {
