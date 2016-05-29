@@ -1035,6 +1035,7 @@ public:
 				}
 				
 				if (compression != currentCompressorId) {
+					// we assume the compressors change infrequently
 					compressor = CreateBlockCompressor (
 						CompressionAlgorithmFromId (compression)
 					);
@@ -1082,6 +1083,8 @@ public:
 			"WHERE source_packages.Id = ? "
 			"ORDER BY PackageOffset ");
 
+		std::vector<byte> compressionOutputBuffer;
+
 		while (findSourcePackagesQuery.Step ()) {
 			auto packageFile = OpenFile (
 				path_ / findSourcePackagesQuery.GetText (1), FileOpenMode::Read
@@ -1094,19 +1097,43 @@ public:
 			contentObjectsInPackageQuery.BindArguments (
 				findSourcePackagesQuery.GetInt64 (0));
 
+			std::string currentCompressorId;
+			std::unique_ptr<BlockCompressor> compressor;
+
 			while (contentObjectsInPackageQuery.Step ()) {
 				const auto packageOffset = contentObjectsInPackageQuery.GetInt64 (0);
 				const auto packageSize = contentObjectsInPackageQuery.GetInt64 (1);
 				SHA256Digest hash;
 				contentObjectsInPackageQuery.GetBlob (3, hash);
 				const char* compression = contentObjectsInPackageQuery.GetText (4);
+				const auto sourceSize = contentObjectsInPackageQuery.GetInt64 (5);
 
-				///@TODO(minor) Handle compression here
-				assert (compression == nullptr);
+				if (compression == nullptr) {
+					if (hash != ComputeSHA256 (ArrayRef<byte> (fileMapping + packageOffset,
+						packageSize))) {
+						// We don't have filenames here - we could fine one if 
+						// needed
+						validationCallback (hash, nullptr, ValidationResult::Corrupted);
+					} else {
+						validationCallback (hash, nullptr, ValidationResult::Ok);
+					}
+					continue;
+				}
+
+				if (compression != currentCompressorId) {
+					// we assume the compressors change infrequently
+					compressor = CreateBlockCompressor (
+						CompressionAlgorithmFromId (compression)
+					);
+				}
+
+				compressionOutputBuffer.resize (sourceSize);
+				compressor->Decompress (ArrayRef<byte> {
+					fileMapping + packageOffset, packageSize},
+					compressionOutputBuffer);
 
 				// Assume for now the content object is not chunked
-				if (hash != ComputeSHA256 (ArrayRef<byte> (fileMapping + packageOffset,
-					packageSize))) {
+				if (hash != ComputeSHA256 (compressionOutputBuffer)) {
 					// We don't have filenames here - we could fine one if 
 					// needed
 					validationCallback (hash, nullptr, ValidationResult::Corrupted);

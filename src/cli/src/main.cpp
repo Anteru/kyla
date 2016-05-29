@@ -49,7 +49,9 @@ void StdcoutProgress (const int currentStage, const int stageCount,
 	//   0123456789012345678901234567890123456879
 
 	if (progress > 0) {
-		std::cout << std::fixed << std::setprecision (3) << progress * 100 << " : " << action << (padding + std::min (::strlen (padding), ::strlen (action))) << "\r";
+		std::cout << std::fixed << std::setprecision (3) << progress * 100 
+			<< " : " << action 
+			<< (padding + std::min (::strlen (padding), ::strlen (action))) << "\r";
 
 		if (progress == 1.0) {
 			std::cout << "\n";
@@ -66,6 +68,7 @@ int main (int argc, char* argv [])
 	po::options_description global ("Global options");
 	global.add_options ()
 		("log,l", po::bool_switch ()->default_value (false), "Show log output")
+		("progress,p", po::bool_switch ()->default_value (false), "Show progress")
 		("command", po::value<std::string> (), "command to execute")
 		("subargs", po::value<std::vector<std::string> > (), "Arguments for command");
 
@@ -304,7 +307,9 @@ int main (int argc, char* argv [])
 			installer->SetLogCallback (installer, StdcoutLog, nullptr);
 		}
 
-		installer->SetProgressCallback (installer, StdcoutProgress, nullptr);
+		if (vm ["progress"].as<bool> ()) {
+			installer->SetProgressCallback (installer, StdcoutProgress, nullptr);
+		}
 
 		KylaSourceRepository source;
 		installer->OpenSourceRepository (installer, vm ["source"].as<std::string> ().c_str (),
