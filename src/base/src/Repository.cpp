@@ -37,45 +37,45 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace kyla {
 ///////////////////////////////////////////////////////////////////////////////
-void IRepository::Validate (const ValidationCallback& validationCallback)
+void Repository::Validate (const ValidationCallback& validationCallback)
 {
 	ValidateImpl (validationCallback);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void IRepository::Repair (IRepository& source)
+void Repository::Repair (Repository& source)
 {
 	RepairImpl (source);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void IRepository::Configure (IRepository& source, const ArrayRef<Uuid>& filesets,
+void Repository::Configure (Repository& source, const ArrayRef<Uuid>& filesets,
 	Log& log, Progress& progress)
 {
 	ConfigureImpl (source, filesets, log, progress);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void IRepository::GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjects,
+void Repository::GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjects,
 	const GetContentObjectCallback& getCallback)
 {
 	GetContentObjectsImpl (requestedObjects, getCallback);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-std::vector<FilesetInfo> IRepository::GetFilesetInfos ()
+std::vector<FilesetInfo> Repository::GetFilesetInfos ()
 {
 	return GetFilesetInfosImpl ();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-std::string IRepository::GetFilesetName (const Uuid& id)
+std::string Repository::GetFilesetName (const Uuid& id)
 {
 	return GetFilesetNameImpl (id);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-Sql::Database& IRepository::GetDatabase ()
+Sql::Database& Repository::GetDatabase ()
 {
 	return GetDatabaseImpl ();
 }
@@ -137,7 +137,7 @@ public:
 	}
 
 	void GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjects,
-		const IRepository::GetContentObjectCallback& getCallback)
+		const Repository::GetContentObjectCallback& getCallback)
 	{
 		// This assumes the repository is in a valid state - i.e. content
 		// objects contain the right data and we're only requested content
@@ -158,7 +158,7 @@ public:
 		}
 	}
 
-	void Validate (const IRepository::ValidationCallback& validationCallback)
+	void Validate (const Repository::ValidationCallback& validationCallback)
 	{
 		// Get a list of (file, hash, size)
 		// We sort by size first so we get small objects out of the way first
@@ -221,7 +221,7 @@ public:
 		}
 	}
 
-	void Repair (IRepository& source)
+	void Repair (Repository& source)
 	{
 		// We use the validation logic here to find missing content objects
 		// and fetch them from the source repository
@@ -289,19 +289,19 @@ void LooseRepository::ValidateImpl (const ValidationCallback& validationCallback
 
 ///////////////////////////////////////////////////////////////////////////////
 void LooseRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
-	const IRepository::GetContentObjectCallback& getCallback)
+	const Repository::GetContentObjectCallback& getCallback)
 {
 	impl_->GetContentObjects (requestedObjects, getCallback);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void LooseRepository::RepairImpl (IRepository& source)
+void LooseRepository::RepairImpl (Repository& source)
 {
 	impl_->Repair (source);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void LooseRepository::ConfigureImpl (IRepository& /*source*/,
+void LooseRepository::ConfigureImpl (Repository& /*source*/,
 	const ArrayRef<Uuid>& /*filesets*/,
 	Log& /*log*/, Progress& /*progress*/)
 {
@@ -341,7 +341,7 @@ public:
 		return db_;
 	}
 
-	void Validate (const IRepository::ValidationCallback& validationCallback)
+	void Validate (const Repository::ValidationCallback& validationCallback)
 	{
 		// Get a list of (file, hash, size)
 		// We sort by size first so we get small objects out of the way first
@@ -400,7 +400,7 @@ public:
 		}
 	}
 
-	void Repair (IRepository& source)
+	void Repair (Repository& source)
 	{
 		// We use the validation logic here to find missing content objects
 		// and fetch them from the source repository
@@ -445,7 +445,7 @@ public:
 	}
 
 	void GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjects,
-		const IRepository::GetContentObjectCallback& getCallback)
+		const Repository::GetContentObjectCallback& getCallback)
 	{
 		auto query = db_.Prepare (
 			"SELECT Path FROM files "
@@ -470,7 +470,7 @@ public:
 		}
 	}
 
-	void Configure (IRepository& source,
+	void Configure (Repository& source,
 		const ArrayRef<Uuid>& filesets,
 		Log& log, Progress& progress)
 	{
@@ -643,7 +643,7 @@ private:
 	Get new content objects, but only for those files, for which we don't
 	have a content object already.
 	*/
-	void GetNewContentObjects (IRepository& source, Log& log, 
+	void GetNewContentObjects (Repository& source, Log& log, 
 		ProgressHelper& progress)
 	{
 		// Find all missing content objects in this database
@@ -847,7 +847,7 @@ private:
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (IRepository& source,
+std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (Repository& source,
 	const ArrayRef<Uuid>& filesets,
 	const Path& targetDirectory,
 	Log& log, Progress& progress)
@@ -902,7 +902,7 @@ void DeployedRepository::ValidateImpl (const ValidationCallback& validationCallb
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void DeployedRepository::RepairImpl (IRepository& source)
+void DeployedRepository::RepairImpl (Repository& source)
 {
 	impl_->Repair (source);
 }
@@ -916,7 +916,7 @@ void DeployedRepository::GetContentObjectsImpl (
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void DeployedRepository::ConfigureImpl (IRepository& source,
+void DeployedRepository::ConfigureImpl (Repository& source,
 	const ArrayRef<Uuid>& filesets,
 	Log& log, Progress& progress)
 {
@@ -957,7 +957,7 @@ public:
 	}
 
 	void GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjects,
-		const IRepository::GetContentObjectCallback& getCallback)
+		const Repository::GetContentObjectCallback& getCallback)
 	{
 		// We need to join the requested objects on our existing data, so
 		// store them in a temporary table
@@ -1056,7 +1056,7 @@ public:
 		db_.Execute ("DROP TABLE requested_content_objects;");
 	}
 
-	void Validate (const IRepository::ValidationCallback& validationCallback)
+	void Validate (const Repository::ValidationCallback& validationCallback)
 	{
 		// Find all source packages we need to handle
 		auto findSourcePackagesQuery = db_.Prepare (
@@ -1184,19 +1184,19 @@ void PackedRepository::ValidateImpl (const ValidationCallback& validationCallbac
 
 ///////////////////////////////////////////////////////////////////////////////
 void PackedRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
-	const IRepository::GetContentObjectCallback& getCallback)
+	const Repository::GetContentObjectCallback& getCallback)
 {
 	impl_->GetContentObjects (requestedObjects, getCallback);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void PackedRepository::RepairImpl (IRepository& source)
+void PackedRepository::RepairImpl (Repository& source)
 {
 	throw RuntimeException ("Not implemented", KYLA_FILE_LINE);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void PackedRepository::ConfigureImpl (IRepository& /*source*/,
+void PackedRepository::ConfigureImpl (Repository& /*source*/,
 	const ArrayRef<Uuid>& /*filesets*/,
 	Log& /*log*/, Progress& /*progress*/)
 {
@@ -1222,23 +1222,23 @@ std::string PackedRepository::GetFilesetNameImpl (const Uuid& id)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<IRepository> OpenRepository (const char* path,
+std::unique_ptr<Repository> OpenRepository (const char* path,
 	const bool allowWrite)
 {
 	if (boost::filesystem::exists (Path{ path } / Path{ ".ky" })) {
 		// .ky indicates a loose repository
-		return std::unique_ptr<IRepository> (new LooseRepository{ path });
+		return std::unique_ptr<Repository> (new LooseRepository{ path });
 	} else if (boost::filesystem::exists (Path{ path } / "repository.db")) {
-		return std::unique_ptr<IRepository> (new PackedRepository{ path });
+		return std::unique_ptr<Repository> (new PackedRepository{ path });
 	}  else {
 		// Assume deployed repository for now
-		return std::unique_ptr<IRepository> (new DeployedRepository{ path,
+		return std::unique_ptr<Repository> (new DeployedRepository{ path,
 		allowWrite });
 	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<IRepository> DeployRepository (IRepository& source,
+std::unique_ptr<Repository> DeployRepository (Repository& source,
 	const char* destinationPath,
 	const ArrayRef<Uuid>& filesets,
 	Log& log, Progress& progress)

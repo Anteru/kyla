@@ -134,9 +134,9 @@ enum class ValidationResult
 	Missing
 };
 
-struct IRepository
+struct Repository
 {
-	virtual ~IRepository () = default;
+	virtual ~Repository () = default;
 
 	using ValidationCallback = std::function<void (const SHA256Digest& contentObject,
 		const char* path,
@@ -150,9 +150,9 @@ struct IRepository
 	void GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback);
 
-	void Repair (IRepository& source);
+	void Repair (Repository& source);
 
-	void Configure (IRepository& other,
+	void Configure (Repository& other,
 		const ArrayRef<Uuid>& filesets,
 		Log& log, Progress& progress);
 
@@ -166,19 +166,19 @@ private:
 	virtual void ValidateImpl (const ValidationCallback& validationCallback) = 0;
 	virtual void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) = 0;
-	virtual void RepairImpl (IRepository& source) = 0;
+	virtual void RepairImpl (Repository& source) = 0;
 	virtual std::vector<FilesetInfo> GetFilesetInfosImpl () = 0;
 	virtual Sql::Database& GetDatabaseImpl () = 0;
 	virtual std::string GetFilesetNameImpl (const Uuid& filesetId) = 0;
-	virtual void ConfigureImpl (IRepository& other,
+	virtual void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& filesets,
 		Log& log, Progress& progress) = 0;
 };
 
-std::unique_ptr<IRepository> OpenRepository (const char* path,
+std::unique_ptr<Repository> OpenRepository (const char* path,
 	const bool allowWriteAccess);
 
-std::unique_ptr<IRepository> DeployRepository (IRepository& source,
+std::unique_ptr<Repository> DeployRepository (Repository& source,
 	const char* targetPath,
 	const ArrayRef<Uuid>& selectedFilesets,
 	Log& log, Progress& progressHelper);
@@ -186,7 +186,7 @@ std::unique_ptr<IRepository> DeployRepository (IRepository& source,
 /**
 Content files stored directly, not deployed
 */
-class LooseRepository final : public IRepository
+class LooseRepository final : public Repository
 {
 public:
 	LooseRepository (const char* path);
@@ -200,8 +200,8 @@ private:
 
 	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) override;
-	void RepairImpl (IRepository& source) override;
-	void ConfigureImpl (IRepository& other,
+	void RepairImpl (Repository& source) override;
+	void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& filesets,
 		Log& log, Progress& progress) override;
 
@@ -216,7 +216,7 @@ private:
 /**
 Files as if the repository has been deployed
 */
-class DeployedRepository final : public IRepository
+class DeployedRepository final : public Repository
 {
 public:
 	DeployedRepository (const char* path);
@@ -226,17 +226,17 @@ public:
 	DeployedRepository (DeployedRepository&& other);
 	DeployedRepository& operator= (DeployedRepository&& other);
 
-	static std::unique_ptr<DeployedRepository> CreateFrom (IRepository& other,
+	static std::unique_ptr<DeployedRepository> CreateFrom (Repository& other,
 		const ArrayRef<Uuid>& filesets,
 		const Path& targetDirectory,
 		Log& log, Progress& progress);
 
 private:
 	void ValidateImpl (const ValidationCallback& validationCallback) override;
-	void RepairImpl (IRepository& source) override;
+	void RepairImpl (Repository& source) override;
 	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) override;
-	void ConfigureImpl (IRepository& other,
+	void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& filesets,
 		Log& log, Progress& progress) override;
 
@@ -251,7 +251,7 @@ private:
 /**
 Everything packed into per-file-set files
 */
-class PackedRepository final : public IRepository
+class PackedRepository final : public Repository
 {
 public:
 	PackedRepository (const char* path);
@@ -265,8 +265,8 @@ private:
 
 	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) override;
-	void RepairImpl (IRepository& source) override;
-	void ConfigureImpl (IRepository& other,
+	void RepairImpl (Repository& source) override;
+	void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& filesets,
 		Log& log, Progress& progress) override;
 

@@ -30,7 +30,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 ///////////////////////////////////////////////////////////////////////////////
 struct KylaRepositoryImpl
 {
-	std::unique_ptr<kyla::IRepository> p;
+	std::unique_ptr<kyla::Repository> p;
 
 	enum class RepositoryType
 	{
