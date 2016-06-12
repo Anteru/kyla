@@ -6,6 +6,7 @@ Contents:
 .. toctree::
 
     tutorial
+    repository-definition
     repository-types
 
 Introduction

@@ -151,8 +151,6 @@ void PackedRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requ
 
 		contentObjectsInPackageQuery.Reset ();
 	}
-
-	db_.Execute ("DROP TABLE requested_content_objects;");
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -120,15 +120,18 @@ class ZeroFile:
         nullBuffer = bytes([0 for _ in range (blockSize)])
 
         for f in args:
-            filePath = os.path.join (env.testDirectory, f)
-            fileSize = os.stat (filePath).st_size
-            bytesToWrite = fileSize
-            with open (filePath, 'wb') as outputFile:
-                while bytesToWrite > 0:
-                    # we write blockSize null bytes in one go
-                    nextBlockSize = min (bytesToWrite, blockSize)
-                    outputFile.write (nullBuffer [:nextBlockSize])
-                    bytesToWrite -= nextBlockSize
+            try:
+                filePath = os.path.join (env.testDirectory, f)
+                fileSize = os.stat (filePath).st_size
+                bytesToWrite = fileSize
+                with open (filePath, 'wb') as outputFile:
+                    while bytesToWrite > 0:
+                        # we write blockSize null bytes in one go
+                        nextBlockSize = min (bytesToWrite, blockSize)
+                        outputFile.write (nullBuffer [:nextBlockSize])
+                        bytesToWrite -= nextBlockSize
+            except:
+                return False
 
         return True
 
@@ -152,6 +155,13 @@ class CheckNotExistant:
                 return False
         return True
 
+class CheckExistant:
+    def Execute (self, env : TestEnvironment, args):
+        for arg in args:
+            if not os.path.exists (os.path.join (env.testDirectory, arg)):
+                return False
+        return True
+
 hooks = {
     'generate-repository' : SetupGenerateRepository,
     'install' : ExecuteInstall,
@@ -159,6 +169,7 @@ hooks = {
     'validate' : ExecuteValidate,
     'check-hash' : CheckHash,
     'check-not-existant' : CheckNotExistant,
+    'check-existant' : CheckExistant,
     'zero-file' : ZeroFile
 }
 

@@ -1,0 +1,40 @@
+{
+    "info" : {
+        "description" : "Installing two filesets from two packages"
+    },
+    "setup" : [
+        {
+            "generate-repository" : {
+                "source" : "data/two_packages.xml",
+                "source-directory" : "data/shared",
+                "target" : "test"
+            }
+        }
+    ],
+    "execute" : [
+        {
+            "install" : {
+                "source" : "test",
+                "target" : "deploy",
+                "filesets" : [
+                    "5d195f63-f424-431f-b7c5-8d57cd32f57b",
+                    "c8bed51b-cbba-4699-953a-834930704d89"
+                ]
+            }
+        }
+    ],
+    "test" : [
+        {
+            "check-hash" : {
+                "deploy/1.txt" : "7f91985fcec377b3ad31c6eba837c8af0f0ad48973795edd33089ec2ad5d9372",
+                "deploy/2.txt" : "928af6ea40cc9728d511a140a552389bec6daa9a3252f65845ec48c861eb4dc3"
+            }
+        },
+        {
+            "check-existant" : [
+                "test/pack0.kypkg",
+                "test/pack1.kypkg"
+            ]
+        }
+    ]
+}

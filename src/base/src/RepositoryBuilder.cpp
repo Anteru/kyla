@@ -73,11 +73,62 @@ struct FileSet
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-std::vector<FileSet> GetFileSets (const pugi::xml_document& doc,
+struct ContentObject
+{
+	Path sourceFile;
+	SHA256Digest hash;
+	std::size_t size;
+
+	std::vector<Path> duplicates;
+};
+
+struct SourcePackage
+{
+	std::string name;
+
+	std::vector<FileSet> fileSets;
+	std::vector<ContentObject> contentObjects;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+std::unordered_map<std::string, SourcePackage> GetSourcePackages (const pugi::xml_document& doc,
 	const BuildContext& ctx)
 {
-	std::vector<FileSet> result;
+	std::unordered_map<std::string, SourcePackage> result;
 
+	bool mainFound = false;
+
+	std::unordered_set<std::string> sourcePackageIds;
+
+	for (const auto& sourcePackageNode : doc.select_nodes ("//SourcePackage")) {
+		SourcePackage sourcePackage;
+
+		sourcePackage.name = sourcePackageNode.node ().attribute ("Name").as_string ();
+
+		if (sourcePackageIds.find (sourcePackage.name) != sourcePackageIds.end ()) {
+			throw RuntimeException ("Source package already existing",
+				KYLA_FILE_LINE);
+		} else {
+			sourcePackageIds.insert (sourcePackage.name);
+		}
+
+		result [sourcePackageNode.node ().attribute ("Id").as_string ()]
+			= sourcePackage;
+	}
+
+	if (sourcePackageIds.find ("main") == sourcePackageIds.end ()) {
+		// Add the default (== main) package
+		result ["main"] = SourcePackage{"main"};
+	}
+
+	return result;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void AssignFileSetsToPackages (const pugi::xml_document& doc,
+	const BuildContext& ctx,
+	std::unordered_map<std::string, SourcePackage>& sourcePackages)
+{
 	int filesFound = 0;
 
 	for (const auto& fileSetNode : doc.select_nodes ("//FileSet")) {
@@ -86,6 +137,14 @@ std::vector<FileSet> GetFileSets (const pugi::xml_document& doc,
 		fileSet.id = Uuid::Parse (fileSetNode.node ().attribute ("Id").as_string ());
 		fileSet.name = fileSetNode.node ().attribute ("Name").as_string ();
 
+		// Loose package doesn't use this, so don't link them there
+		std::string sourcePackageId = "main";
+		if (fileSetNode.node ().attribute ("SourcePackageId")) {
+			sourcePackageId = fileSetNode.node ().attribute ("SourcePackageId").as_string ();
+		}
+
+		auto& package = sourcePackages.find (sourcePackageId)->second;
+		
 		for (const auto& fileNode : fileSetNode.node ().children ("File")) {
 			File file;
 			file.source = fileNode.attribute ("Source").as_string ();
@@ -101,10 +160,8 @@ std::vector<FileSet> GetFileSets (const pugi::xml_document& doc,
 			++filesFound;
 		}
 
-		result.emplace_back (std::move (fileSet));
+		package.fileSets.emplace_back (std::move (fileSet));
 	}
-
-	return result;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -119,21 +176,11 @@ void HashFiles (std::vector<FileSet>& fileSets,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-struct UniqueContentObjects
-{
-	Path sourceFile;
-	SHA256Digest hash;
-	std::size_t size;
-
-	std::vector<Path> duplicates;
-};
-
-///////////////////////////////////////////////////////////////////////////////
 /**
 Given a couple of file sets, we find unique files by hashing everything
 and merging the results on the hash.
 */
-std::vector<UniqueContentObjects> FindUniqueFileContents (std::vector<FileSet>& fileSets,
+std::vector<ContentObject> FindContentObjects (std::vector<FileSet>& fileSets,
 	const BuildContext& ctx)
 {
 	std::unordered_map<SHA256Digest, std::vector<std::pair<Path, Path>>,
@@ -146,11 +193,11 @@ std::vector<UniqueContentObjects> FindUniqueFileContents (std::vector<FileSet>& 
 		}
 	}
 
-	std::vector<UniqueContentObjects> result;
+	std::vector<ContentObject> result;
 	result.reserve (uniqueContents.size ());
 
 	for (const auto& kv : uniqueContents) {
-		UniqueContentObjects uf;
+		ContentObject uf;
 
 		uf.hash = kv.first;
 		uf.sourceFile = ctx.sourceDirectory / kv.second.front ().first;
@@ -174,8 +221,7 @@ struct IRepositoryBuilder
 	}
 
 	virtual void Build (const BuildContext& ctx,
-		const std::vector<FileSet>& fileSets,
-		const std::vector<UniqueContentObjects>& uniqueFiles) = 0;
+		const std::unordered_map<std::string, SourcePackage>& packages) = 0;
 };
 
 /**
@@ -184,8 +230,7 @@ A loose repository is little more than the files themselves, with hashes.
 struct LooseRepositoryBuilder final : public IRepositoryBuilder
 {
 	void Build (const BuildContext& ctx,
-		const std::vector<FileSet>& fileSets,
-		const std::vector<UniqueContentObjects>& uniqueFiles) override
+		const std::unordered_map<std::string, SourcePackage>& packages) override
 	{
 		boost::filesystem::create_directories (ctx.targetDirectory / ".ky");
 		boost::filesystem::create_directories (ctx.targetDirectory / ".ky" / "objects");
@@ -200,10 +245,11 @@ struct LooseRepositoryBuilder final : public IRepositoryBuilder
 		db.Execute ("PRAGMA journal_mode=WAL;");
 		db.Execute ("PRAGMA synchronous=NORMAL;");
 
-		const auto fileToFileSetId = PopulateFileSets (db, fileSets);
-		PopulateContentObjectsAndFiles (db, uniqueFiles, fileToFileSetId,
-			ctx.targetDirectory / ".ky" / "objects");
-
+		for (const auto& sourcePackage : packages) {
+			const auto fileToFileSetId = PopulateFileSets (db, sourcePackage.second.fileSets);
+			PopulateContentObjectsAndFiles (db, sourcePackage.second.contentObjects, fileToFileSetId,
+				ctx.targetDirectory / ".ky" / "objects");
+		}
 		db.Execute ("PRAGMA journal_mode=DELETE;");
 		// Necessary to get good index statistics
 		db.Execute ("ANALYZE");
@@ -241,7 +287,7 @@ private:
 	}
 
 	void PopulateContentObjectsAndFiles (Sql::Database& db,
-		const std::vector<UniqueContentObjects>& uniqueFiles,
+		const std::vector<ContentObject>& uniqueFiles,
 		const std::map<Path, std::int64_t>& fileToFileSetId,
 		const Path& contentObjectPath)
 	{
@@ -289,8 +335,7 @@ compressed as well.
 struct PackedRepositoryBuilder final : public IRepositoryBuilder
 {
 	void Build (const BuildContext& ctx,
-		const std::vector<FileSet>& fileSets,
-		const std::vector<UniqueContentObjects>& uniqueFiles) override
+		const std::unordered_map<std::string, SourcePackage>& packages) override
 	{
 		auto dbFile = ctx.targetDirectory / "repository.db";
 		boost::filesystem::remove (dbFile);
@@ -301,10 +346,21 @@ struct PackedRepositoryBuilder final : public IRepositoryBuilder
 		db.Execute (install_db_structure);
 		db.Execute ("PRAGMA journal_mode=WAL;");
 		db.Execute ("PRAGMA synchronous=NORMAL;");
+		
+		auto uniqueObjects = PopulateUniqueContentObjects (db, packages);
 
-		const auto fileToFileSetId = PopulateFileSets (db, fileSets);
-		PopulateContentObjectsAndFiles (db, uniqueFiles, fileToFileSetId,
-			ctx.targetDirectory);
+		for (const auto& sourcePackage : packages) {
+			if (sourcePackage.second.contentObjects.empty ()) {
+				continue;
+			}
+
+			const auto fileToFileSetId = PopulateFileSets (db,
+				sourcePackage.second.fileSets); 
+			
+			WritePackage (db, sourcePackage.second,
+				fileToFileSetId, uniqueObjects,
+				ctx.targetDirectory);
+		}
 
 		db.Execute ("PRAGMA journal_mode=DELETE;");
 		// Necessary to get good index statistics
@@ -314,6 +370,33 @@ struct PackedRepositoryBuilder final : public IRepositoryBuilder
 	}
 
 private:
+	std::unordered_map<SHA256Digest, int64, HashDigestHash, HashDigestEqual> PopulateUniqueContentObjects (Sql::Database& db,
+		const std::unordered_map<std::string, SourcePackage>& packages)
+	{
+		auto contentObjectInsertQuery = db.Prepare (
+			"INSERT INTO content_objects (Hash, Size) VALUES (?, ?);");
+
+		std::unordered_map<SHA256Digest, int64, HashDigestHash, HashDigestEqual> uniqueObjects;
+
+		for (const auto& package : packages) {
+			for (const auto& contentObject : package.second.contentObjects) {
+				if (uniqueObjects.find (contentObject.hash) != uniqueObjects.end ()) {
+					continue;
+				}
+				
+				contentObjectInsertQuery.BindArguments (
+					contentObject.hash,
+					contentObject.size);
+				contentObjectInsertQuery.Step ();
+				contentObjectInsertQuery.Reset ();
+
+				uniqueObjects [contentObject.hash] = db.GetLastRowId ();
+			}
+		}
+
+		return uniqueObjects;
+	}
+
 	std::map<Path, std::int64_t> PopulateFileSets (Sql::Database& db,
 		const std::vector<FileSet>& fileSets)
 	{
@@ -342,14 +425,30 @@ private:
 		return result;
 	}
 
-	void PopulateContentObjectsAndFiles (Sql::Database& db,
-		const std::vector<UniqueContentObjects>& uniqueFiles,
-		const std::map<Path, std::int64_t>& fileToFileSetId,
+	// The file starts with a header followed by all content objects.
+	// The database is stored separately
+	struct PackageHeader
+	{
+		char id [8];
+		std::uint64_t version;
+		char reserved [48];
+
+		static void Initialize (PackageHeader& header)
+		{
+			memset (&header, 0, sizeof (header));
+
+			memcpy (header.id, "KYLAPKG", 8);
+			header.version = 0x0001000000000000ULL;
+		}
+	};
+
+	void WritePackage (Sql::Database& db,
+		const SourcePackage& sourcePackage,
+		const std::map<Path, int64>& fileToFileSetId,
+		const std::unordered_map<SHA256Digest, int64, HashDigestHash, HashDigestEqual>& uniqueContentObjects,
 		const Path& packagePath)
 	{
 		auto contentObjectInsert = db.BeginTransaction ();
-		auto contentObjectInsertQuery = db.Prepare (
-			"INSERT INTO content_objects (Hash, Size) VALUES (?, ?);");
 		auto filesInsertQuery = db.Prepare (
 			"INSERT INTO files (Path, ContentObjectId, FileSetId) VALUES (?, ?, ?);");
 		auto packageInsertQuery = db.Prepare (
@@ -359,31 +458,14 @@ private:
 			"(ContentObjectId, SourcePackageId, PackageOffset, PackageSize, SourceOffset, SourceSize, Compression) "
 			"VALUES (?, ?, ?, ?, ?, ?, ?)");
 
-		auto package = CreateFile (packagePath / "data.kypkg");
-
-		// The file starts with a header followed by all content objects.
-		// The database is stored separately
-		struct PackageHeader
-		{
-			char id [8];
-			std::uint64_t version;
-			char reserved [48];
-
-			static void Initialize (PackageHeader& header)
-			{
-				memset (&header, 0, sizeof (header));
-
-				memcpy (header.id, "KYLAPKG", 8);
-				header.version = 0x0001000000000000ULL;
-			}
-		};
+		auto package = CreateFile (packagePath / (sourcePackage.name + ".kypkg"));
 
 		PackageHeader packageHeader;
 		PackageHeader::Initialize (packageHeader);
 
 		package->Write (ArrayRef<PackageHeader> (packageHeader));
 
-		packageInsertQuery.BindArguments ("package", "data.kypkg",
+		packageInsertQuery.BindArguments (sourcePackage.name, (sourcePackage.name + ".kypkg"),
 			Uuid::CreateRandom ());
 		packageInsertQuery.Step ();
 		packageInsertQuery.Reset ();
@@ -398,14 +480,8 @@ private:
 		std::vector<byte> compressionInputBuffer, compressionOutputBuffer;
 
 		// We can insert content objects directly - every unique file is one
-		for (const auto& kv : uniqueFiles) {
-			contentObjectInsertQuery.BindArguments (
-				kv.hash,
-				kv.size);
-			contentObjectInsertQuery.Step ();
-			contentObjectInsertQuery.Reset ();
-
-			const auto contentObjectId = db.GetLastRowId ();
+		for (const auto& kv : sourcePackage.contentObjects) {
+			const auto contentObjectId = uniqueContentObjects.find (kv.hash)->second;
 
 			for (const auto& reference : kv.duplicates) {
 				const auto fileSetId = fileToFileSetId.find (reference)->second;
@@ -465,11 +541,17 @@ void BuildRepository (const char* descriptorFile,
 			KYLA_FILE_LINE);
 	}
 
-	auto fileSets = GetFileSets (doc, ctx);
+	auto sourcePackages = GetSourcePackages (doc, ctx);
+	AssignFileSetsToPackages (doc, ctx, sourcePackages);
 
-	HashFiles (fileSets, ctx);
+	for (auto& sourcePackage : sourcePackages) {
+		HashFiles (sourcePackage.second.fileSets, ctx);
+	}
 
-	auto uniqueFiles = FindUniqueFileContents (fileSets, ctx);
+	for (auto& sourcePackage : sourcePackages) {
+		sourcePackage.second.contentObjects = FindContentObjects (
+			sourcePackage.second.fileSets, ctx);
+	}
 
 	const auto packageTypeNode = doc.select_node ("//Package/Type");
 
@@ -484,7 +566,7 @@ void BuildRepository (const char* descriptorFile,
 	}
 
 	if (builder) {
-		builder->Build (ctx, fileSets, uniqueFiles);
+		builder->Build (ctx, sourcePackages);
 	} else {
 		throw RuntimeException ("Package type not specified.",
 			KYLA_FILE_LINE);
