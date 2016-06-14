@@ -69,11 +69,11 @@ This will give us::
 
 .. note:: The uuid will be different if you run this!
 
-The output is file set uuid, followed by the number of files in the file set and the total size in bytes. Now we can create an installation. The ``kcl`` allows us to select the file sets on the command line::
+The output consists of the file set Uuid, followed by the number of files in the file set and the total size in bytes. The file set id is needed so we can tell kyla what to install. On the command line, we can start an installation by using the ``install`` command, followed by the source and target repository, and the ids of the file sets we want to deploy::
 
     $ .\kcl install source deploy bd4f8902-087f-401b-819c-f978c6e14d6b
 
-An installation is also a file repository, so we can use the usual options on it. Let's start by validating the installation::
+An installation is also a file repository, so we can use the usual actions on it. Let's start by validating the installation::
 
     $ .\kcl validate deploy
 
@@ -93,10 +93,12 @@ In fact, we could have also repaired the source repository using the deploy repo
 
     $ .\kcl install deploy deploy2 bd4f8902-087f-401b-819c-f978c6e14d6b
 
+This will install from our freshly deployed repository into a new deployed repository.
+
 Configuring
 -----------
 
-Configuring a repository means adding or removing file sets from it. We'll create three filesets for GLFW, a general one, one for the ``docs/`` folder, and one for the ``examples/`` folder. Let's query it::
+Configuring a repository means adding or removing file sets from it. We'll create three filesets for GLFW, a general one, one for the ``docs/`` folder, and one for the ``examples/`` folder. For this sample, you need to build the ``glfw-3.1.2-filesets.xml`` repository. Let's query it::
 
     $ .\kcl query-filesets -n source-fs
 

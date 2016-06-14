@@ -47,6 +47,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "Compression.h"
 
+#include <boost/format.hpp>
+
 namespace {
 using namespace kyla;
 
@@ -86,6 +88,8 @@ struct SourcePackage
 {
 	std::string name;
 
+	CompressionAlgorithm compressionAlgorithm;
+
 	std::vector<FileSet> fileSets;
 	std::vector<ContentObject> contentObjects;
 };
@@ -106,10 +110,18 @@ std::unordered_map<std::string, SourcePackage> GetSourcePackages (const pugi::xm
 		sourcePackage.name = sourcePackageNode.node ().attribute ("Name").as_string ();
 
 		if (sourcePackageIds.find (sourcePackage.name) != sourcePackageIds.end ()) {
-			throw RuntimeException ("Source package already existing",
+			throw RuntimeException (
+				str (boost::format ("Source %1% package already exists") % sourcePackage.name),
 				KYLA_FILE_LINE);
 		} else {
 			sourcePackageIds.insert (sourcePackage.name);
+		}
+
+		if (sourcePackageNode.node ().attribute ("Compression")) {
+			sourcePackage.compressionAlgorithm = CompressionAlgorithmFromId (
+				sourcePackageNode.node ().attribute ("Compression").as_string ());
+		} else {
+			sourcePackage.compressionAlgorithm = CompressionAlgorithm::Zip;
 		}
 
 		result [sourcePackageNode.node ().attribute ("Id").as_string ()]
@@ -137,7 +149,7 @@ void AssignFileSetsToPackages (const pugi::xml_document& doc,
 		fileSet.id = Uuid::Parse (fileSetNode.node ().attribute ("Id").as_string ());
 		fileSet.name = fileSetNode.node ().attribute ("Name").as_string ();
 
-		// Loose package doesn't use this, so don't link them there
+		// Default package name is main
 		std::string sourcePackageId = "main";
 		if (fileSetNode.node ().attribute ("SourcePackageId")) {
 			sourcePackageId = fileSetNode.node ().attribute ("SourcePackageId").as_string ();
@@ -214,9 +226,9 @@ std::vector<ContentObject> FindContentObjects (std::vector<FileSet>& fileSets,
 	return result;
 }
 
-struct IRepositoryBuilder
+struct RepositoryBuilder
 {
-	virtual ~IRepositoryBuilder ()
+	virtual ~RepositoryBuilder ()
 	{
 	}
 
@@ -227,7 +239,7 @@ struct IRepositoryBuilder
 /**
 A loose repository is little more than the files themselves, with hashes.
 */
-struct LooseRepositoryBuilder final : public IRepositoryBuilder
+struct LooseRepositoryBuilder final : public RepositoryBuilder
 {
 	void Build (const BuildContext& ctx,
 		const std::unordered_map<std::string, SourcePackage>& packages) override
@@ -332,7 +344,7 @@ private:
 Store all files into one or more source packages. A source package can be
 compressed as well.
 */
-struct PackedRepositoryBuilder final : public IRepositoryBuilder
+struct PackedRepositoryBuilder final : public RepositoryBuilder
 {
 	void Build (const BuildContext& ctx,
 		const std::unordered_map<std::string, SourcePackage>& packages) override
@@ -373,6 +385,7 @@ private:
 	std::unordered_map<SHA256Digest, int64, HashDigestHash, HashDigestEqual> PopulateUniqueContentObjects (Sql::Database& db,
 		const std::unordered_map<std::string, SourcePackage>& packages)
 	{
+		auto contentObjectInsert = db.BeginTransaction ();
 		auto contentObjectInsertQuery = db.Prepare (
 			"INSERT INTO content_objects (Hash, Size) VALUES (?, ?);");
 
@@ -393,6 +406,8 @@ private:
 				uniqueObjects [contentObject.hash] = db.GetLastRowId ();
 			}
 		}
+
+		contentObjectInsert.Commit ();
 
 		return uniqueObjects;
 	}
@@ -474,8 +489,8 @@ private:
 
 		// For now we support only a single package
 
-		auto compressor = CreateBlockCompressor (CompressionAlgorithm::Zip);
-		auto compressorId = IdFromCompressionAlgorithm (CompressionAlgorithm::Zip);
+		auto compressor = CreateBlockCompressor (sourcePackage.compressionAlgorithm);
+		auto compressorId = IdFromCompressionAlgorithm (sourcePackage.compressionAlgorithm);
 
 		std::vector<byte> compressionInputBuffer, compressionOutputBuffer;
 
@@ -497,6 +512,7 @@ private:
 			///@TODO(minor) Chunk the input file here based on uncompressed size
 			///@TODO(minor) Ensure chunk size is < 2 GiB
 			///@TODO(minor) Check this handles 0-byte files
+			///@TODO(minor) Support per-file compression algorithms
 			auto startOffset = package->Tell ();
 			
 			auto inputFile = OpenFile (kv.sourceFile, FileOpenMode::Read);
@@ -555,12 +571,13 @@ void BuildRepository (const char* descriptorFile,
 
 	const auto packageTypeNode = doc.select_node ("//Package/Type");
 
-	std::unique_ptr<IRepositoryBuilder> builder;
+	std::unique_ptr<RepositoryBuilder> builder;
 
 	if (packageTypeNode) {
-		if (strcmp (packageTypeNode.node ().text ().as_string (), "Loose") == 0) {
+		const auto packageType = packageTypeNode.node ().text ().as_string ();
+		if (strcmp (packageType, "Loose") == 0) {
 			builder.reset (new LooseRepositoryBuilder);
-		} else if (strcmp (packageTypeNode.node ().text ().as_string (), "Packed") == 0) {
+		} else if (strcmp (packageType, "Packed") == 0) {
 			builder.reset (new PackedRepositoryBuilder);
 		}
 	}

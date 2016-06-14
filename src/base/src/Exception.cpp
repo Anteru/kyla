@@ -20,7 +20,18 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "Exception.h"
 
 namespace kyla {
-RuntimeException::RuntimeException (const char *msg, const char *file, const int line)
+///////////////////////////////////////////////////////////////////////////////	
+RuntimeException::RuntimeException (const char* msg, 
+	const char* file, const int line)
+: std::runtime_error (msg)
+, file_ (file)
+, line_ (line)
+{
+}
+
+///////////////////////////////////////////////////////////////////////////////
+RuntimeException::RuntimeException (const std::string& msg, 
+	const char *file, const int line)
 : std::runtime_error (msg)
 , file_ (file)
 , line_ (line)

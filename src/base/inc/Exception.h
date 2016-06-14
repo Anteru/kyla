@@ -30,6 +30,7 @@ class RuntimeException : public std::runtime_error
 {
 public:
 	RuntimeException (const char* msg, const char* file, const int line);
+	RuntimeException (const std::string& msg, const char* file, const int line);
 
 private:
 	std::string detail_;
