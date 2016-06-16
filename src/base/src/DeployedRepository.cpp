@@ -143,17 +143,25 @@ void DeployedRepository::RepairImpl (Repository& source)
 	});
 
 	source.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
-		const ArrayRef<>& contents) -> void {
+		const ArrayRef<>& contents,
+		const int64 offset,
+		const int64 totalSize) -> void {
 		// We lookup all paths from the map here - could do a query as well
 		// but as we built it anyway during validation, we reuse that
 
 		auto range = requiredEntries.equal_range (hash);
 		for (auto it = range.first; it != range.second; ++it) {
-			auto file = CreateFile (it->second);
-			file->SetSize (contents.GetSize ());
+			std::unique_ptr<File> file;
 
-			auto pointer = file->Map ();
-			::memcpy (pointer, contents.GetData (), contents.GetSize ());
+			if (offset == 0) {
+				file = CreateFile (it->second);
+				file->SetSize (contents.GetSize ());
+			} else {
+				file = OpenFile (it->second, FileOpenMode::Write);
+			}
+
+			byte* pointer = static_cast<byte*> (file->Map ());
+			::memcpy (pointer + offset, contents.GetData (), contents.GetSize ());
 			file->Unmap (pointer);
 		}
 	});
@@ -178,7 +186,7 @@ void DeployedRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& re
 		auto pointer = file->Map ();
 
 		const ArrayRef<> fileContents{ pointer, file->GetSize () };
-		getCallback (hash, fileContents);
+		getCallback (hash, fileContents, 0, file->GetSize ());
 
 		file->Unmap (pointer);
 
@@ -392,10 +400,42 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 
 	// Fetch the missing ones now and store in the right places
 	source.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
-		const ArrayRef<>& contents) -> void {
-		auto transaction = db_.BeginTransaction ();
-
+		const ArrayRef<>& contents,
+		const int64 offset,
+		const int64 totalSize) -> void {
 		const auto hashString = ToString (hash);
+
+		bool hasStagingFile = false;
+		const auto stagingFilePath = path_ / (hashString + ".kytmp");
+		if ((offset != 0) || (contents.GetSize () != totalSize)) {
+			std::unique_ptr<File> file;
+			
+			if (offset == 0) {
+				log.Debug ("Configure",
+					boost::format ("Created staging file %1%")
+					% stagingFilePath);
+
+				file = CreateFile (stagingFilePath);
+				file->SetSize (totalSize);
+			} else {
+				log.Debug ("Configure",
+					boost::format ("Appending to staging file %1%")
+					% stagingFilePath);
+
+				file = OpenFile (stagingFilePath, FileOpenMode::Write);
+			}
+
+			file->Seek (offset);
+			file->Write (contents);
+
+			if ((offset + contents.GetSize ()) != totalSize) {
+				return;
+			} else {
+				hasStagingFile = true;
+			}
+		}
+
+		auto transaction = db_.BeginTransaction ();
 		log.Debug ("Configure", boost::format ("Received content object '%1%'") % hashString);
 
 		int64 contentObjectId = -1;
@@ -427,15 +467,40 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 
 		getTargetFilesQuery.BindArguments (hash);
 
+		bool isFirstFile = true;
+		Path lastFilePath;
 		while (getTargetFilesQuery.Step ()) {
 			const Path targetPath{ getTargetFilesQuery.GetText (0) };
 
-			log.Debug ("Configure", boost::format ("Creating file %1%") % targetPath);
-
 			boost::filesystem::create_directories (path_ / targetPath.parent_path ());
 
-			auto file = CreateFile (path_ / targetPath);
-			file->Write (contents);
+			if (hasStagingFile) {
+				if (isFirstFile) {
+					log.Debug ("Configure", 
+						boost::format ("Renaming staging file %1% to %2%") 
+							% stagingFilePath % targetPath);
+
+					boost::filesystem::rename (stagingFilePath,
+						path_ / targetPath);
+					isFirstFile = false;
+				} else {
+					log.Debug ("Configure",
+						boost::format ("Copying file %1% to %2%")
+						% stagingFilePath % targetPath);
+
+					assert (!lastFilePath.empty ());
+					boost::filesystem::copy_file (lastFilePath,
+						path_ / targetPath);
+				}
+
+				lastFilePath = path_ / targetPath;
+			} else {
+				log.Debug ("Configure", 
+					boost::format ("Creating file %1%") % targetPath);
+
+				auto file = CreateFile (path_ / targetPath);
+				file->Write (contents);
+			}
 
 			insertFileQuery.BindArguments (targetPath.string (), contentObjectId, targetPath.string ());
 			insertFileQuery.Step ();

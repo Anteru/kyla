@@ -145,7 +145,9 @@ struct Repository
 	void Validate (const ValidationCallback& validationCallback);
 
 	using GetContentObjectCallback = std::function<void (const SHA256Digest& objectDigest,
-		const ArrayRef<>& contents)>;
+		const ArrayRef<>& contents,
+		const int64 offset,
+		const int64 totalSize)>;
 
 	void GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback);

@@ -71,7 +71,7 @@ void LooseRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& reque
 		auto pointer = file->Map ();
 
 		const ArrayRef<> fileContents{ pointer, file->GetSize () };
-		getCallback (hash, fileContents);
+		getCallback (hash, fileContents, 0, file->GetSize ());
 
 		file->Unmap (pointer);
 	}
@@ -160,15 +160,21 @@ void LooseRepository::RepairImpl (Repository& source)
 	});
 
 	source.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
-		const ArrayRef<>& contents) -> void {
+		const ArrayRef<>& contents,
+		const int64 offset, const int64 totalSize) -> void {
 		const auto filePath = Path{ path_ } / Path{ ".ky" }
 		/ Path{ "objects" } / ToString (hash);
 
-		auto file = CreateFile (filePath);
-		file->SetSize (contents.GetSize ());
+		std::unique_ptr<File> file;
+		if (offset == 0) {
+			file = CreateFile (filePath);
+			file->SetSize (contents.GetSize ());
+		} else {
+			file = OpenFile (filePath, FileOpenMode::Write);
+		}
 
-		auto pointer = file->Map ();
-		::memcpy (pointer, contents.GetData (), contents.GetSize ());
+		byte* pointer = static_cast<byte*> (file->Map ());
+		::memcpy (pointer + offset, contents.GetData (), contents.GetSize ());
 		file->Unmap (pointer);
 	});
 }

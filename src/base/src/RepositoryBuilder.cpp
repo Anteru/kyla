@@ -232,6 +232,8 @@ struct RepositoryBuilder
 	{
 	}
 
+	virtual void Configure (const pugi::xml_document& repositoryDefinition) = 0;
+
 	virtual void Build (const BuildContext& ctx,
 		const std::unordered_map<std::string, SourcePackage>& packages) = 0;
 };
@@ -241,6 +243,10 @@ A loose repository is little more than the files themselves, with hashes.
 */
 struct LooseRepositoryBuilder final : public RepositoryBuilder
 {
+	void Configure (const pugi::xml_document&) override
+	{
+	}
+
 	void Build (const BuildContext& ctx,
 		const std::unordered_map<std::string, SourcePackage>& packages) override
 	{
@@ -346,6 +352,17 @@ compressed as well.
 */
 struct PackedRepositoryBuilder final : public RepositoryBuilder
 {
+	void Configure (const pugi::xml_document& repositoryDefinition) override
+	{
+		auto chunkSizeNode = repositoryDefinition.select_node ("//Package/ChunkSize");
+
+		if (chunkSizeNode) {
+			chunkSize_ = chunkSizeNode.node ().text ().as_llong ();
+
+			assert (chunkSize_ >= 1);
+		}
+	}
+
 	void Build (const BuildContext& ctx,
 		const std::unordered_map<std::string, SourcePackage>& packages) override
 	{
@@ -513,28 +530,41 @@ private:
 			///@TODO(minor) Ensure chunk size is < 2 GiB
 			///@TODO(minor) Check this handles 0-byte files
 			///@TODO(minor) Support per-file compression algorithms
-			auto startOffset = package->Tell ();
 			
 			auto inputFile = OpenFile (kv.sourceFile, FileOpenMode::Read);
-			
-			// Read complete file, compress, write compressed file
-			compressionInputBuffer.resize (inputFile->GetSize ());
-			inputFile->Read (compressionInputBuffer);
-			compressionOutputBuffer.resize (compressor->GetCompressionBound (inputFile->GetSize ()));
-			auto compressedSize = compressor->Compress (compressionInputBuffer, compressionOutputBuffer);
-			package->Write (ArrayRef<byte> (compressionOutputBuffer.data (), compressedSize));
-			auto endOffset = package->Tell ();
 
-			storageMappingInsertQuery.BindArguments (contentObjectId, packageId,
-				startOffset, endOffset - startOffset, 0 /* offset inside the content object */,
-				inputFile->GetSize () /* source size */,
-				compressorId);
-			storageMappingInsertQuery.Step ();
-			storageMappingInsertQuery.Reset ();
+			compressionInputBuffer.resize (std::min (
+				chunkSize_, inputFile->GetSize ()));
+
+			int64 bytesRead = -1;
+			int64 readOffset = 0;
+			while ((bytesRead = inputFile->Read (compressionInputBuffer)) > 0) {
+				compressionOutputBuffer.resize (
+					compressor->GetCompressionBound (bytesRead));
+				const auto compressedSize = compressor->Compress (
+					ArrayRef<byte> (compressionInputBuffer).Slice (0, bytesRead),
+					compressionOutputBuffer);
+
+				const auto startOffset = package->Tell ();
+				package->Write (ArrayRef<byte> (compressionOutputBuffer.data (), compressedSize));
+				const auto endOffset = package->Tell ();
+
+				storageMappingInsertQuery.BindArguments (contentObjectId, packageId,
+					startOffset, endOffset - startOffset, 
+					readOffset,
+					bytesRead,
+					compressorId);
+				storageMappingInsertQuery.Step ();
+				storageMappingInsertQuery.Reset ();
+
+				readOffset += bytesRead;
+			}
 		}
 
 		contentObjectInsert.Commit ();
 	}
+
+	int64 chunkSize_ = 4 << 20; // 4 MiB chunks is the default
 };
 }
 
@@ -583,6 +613,7 @@ void BuildRepository (const char* descriptorFile,
 	}
 
 	if (builder) {
+		builder->Configure (doc);
 		builder->Build (ctx, sourcePackages);
 	} else {
 		throw RuntimeException ("Package type not specified.",

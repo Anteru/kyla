@@ -88,6 +88,7 @@ void PackedRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requ
 		"    storage_mapping.PackageSize AS PackageSize, "
 		"    storage_mapping.SourceOffset AS SourceOffset,  "
 		"    content_objects.Hash AS Hash, "
+		"    content_objects.Size as TotalSize, "
 		"    storage_mapping.Compression AS Compression, "
 		"	 storage_mapping.SourceSize AS SourceSize "
 		"FROM storage_mapping "
@@ -122,13 +123,14 @@ void PackedRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requ
 			const auto sourceOffset = contentObjectsInPackageQuery.GetInt64 (2);
 			SHA256Digest hash;
 			contentObjectsInPackageQuery.GetBlob (3, hash);
-			const char* compression = contentObjectsInPackageQuery.GetText (4);
-			const auto sourceSize = contentObjectsInPackageQuery.GetInt64 (5);
+			const auto totalSize = contentObjectsInPackageQuery.GetInt64 (4);
+			const char* compression = contentObjectsInPackageQuery.GetText (5);
+			const auto sourceSize = contentObjectsInPackageQuery.GetInt64 (6);
 
 			if (compression == nullptr) {
 				getCallback (hash,
 					ArrayRef<byte> {fileMapping + packageOffset,
-					packageSize});
+					packageSize}, sourceOffset, totalSize);
 				continue;
 			}
 
@@ -144,7 +146,7 @@ void PackedRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requ
 				fileMapping + packageOffset, packageSize},
 				compressionOutputBuffer);
 
-			getCallback (hash, compressionOutputBuffer);
+			getCallback (hash, compressionOutputBuffer, sourceOffset, totalSize);
 		}
 
 		packageFile->Unmap (fileMapping);
