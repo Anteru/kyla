@@ -24,12 +24,11 @@ Installer repositories are compiled by using ``kcl build``. This requires an Xml
 Reference
 ---------
 
-* ``FileRepository`` is the top-level node and must be present in every repository definition.
-* ``Package`` describes this package
+* ``FileRepository`` is the root node and must be present in every repository definition.
+* ``Package`` within ``FileRepository`` provides meta-information about the package. It may contain two elements:
 
-  * ``Type`` must be specified and one of ``Loose`` or ``Packed``.
-
-  Optionally, and only for ``Packed`` repositories, the ``Package`` node may contain a ``ChunkSize`` element. This determines the chunk size at which objects are stored (specified in bytes). The default size is 4 MiB.
+  * ``Type`` to specify the package type. ``Packed`` and ``Loose`` are valid options.
+  * ``ChunkSize`` if the package type is ``Packed``. This determines the chunk size at which objects are stored (specified in bytes). The default size is 4 MiB.
 
 * ``FileSets`` describes all file sets stored in this package.
 
@@ -37,9 +36,9 @@ Reference
 
     A file set must contain an ``Id`` attribute which must be a valid Uuid. The id is used during the installation to uniquely identify a file set.
 
-    A file set may contain an optional ``SourcePackageId`` attribute which references a source package defined in this repository definition. More on this below.
+    A file set must contain one or more ``File`` elements. A ``File`` element must have the ``Source`` attribute set and it must point to an existing file. Optionally, the ``Target`` attribute can be specified to store a file at a different location. If no ``Target`` is present, the default is to use the ``Source`` path.
 
-    A file set contains ``File`` elements, one per file. A ``File`` element must have the ``Source`` attribute set. The ``Source`` attribute must point to a file. Optionally, ``Target`` can be specified to move a file to a different location. If no ``Target`` is present, the default is to use the ``Source`` path.
+    A file set may contain an optional ``SourcePackageId`` attribute which references a source package defined in this repository definition. More on this below.
 
 There's also a couple of optional elements:
 
