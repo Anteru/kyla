@@ -68,12 +68,18 @@ void LooseRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& reque
 		/ Path{ "objects" } / ToString (hash);
 
 		auto file = OpenFile (filePath, FileOpenMode::Read);
-		auto pointer = file->Map ();
+		const auto fileSize = file->GetSize ();
 
-		const ArrayRef<> fileContents{ pointer, file->GetSize () };
-		getCallback (hash, fileContents, 0, file->GetSize ());
+		if (fileSize > 0) {
+			auto pointer = file->Map ();
 
-		file->Unmap (pointer);
+			const ArrayRef<> fileContents{ pointer, file->GetSize () };
+			getCallback (hash, fileContents, 0, file->GetSize ());
+
+			file->Unmap (pointer);
+		} else {
+			getCallback (hash, ArrayRef<> {}, 0, 0);
+		}
 	}
 }
 

@@ -532,32 +532,48 @@ private:
 			///@TODO(minor) Support per-file compression algorithms
 			
 			auto inputFile = OpenFile (kv.sourceFile, FileOpenMode::Read);
+			const auto inputFileSize = inputFile->GetSize ();
 
-			compressionInputBuffer.resize (std::min (
-				chunkSize_, inputFile->GetSize ()));
-
-			int64 bytesRead = -1;
-			int64 readOffset = 0;
-			while ((bytesRead = inputFile->Read (compressionInputBuffer)) > 0) {
-				compressionOutputBuffer.resize (
-					compressor->GetCompressionBound (bytesRead));
-				const auto compressedSize = compressor->Compress (
-					ArrayRef<byte> (compressionInputBuffer).Slice (0, bytesRead),
-					compressionOutputBuffer);
-
+			if (inputFileSize == 0) {
+				// If it's a null-byte file, we still store a storage mapping
+				// but uncompressed with size 0
 				const auto startOffset = package->Tell ();
-				package->Write (ArrayRef<byte> (compressionOutputBuffer.data (), compressedSize));
-				const auto endOffset = package->Tell ();
 
-				storageMappingInsertQuery.BindArguments (contentObjectId, packageId,
-					startOffset, endOffset - startOffset, 
-					readOffset,
-					bytesRead,
-					compressorId);
+				storageMappingInsertQuery.BindArguments (contentObjectId, 
+					packageId,
+					startOffset, 0 /* = size */,
+					0 /* = output offset */,
+					0 /* = uncompressed size */,
+					IdFromCompressionAlgorithm (CompressionAlgorithm::Uncompressed));
 				storageMappingInsertQuery.Step ();
 				storageMappingInsertQuery.Reset ();
+			} else {
+				compressionInputBuffer.resize (std::min (
+					chunkSize_, inputFileSize));
 
-				readOffset += bytesRead;
+				int64 bytesRead = -1;
+				int64 readOffset = 0;
+				while ((bytesRead = inputFile->Read (compressionInputBuffer)) > 0) {
+					compressionOutputBuffer.resize (
+						compressor->GetCompressionBound (bytesRead));
+					const auto compressedSize = compressor->Compress (
+						ArrayRef<byte> (compressionInputBuffer).Slice (0, bytesRead),
+						compressionOutputBuffer);
+
+					const auto startOffset = package->Tell ();
+					package->Write (ArrayRef<byte> (compressionOutputBuffer.data (), compressedSize));
+					const auto endOffset = package->Tell ();
+
+					storageMappingInsertQuery.BindArguments (contentObjectId, packageId,
+						startOffset, endOffset - startOffset, 
+						readOffset,
+						bytesRead,
+						compressorId);
+					storageMappingInsertQuery.Step ();
+					storageMappingInsertQuery.Reset ();
+
+					readOffset += bytesRead;
+				}
 			}
 		}
 

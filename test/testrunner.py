@@ -139,7 +139,8 @@ class CheckHash:
     def Execute (self, env : TestEnvironment, args):
         for k,v in args.items ():
             try:
-                actualHash = hashlib.sha256 (open (os.path.join (env.testDirectory, k), 'rb').read()).digest().hex()
+                contents = open (os.path.join (env.testDirectory, k), 'rb').read()
+                actualHash = hashlib.sha256 (contents).digest().hex()
                 if actualHash != v:
                     print ('Wrong hash', k, 'expected', v, 'actual', actualHash)
                     return False

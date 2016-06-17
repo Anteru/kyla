@@ -1,0 +1,32 @@
+{
+    "info" : {
+        "description" : "Installing a null-byte file"
+    },
+    "setup" : [
+        {
+            "generate-repository" : {
+                "source" : "data/null_byte_file.xml",
+                "source-directory" : "data/shared",
+                "target" : "test"
+            }
+        }
+    ],
+    "execute" : [
+        {
+            "install" : {
+                "source" : "test",
+                "target" : "deploy",
+                "filesets" : [
+                    "cc3f60a7-7b24-4a54-8dfa-6f811efd4af0"
+                ]
+            }
+        }
+    ],
+    "test" : [
+        {
+            "check-hash" : {
+                "deploy/0" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            }
+        }
+    ]
+}
