@@ -102,10 +102,10 @@ struct KylaFilesetInfo
 
 enum kylaAction
 {
-	kylaAction_Install,
-	kylaAction_Configure,
-	kylaAction_Repair,
-	kylaAction_Verify
+	kylaAction_Install		= 1,
+	kylaAction_Configure	= 2,
+	kylaAction_Repair		= 3,
+	kylaAction_Verify		= 4
 };
 
 struct KylaDesiredState
