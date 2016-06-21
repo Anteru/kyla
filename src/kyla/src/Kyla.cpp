@@ -517,6 +517,8 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** installer)
 		KYLA_C_API_END ()
 	};
 
+	*installer = internal;
+
 	return kylaResult_Ok;
 
 	KYLA_C_API_END ()

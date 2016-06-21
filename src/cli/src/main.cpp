@@ -87,7 +87,7 @@ int Build (const std::vector<std::string>& options,
 		vm ["source-directory"].as<std::string> ().c_str (),
 		vm ["output-directory"].as<std::string> ().c_str ());
 
-	return result == kylaResult_Ok;
+	return result;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -225,7 +225,7 @@ int Repair (const std::vector<std::string>& options,
 	installer->CloseRepository (installer, target);
 	kylaDestroyInstaller (installer);
 
-	return result == kylaResult_Ok;
+	return result;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -361,7 +361,7 @@ int ConfigureOrInstall (const std::string& cmd,
 	desiredState.filesetCount = static_cast<int> (filesetIds.size ());
 	desiredState.filesetIds = filesetPointers.data ();
 
-	int result;
+	int result = -1;
 
 	if (cmd == "install") {
 		result = installer->Execute (installer, kylaAction_Install,
@@ -375,7 +375,7 @@ int ConfigureOrInstall (const std::string& cmd,
 	installer->CloseRepository (installer, target);
 	kylaDestroyInstaller (installer);
 
-	return result == kylaResult_Ok;
+	return result;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

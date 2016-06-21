@@ -28,15 +28,10 @@ class KylaRunner:
         if self._verbose:
             print ('Executing: "{}"'.format (' '.join (args)))
 
-        try:
-            result = subprocess.check_call (args)
-            if self._verbose:
-                print ('Result:', result)
-            return result == 0
-        except:
-            if self._verbose:
-                print ('Result:', 'ERROR')
-            return False
+        result = subprocess.run (args,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        if self._verbose:
+            print ('Result:', result.returncode)
+        return result.returncode == 0
 
     def Install(self, source, target, filesets=[]):
         return self._ExecuteAction ('install', source, target, filesets)
@@ -59,11 +54,11 @@ class KylaRunner:
             print ('Executing: "{}"'.format (' '.join (args)))
 
         try:
-            result = subprocess.run (args,stdout=subprocess.PIPE)
+            result = subprocess.run (args,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
             if self._verbose:
                 print ('Result:', result.returncode)
             return result.returncode == 0
-        except:
+        except e:
             if self._verbose:
                 print ('Result:', 'ERROR')
             return False
