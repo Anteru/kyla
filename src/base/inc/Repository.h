@@ -38,16 +38,16 @@ class Log;
 class Progress
 {
 public:
-	using ProgressCallback = std::function<void (const int sc, const int cs, const float p, const char* s, const char* a)>;
+	using ProgressCallback = std::function<void (const float p, const char* s, const char* a)>;
 
 	Progress (ProgressCallback callback)
 		: callback_ (callback)
 	{
 	}
 
-	void operator () (const int currentStage, const int stageCount, const float p, const char* s, const char* a)
+	void operator () (const float p, const char* s, const char* a)
 	{
-		callback_ (currentStage, stageCount, p, s, a);
+		callback_ (p, s, a);
 	}
 
 private:
@@ -74,7 +74,7 @@ public:
 		stageName_ = stageName;
 		currentStageTarget_ = 0;
 		current_ = 0;
-		progressCallback_ (currentStage_, stageCount_, 0,
+		progressCallback_ (GetTotalProgress (),
 			stageName_.c_str (), nullptr);
 	}
 
@@ -92,7 +92,7 @@ public:
 	{
 		++current_;
 
-		progressCallback_ (currentStage_, stageCount_, GetInStageProgress (),
+		progressCallback_ (GetTotalProgress (),
 			stageName_.c_str (), action_.c_str ());
 	}
 
@@ -100,7 +100,7 @@ public:
 	{
 		++current_;
 
-		progressCallback_ (currentStage_, stageCount_, GetInStageProgress (), 
+		progressCallback_ (GetTotalProgress (), 
 			stageName_.c_str (), action_.c_str ());
 	}
 
@@ -109,6 +109,12 @@ private:
 	{
 		assert (current_ <= currentStageTarget_);
 		return static_cast<float> (current_) / static_cast<float> (currentStageTarget_);
+	}
+
+	float GetTotalProgress () const
+	{
+		const float stageWeight = static_cast<float> (currentStage_) / static_cast<float> (stageCount_);
+		return stageWeight * currentStage_ + stageWeight * GetInStageProgress ();
 	}
 
 	Progress progressCallback_;

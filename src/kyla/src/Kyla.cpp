@@ -52,8 +52,8 @@ struct KylaInstallerInternal
 	KylaInstallerInternal ()
 		: log (new kyla::Log ([](kyla::LogLevel, const char*, const char*) -> void {
 	}))
-		, progress (new kyla::Progress ([](const int currentStage, const int stageCount, 
-			const float stageProgress, const char* stageName, const char* action) -> void {
+		, progress (new kyla::Progress ([](const float totalProgress, 
+			const char* stageName, const char* action) -> void {
 	}))
 	{
 	}
@@ -500,9 +500,16 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** installer)
 
 		auto internal = GetInstallerInternal (installer);
 
-		internal->progress.reset (new kyla::Progress ([=](
-			const int currentStage, const int stageCount, const float f, const char* s, const char* a) -> void {
-			progressCallback (currentStage, stageCount, f, s, a, callbackContext);
+		std::vector<float> weights;
+
+		internal->progress.reset (new kyla::Progress ([&](
+			const float f, const char* s, const char* a) -> void {
+			KylaProgress progress;
+			progress.detailMessage = a;
+			progress.action = s;
+			progress.totalProgress = f;
+
+			progressCallback (&progress, callbackContext);
 		}));
 
 		return kylaResult_Ok;

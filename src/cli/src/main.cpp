@@ -43,23 +43,18 @@ void StdcoutLog (const char* source, const kylaLogSeverity severity,
 	std::cout << source << ":" << message << "\n";
 }
 
-void StdcoutProgress (const int currentStage, const int stageCount,
-	const float progress, const char* stageName, const char* action, void* context)
+void StdcoutProgress (const KylaProgress* progress, void* context)
 {
 	static const char* padding = 
 		"                                        ";
 	//   0123456789012345678901234567890123456879
 
-	if (progress > 0) {
-		std::cout << std::fixed << std::setprecision (3) << progress * 100 
-			<< " : " << action 
-			<< (padding + std::min (::strlen (padding), ::strlen (action))) << "\r";
+	std::cout << std::fixed << std::setprecision (3) << progress->totalProgress * 100
+		<< " : " << progress->action 
+		<< (padding + std::min (::strlen (padding), ::strlen (progress->action))) << "\r";
 
-		if (progress == 1.0) {
-			std::cout << "\n";
-		}
-	} else {
-		std::cout << (currentStage + 1) << "/" << stageCount << " - " << stageName << "\n";
+	if (progress->totalProgress == 1.0) {
+		std::cout << "\n";
 	}
 }
 
