@@ -12,14 +12,25 @@ Contents:
 Introduction
 ------------
 
-kyla is a file content management system. It handles file contents, similar to an installer, and can be used for deploying builds, patching and installation management. However, kyla is not a full installer. It does not handle shortcuts, registry entries or other setup.
+kyla is a file content management system. It handles file contents, similar to an installer, and can be used for deploying builds, patching and installation management. The main features are:
+
+* kyla allows to install applications with *features*.
+* kyla works on file contents, not file names. No data is duplicated, and only content that changed is used. If you have a 10.000 file installation, and only one file changes between revisions, the update will only change this one file.
+* kyla has a unified system for configure (i.e. adding/removing features), updating and downgrading. You can configure from one product to another and kyla will only update changed files - just like for a normal update.
+* kyla provides repair and validation.
+* kyla is fast: Files are only read sequentially, data is read only once if possible, etc.
+* kyla is reliable: It uses the `SQLite <https://sqlite.org>`_ storage engine for durability - one of the most robust databases in the world.
+
+.. note::
+
+    kyla is not a full-fledged installer taking care of registry keys, registering services, or similar. It is designed to deploy and manage applications in a single folder. If you need additional pre/post install hooks, you can easily build them on top of kyla.
 
 Basic concepts
 --------------
 
 kyla has two main concepts:
 
-* A **file repository**, which is the content source. kyla exclusively works on repositories. A file repository contains the contents of all files stored in it. Files are grouped in file sets. A repository can be *packed* into a few package files, or *loose* with all files being stored separately in the file system.
+* A **file repository**, which is the content source. kyla exclusively works on repositories. A file repository contains the contents of all files stored in it. Files are grouped in file sets. A repository can be either *packed* into a few package files, or be a *loose* repository with all file contents being stored separately in the file system.
 * A **file set** is a set of files that is processed together. Each file in a file set must be unique, and all sets in a file repository must be disjoint. For example, each feature of an application would be represented as a file set.
 
 Overview

@@ -13,7 +13,7 @@ To create the build scripts, run ``create.py`` which will result in two Xml file
 Building
 --------
 
-The next step is to build a repository. This is done using the ``kcl`` command line binary, which is expected to be found in the path. We'll build a repository for `glfw-3.1.2`` first, using the ``build.bat`` batch file. All it does is call the ``kcl`` binary and pass the build file generated previously. The script will actually build twice into two separate output folders, one is ``source``, and one is ``target`` - more on that in a moment.
+The next step is to build a repository. This is done using the ``kcl`` command line binary, which is expected to be found in the path. We'll build a repository for ``glfw-3.1.2`` first, using the ``build.bat`` batch file. All it does is call the ``kcl`` binary and pass the build file generated previously. The script will actually build twice into two separate output folders, one is ``source``, and one is ``target`` - more on that in a moment.
 
 Validating
 ----------
