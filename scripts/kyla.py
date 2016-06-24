@@ -18,15 +18,14 @@ from enum import Enum
 class PackageType(Enum):
 	Loose = 0
 	Packed = 1
-	Bundle = 2
 
 class FileRepositoryBuilder:
-	def __init__ (self):
+	def __init__ (self, packageType = PackageType.Packed):
 		self._propertyNode = etree.Element ('Properties')
 		self._root = etree.Element ('FileRepository')
 		self._package = etree.SubElement (self._root, 'Package')
 		self._fileSets = []
-		self._packageType = PackageType.Loose
+		self._packageType = packageType
 
 	def SetPackageType(self, packageType):
 		self._packageType = packageType
@@ -39,6 +38,10 @@ class FileRepositoryBuilder:
 			self.__element = etree.Element ('FileSet')
 			self.__element.set ('Name', name)
 			self.__element.set ('Id', _IdString (fileSetId))
+			self.__id = fileSetId
+
+		def GetId (self):
+			return self.__id
 
 		def SetSourcePackage (self, sourcePackage):
 			self.__element.set = ('SourcePackage', sourcePackage)
