@@ -130,7 +130,7 @@ std::unordered_map<std::string, SourcePackage> GetSourcePackages (const pugi::xm
 
 	if (sourcePackageIds.find ("main") == sourcePackageIds.end ()) {
 		// Add the default (== main) package
-		result ["main"] = SourcePackage{"main"};
+		result ["main"] = SourcePackage{"main", CompressionAlgorithm::Zip};
 	}
 
 	return result;
