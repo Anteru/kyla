@@ -49,8 +49,8 @@ void StdcoutProgress (const KylaProgress* progress, void* context)
 		"                                        ";
 	//   0123456789012345678901234567890123456879
 
-	std::cout << std::fixed << std::setprecision (3) << progress->totalProgress * 100
-		<< " : " << progress->action 
+	std::cout << std::fixed << std::setprecision (2) << progress->totalProgress * 100
+		<< " % : " << progress->action 
 		<< (padding + std::min (::strlen (padding), ::strlen (progress->action))) << "\r";
 
 	if (progress->totalProgress == 1.0) {
