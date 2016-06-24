@@ -486,7 +486,7 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** installer)
 
 		std::vector<float> weights;
 
-		internal->progress.reset (new kyla::Progress ([&](
+		internal->progress.reset (new kyla::Progress ([=](
 			const float f, const char* s, const char* a) -> void {
 			KylaProgress progress;
 			progress.detailMessage = a;
