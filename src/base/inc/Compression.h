@@ -31,8 +31,8 @@ namespace kyla {
 enum class CompressionAlgorithm : std::uint8_t
 {
 	Uncompressed,
-	Zip
-	// Brotli
+	Zip,
+	Brotli
 };
 
 const char* IdFromCompressionAlgorithm (CompressionAlgorithm algorithm);

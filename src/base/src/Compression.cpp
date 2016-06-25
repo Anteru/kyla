@@ -22,6 +22,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <cstring>
 #include <zlib.h>
 #include <vector>
+#include <encode.h>
+#include <decode.h>
 
 namespace kyla {
 struct NullBlockCompressor final : public BlockCompressor
@@ -34,6 +36,15 @@ struct NullBlockCompressor final : public BlockCompressor
 };
 
 struct ZipBlockCompressor final : public BlockCompressor
+{
+	int GetCompressionBoundImpl (const int inputSize) const override;
+	int CompressImpl (const ArrayRef<>& input,
+		const MutableArrayRef<>& output) const override;
+	void DecompressImpl (const ArrayRef<>& input,
+		const MutableArrayRef<>& output) const override;
+};
+
+struct BrotliBlockCompressor final : public BlockCompressor
 {
 	int GetCompressionBoundImpl (const int inputSize) const override;
 	int CompressImpl (const ArrayRef<>& input,
@@ -128,6 +139,50 @@ void NullBlockCompressor::DecompressImpl (const ArrayRef<>& input,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+int BrotliBlockCompressor::GetCompressionBoundImpl (const int input_size) const
+{
+	/*
+	This is copy-pasted from Brotli 0.5 which isn't available as a stable
+	release yet.
+
+	*/
+	///@TODO(minor) Replace with BrotliEncoderMaxCompressedSize once available
+	size_t num_large_blocks = input_size >> 24;
+	size_t tail = input_size - (num_large_blocks << 24);
+	size_t tail_overhead = (tail > (1 << 20)) ? 4 : 3;
+	size_t overhead = 2 + (4 * num_large_blocks) + tail_overhead + 1;
+	size_t result = input_size + overhead;
+	if (input_size == 0) return 1;
+	return (result < input_size) ? 0 : result;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+int BrotliBlockCompressor::CompressImpl (const ArrayRef<>& input,
+	const MutableArrayRef<>& output) const
+{
+	size_t encodedSize = output.GetSize ();
+	auto brotliParams = brotli::BrotliParams ();
+	brotliParams.quality = 5;
+
+	brotli::BrotliCompressBuffer (brotliParams,
+		input.GetSize (), static_cast<const uint8_t*> (input.GetData ()),
+		&encodedSize, reinterpret_cast<uint8_t*> (output.GetData ()));
+	///@TODO(minor) check for overflow
+	return static_cast<int> (encodedSize);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void BrotliBlockCompressor::DecompressImpl (const ArrayRef<>& input,
+	const MutableArrayRef<>& output) const
+{
+	size_t decodedSize = output.GetSize ();
+	BrotliDecompressBuffer (input.GetSize (),
+		static_cast<const uint8_t*> (input.GetData ()),
+		&decodedSize, static_cast<uint8_t*> (output.GetData ()));
+	assert (decodedSize == output.GetSize ());
+}
+
+////////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<BlockCompressor> CreateBlockCompressor (CompressionAlgorithm compression)
 {
 	switch (compression) {
@@ -136,6 +191,9 @@ std::unique_ptr<BlockCompressor> CreateBlockCompressor (CompressionAlgorithm com
 
 	case CompressionAlgorithm::Uncompressed:
 		return std::unique_ptr<BlockCompressor> (new NullBlockCompressor);
+
+	case CompressionAlgorithm::Brotli:
+		return std::unique_ptr<BlockCompressor> (new BrotliBlockCompressor);
 	}
 
 	return std::unique_ptr<BlockCompressor> ();
@@ -149,6 +207,8 @@ const char* IdFromCompressionAlgorithm (CompressionAlgorithm algorithm)
 		return nullptr;
 	case CompressionAlgorithm::Zip:
 		return "ZIP";
+	case CompressionAlgorithm::Brotli:
+		return "Brotli";
 	default:
 		return nullptr;
 	}
@@ -161,6 +221,8 @@ CompressionAlgorithm CompressionAlgorithmFromId (const char* id)
 		return CompressionAlgorithm::Uncompressed;
 	} else if (strcmp (id, "ZIP") == 0) {
 		return CompressionAlgorithm::Zip;
+	} else if (strcmp (id, "Brotli") == 0) {
+		return CompressionAlgorithm::Brotli;
 	}
 
 	return CompressionAlgorithm::Uncompressed;

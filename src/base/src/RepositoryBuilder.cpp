@@ -121,7 +121,7 @@ std::unordered_map<std::string, SourcePackage> GetSourcePackages (const pugi::xm
 			sourcePackage.compressionAlgorithm = CompressionAlgorithmFromId (
 				sourcePackageNode.node ().attribute ("Compression").as_string ());
 		} else {
-			sourcePackage.compressionAlgorithm = CompressionAlgorithm::Zip;
+			sourcePackage.compressionAlgorithm = CompressionAlgorithm::Brotli;
 		}
 
 		result [sourcePackageNode.node ().attribute ("Id").as_string ()]
@@ -130,7 +130,7 @@ std::unordered_map<std::string, SourcePackage> GetSourcePackages (const pugi::xm
 
 	if (sourcePackageIds.find ("main") == sourcePackageIds.end ()) {
 		// Add the default (== main) package
-		result ["main"] = SourcePackage{"main", CompressionAlgorithm::Zip};
+		result ["main"] = SourcePackage{"main", CompressionAlgorithm::Brotli};
 	}
 
 	return result;
