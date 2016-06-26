@@ -58,7 +58,7 @@ SET(BROTLI_DEC
     dec/context.h
     dec/decode.c
     dec/decode.h
-    dec/dictionary.c
+    # dec/dictionary.c
     dec/dictionary.h
     dec/huffman.c
     dec/huffman.h
@@ -69,6 +69,10 @@ SET(BROTLI_DEC
     dec/transform.h
     dec/types.h
     )
+
+IF(MSVC)
+	ADD_DEFINITIONS(/wd4334 /wd4146)
+ENDIF()
 
 ADD_LIBRARY(brotli STATIC ${BROTLI_ENC} ${BROTLI_DEC})
 TARGET_INCLUDE_DIRECTORIES(brotli
