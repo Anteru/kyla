@@ -127,6 +127,8 @@ std::unique_ptr<File> CreateFile (const Path& path);
 
 void BlockCopy (File& input, File& output);
 void BlockCopy (File& input, File& output, const MutableArrayRef<byte>& buffer);
+
+Path GetTemporaryFilename ();
 }
 
 #endif // FILEIO_H

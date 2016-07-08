@@ -455,4 +455,24 @@ void BlockCopy (File& input, File& output, const MutableArrayRef<byte>& buffer)
 		}
 	}
 }
+
+///////////////////////////////////////////////////////////////////////////////
+Path GetTemporaryFilename ()
+{
+#if KYLA_PLATFORM_WINDOWS
+	char tempPathBuffer [MAX_PATH] = {0};
+	if (GetTempPathA (MAX_PATH, tempPathBuffer) == 0) {
+		///@TODO(minor) Handle error
+	}
+
+	char tempFileBuffer [MAX_PATH] = { 0 };
+	if (GetTempFileNameA (tempPathBuffer, "kylatmp", 0, tempFileBuffer) == 0) {
+		///@TODO(minor) Handle error
+	}
+
+	return Path{ tempFileBuffer };
+#else
+#error Unsupported platform
+#endif
+}
 }
