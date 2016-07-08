@@ -1,6 +1,6 @@
 /**
 [LICENSE BEGIN]
-kyla Copyright (C) 2016 Matth‰us G. Chajdas
+kyla Copyright (C) 2016 Matth√§us G. Chajdas
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -17,27 +17,32 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 [LICENSE END]
 */
 
-#ifndef KYLA_CORE_INTERNAL_BASE_REPOSITORY_H
-#define KYLA_CORE_INTERNAL_BASE_REPOSITORY_H
+#ifndef KYLA_CORE_INTERNAL_WEB_REPOSITORY_H
+#define KYLA_CORE_INTERNAL_WEB_REPOSITORY_H
 
-#include "Repository.h"
+#include "BaseRepository.h"
+#include "sql/Database.h"
 
 namespace kyla {
-class BaseRepository : public Repository
+class WebRepository final : public BaseRepository
 {
 public:
-	virtual ~BaseRepository () = default;
+	WebRepository (const char* path);
+	~WebRepository ();
 
 private:
-	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
-	std::string GetFilesetNameImpl (const Uuid& filesetId) override;
+	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
+		const GetContentObjectCallback& getCallback) override;
 
-	void RepairImpl (Repository& source) override;
-	void ValidateImpl (const ValidationCallback& validationCallback) override;
-	void ConfigureImpl (Repository& other,
-		const ArrayRef<Uuid>& filesets,
-		Log& log, Progress& progress) override;
+	Sql::Database& GetDatabaseImpl () override;
+
+	Sql::Database db_;
+	Path dbPath_;
+	const char* url_;
+
+	struct Impl;
+	std::unique_ptr<Impl> impl_;
 };
-}
+} // namespace kyla
 
 #endif

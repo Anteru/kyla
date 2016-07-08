@@ -40,6 +40,7 @@ SET(HEADERS
 	inc/StringRef.h
 	inc/Types.h
 	inc/Uuid.h
+	inc/WebRepository.h
 )
 
 SET(SOURCES
@@ -58,6 +59,7 @@ SET(SOURCES
 	src/RepositoryBuilder.cpp
 	src/StringRef.cpp
 	src/Uuid.cpp
+	src/WebRepository.cpp
 )
 
 IF(WIN32)

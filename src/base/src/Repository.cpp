@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "DeployedRepository.h"
 #include "LooseRepository.h"
 #include "PackedRepository.h"
+#include "WebRepository.h"
 
 namespace kyla {
 ///////////////////////////////////////////////////////////////////////////////
@@ -74,7 +75,9 @@ std::unique_ptr<Repository> OpenRepository (const char* path,
 {
 	///@TODO(minor) Move this logic into a static member function of the
 	/// various repository types
-	if (boost::filesystem::exists (Path{ path } / Path{ ".ky" })) {
+	if (strncmp (path, "http", 4) == 0) {
+		return std::unique_ptr<Repository> (new WebRepository{ path });
+	} else if (boost::filesystem::exists (Path{ path } / Path{ ".ky" })) {
 		// .ky indicates a loose repository
 		return std::unique_ptr<Repository> (new LooseRepository{ path });
 	} else if (boost::filesystem::exists (Path{ path } / "repository.db")) {

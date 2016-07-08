@@ -52,6 +52,12 @@ void BaseRepository::RepairImpl (Repository& /*source*/)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+void BaseRepository::ValidateImpl (const ValidationCallback& /*validationCallback*/)
+{
+	throw RuntimeException ("NOT IMPLEMENTED", KYLA_FILE_LINE);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 void BaseRepository::ConfigureImpl (Repository& /*other*/,
 	const ArrayRef<Uuid>& /*filesets*/,
 	Log& /*log*/, Progress& /*progress*/)
