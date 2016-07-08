@@ -67,7 +67,7 @@ struct WebRepository::Impl
 
 		File (HINTERNET internet, const char* url)
 		{
-			InternetOpenUrl (internet,
+			handle_ = InternetOpenUrl (internet,
 				url,
 				NULL, /* headers */
 				0, /* header length */
@@ -132,19 +132,22 @@ WebRepository::WebRepository (const char* path)
 	const auto dbWebFile = impl_->Open (std::string (path) + "repository.db");
 	url_ = path;
 	dbPath_ = GetTemporaryFilename ();
-	auto dbLocalFile = CreateFile (dbPath_);
 
-	std::vector<byte> buffer;
-	buffer.resize (1 << 20); // 1 MiB
+	// Extra scope so it's closed by the time we try to open
+	{
+		auto dbLocalFile = CreateFile (dbPath_);
+		std::vector<byte> buffer;
+		buffer.resize (1 << 20); // 1 MiB
 
-	for (;;) {
-		const auto read = dbWebFile->Read (buffer);
+		for (;;) {
+			const auto read = dbWebFile->Read (buffer);
 		
-		if (read == 0) {
-			break;
+			if (read == 0) {
+				break;
+			}
+		
+			dbLocalFile->Write (ArrayRef<byte> {buffer}.Slice (0, read));
 		}
-		
-		dbLocalFile->Write (ArrayRef<byte> {buffer}.Slice (0, read));
 	}
 
 	db_ = Sql::Database::Open (dbPath_);
@@ -153,6 +156,7 @@ WebRepository::WebRepository (const char* path)
 ///////////////////////////////////////////////////////////////////////////////
 WebRepository::~WebRepository ()
 {
+	db_.Close ();
 	boost::filesystem::remove (dbPath_);
 }
 
