@@ -260,7 +260,7 @@ int QueryFilesets (const std::vector<std::string>& options,
 
 	KylaTargetRepository source;
 	installer->OpenSourceRepository (installer, vm ["source"].as<std::string> ().c_str (),
-		0, &source);
+		kylaRepositoryOption_ReadOnly, &source);
 
 	int filesetCount = 0;
 
