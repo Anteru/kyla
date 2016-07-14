@@ -262,36 +262,46 @@ int QueryFilesets (const std::vector<std::string>& options,
 	installer->OpenSourceRepository (installer, vm ["source"].as<std::string> ().c_str (),
 		kylaRepositoryOption_ReadOnly, &source);
 
-	int filesetCount = 0;
+	std::size_t resultSize = 0;
+	installer->QueryRepository (installer, source,
+		kylaRepositoryProperty_AvailableFilesets, &resultSize, nullptr);
 
-	installer->QueryFilesets (installer, source,
-		&filesetCount, nullptr);
-
-	std::vector<KylaFilesetInfo> filesetInfos{ static_cast<size_t> (filesetCount) };
-
-	installer->QueryFilesets (installer, source,
-		&filesetCount, filesetInfos.data ());
-
+	std::vector<KylaUuid> filesets;
+	filesets.resize (resultSize / sizeof (KylaUuid));
+	installer->QueryRepository (installer, source,
+		kylaRepositoryProperty_AvailableFilesets, &resultSize, filesets.data ());
+	
 	const auto queryName = vm ["name"].as<bool> ();
 
-	for (const auto& info : filesetInfos) {
+	for (const auto& filesetId : filesets) {
 		if (queryName) {
-			int nameSize = 0;
+			size_t nameSize = 0;
 
-			installer->QueryFilesetName (installer, source,
-				info.id, &nameSize, nullptr);
+			installer->QueryFileset (installer, source,
+				filesetId, 
+				kylaFilesetProperty_Name, &nameSize, nullptr);
 			std::vector<char> name;
 			name.resize (nameSize);
 
-			installer->QueryFilesetName (installer, source,
-				info.id, &nameSize, name.data ());
+			installer->QueryFileset (installer, source,
+				filesetId,
+				kylaFilesetProperty_Name, &nameSize, name.data ());
 
-			std::cout << ToString (kyla::Uuid{ info.id }) << " " << name.data ();
+			std::cout << ToString (kyla::Uuid{ filesetId.bytes }) << " " << name.data ();
 		} else {
-			std::cout << ToString (kyla::Uuid{ info.id });
+			std::cout << ToString (kyla::Uuid{ filesetId.bytes });
 		}
 
-		std::cout << " " << info.fileCount << " " << info.fileSize << std::endl;
+		size_t int64Size = sizeof (std::int64_t);
+		std::int64_t fileCount, size;
+		installer->QueryFileset (installer, source,
+			filesetId, kylaFilesetProperty_Size,
+			&int64Size, &size);
+		installer->QueryFileset (installer, source,
+			filesetId, kylaFilesetProperty_FileCount,
+			&int64Size, &fileCount);
+
+		std::cout << " " << fileCount << " " << size << std::endl;
 	}
 
 	installer->CloseRepository (installer, source);

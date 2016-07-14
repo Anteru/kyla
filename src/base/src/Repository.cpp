@@ -52,15 +52,27 @@ void Repository::GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjec
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-std::vector<FilesetInfo> Repository::GetFilesetInfos ()
+std::vector<Uuid> Repository::GetFilesets ()
 {
-	return GetFilesetInfosImpl ();
+	return GetFilesetsImpl ();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 std::string Repository::GetFilesetName (const Uuid& id)
 {
 	return GetFilesetNameImpl (id);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+int64_t Repository::GetFilesetSize (const Uuid& id)
+{
+	return GetFilesetSizeImpl (id);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+int64_t Repository::GetFilesetFileCount (const Uuid& id)
+{
+	return GetFilesetFileCountImpl (id);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

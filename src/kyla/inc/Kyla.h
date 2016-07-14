@@ -114,6 +114,23 @@ struct KylaDesiredState
 	const uint8_t* const* filesetIds;
 };
 
+struct KylaUuid
+{
+	uint8_t bytes [16];
+};
+
+enum kylaRepositoryProperty
+{
+	kylaRepositoryProperty_AvailableFilesets
+};
+
+enum kylaFilesetProperty
+{
+	kylaFilesetProperty_Name,
+	kylaFilesetProperty_Size,
+	kylaFilesetProperty_FileCount
+};
+
 struct KylaInstaller
 {
 	int (*SetLogCallback)(KylaInstaller* installer,
@@ -130,15 +147,18 @@ struct KylaInstaller
 	int (*CloseRepository)(KylaInstaller* installer,
 		KylaRepository impl);
 
-	int (*QueryFilesets)(KylaInstaller* installer,
+	int (*QueryRepository)(KylaInstaller* installer,
 		KylaSourceRepository repository,
-		int* filesetCount, KylaFilesetInfo* filesetInfos);
+		int propertyId,
+		size_t* resultSize,
+		void* result);
 
-	int (*QueryFilesetName)(KylaInstaller* installer,
+	int (*QueryFileset)(KylaInstaller* installer,
 		KylaSourceRepository repository,
-		const uint8_t* id,
-		int* length,
-		char* result);
+		struct KylaUuid id,
+		int propertyId,
+		size_t* resultSize,
+		void* result);
 
 	int (*Execute)(KylaInstaller* installer, kylaAction action,
 		KylaTargetRepository target, KylaSourceRepository source,

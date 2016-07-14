@@ -9,21 +9,28 @@ namespace {
 class FilesetListItem : public QListWidgetItem
 {
 public:
-	FilesetListItem (const KylaFilesetInfo& info, const char* description)
-		: QListWidgetItem (description)
-		, info_ (info)
+	FilesetListItem (const KylaUuid id, const std::int64_t size, const char* description)
+	: QListWidgetItem (description)
+	, id_ (id)
+	, size_ (size)
 	{
 		this->setFlags (Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
 		this->setCheckState (Qt::Unchecked);
 	}
 
-	const KylaFilesetInfo& GetInfo () const
+	std::int64_t GetSize () const
 	{
-		return info_;
+		return size_;
+	}
+
+	const KylaUuid& GetId () const
+	{
+		return id_;
 	}
 
 private:
-	KylaFilesetInfo info_;
+	KylaUuid id_;
+	std::int64_t size_;
 };
 }
 
@@ -63,20 +70,18 @@ StartDialog::StartDialog(QWidget *parent) :
 	connect (ui->featureSelection, &QListWidget::itemChanged,
 		[=]() -> void {
 		std::int64_t totalSize = 0;
-		std::int64_t totalCount = 0;
 
 		for (int i = 0; i < ui->featureSelection->count (); ++i) {
 			auto item = static_cast<FilesetListItem*> (ui->featureSelection->item (i));
 
 			if (item->checkState () == Qt::Checked) {
-				totalSize += item->GetInfo ().fileSize;
-				totalCount += item->GetInfo ().fileCount;
+				totalSize += item->GetSize ();
 			}
 		}
 
-		if (totalCount > 0) {
-		ui->requiredDiskSpaceValue->setText (QString (tr ("%1 file(s), %2 byte(s)"))
-			.arg (totalCount).arg (totalSize));
+		if (totalSize > 0) {
+		ui->requiredDiskSpaceValue->setText (QString (tr ("%1 byte(s)"))
+			.arg (totalSize));
 		} else {
 			ui->requiredDiskSpaceValue->setText (tr ("No features selected"));
 		}
@@ -89,25 +94,37 @@ StartDialog::StartDialog(QWidget *parent) :
 		progressBar->setValue (progress->totalProgress * 100);
 	}, ui->progressBar);
 
-	int filesetCount = 0;
-	installer_->QueryFilesets (installer_, sourceRepository_,
-		&filesetCount, nullptr);
+	std::size_t resultSize = 0;
+	installer_->QueryRepository (installer_, sourceRepository_,
+		kylaRepositoryProperty_AvailableFilesets, &resultSize, nullptr);
 
-	std::vector<KylaFilesetInfo> filesets;
-	filesets.resize (filesetCount);
-	installer_->QueryFilesets (installer_, sourceRepository_,
-		&filesetCount, filesets.data ());
+	std::vector<KylaUuid> filesets;
+	filesets.resize (resultSize / sizeof (KylaUuid));
+	installer_->QueryRepository (installer_, sourceRepository_,
+		kylaRepositoryProperty_AvailableFilesets, &resultSize, filesets.data ());
 
 	for (const auto& fs : filesets) {
-		int length = 0;
-		installer_->QueryFilesetName (installer_, sourceRepository_,
-			fs.id, &length, nullptr);
+		std::size_t length = 0;
+		installer_->QueryFileset (installer_, sourceRepository_,
+			fs, kylaFilesetProperty_Name,
+			&length, nullptr);
 		std::vector<char> name;
 		name.resize (length);
-		installer_->QueryFilesetName (installer_, sourceRepository_,
-			fs.id, &length, name.data ());
+		installer_->QueryFileset (installer_, sourceRepository_,
+			fs, kylaFilesetProperty_Name,
+			&length, name.data ());
 
-		ui->featureSelection->addItem (new FilesetListItem (fs, name.data ()));
+		std::int64_t filesetSize = 0;
+		std::size_t filesetResultSize = sizeof (filesetSize);
+
+		installer_->QueryFileset (installer_, sourceRepository_,
+			fs, kylaFilesetProperty_Size,
+			&filesetResultSize, &filesetSize);
+
+		auto item = new FilesetListItem (fs,
+			filesetSize, name.data ());
+		ui->featureSelection->addItem (item);
+		item->setCheckState (Qt::Checked);
 	}
 
 	connect (ui->startInstallationButton, &QPushButton::clicked,
@@ -127,8 +144,8 @@ StartDialog::StartDialog(QWidget *parent) :
 
 			if (item->checkState () == Qt::Checked) {
 				idStore.insert (idStore.end (),
-					item->GetInfo ().id,
-					item->GetInfo ().id + sizeof (item->GetInfo ().id));
+					item->GetId ().bytes,
+					item->GetId ().bytes + sizeof (item->GetId ().bytes));
 				++itemCount;
 			}
 		}

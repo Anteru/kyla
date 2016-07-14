@@ -266,9 +266,11 @@ int kylaExecute (
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaQueryFilesets (KylaInstaller* installer,
+int kylaQueryRepository (KylaInstaller* installer,
 	KylaSourceRepository repository,
-	int* pFilesetCount, KylaFilesetInfo* pFilesetInfos)
+	int propertyId,
+	size_t* pResultSize,
+	void* pResult)
 {
 	KYLA_C_API_BEGIN ()
 
@@ -288,34 +290,31 @@ int kylaQueryFilesets (KylaInstaller* installer,
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	const auto result = repository->p->GetFilesetInfos ();
-	const auto resultSize = static_cast<int> (result.size ());
+	switch (propertyId) {
+	case kylaRepositoryProperty_AvailableFilesets:
+	{
+		const auto result = repository->p->GetFilesets ();
+		const auto resultSize = static_cast<int> (result.size ()) * sizeof (KylaUuid);
 
-	if (pFilesetCount) {
-		if (resultSize < 0) {
-			// overflow
+		if (pResultSize && !pResult) {
+			*pResultSize = resultSize;
+		} else if (pResultSize && pResult) {
+			if (*pResultSize < resultSize) {
+				return kylaResult_ErrorInvalidArgument;
+			} else {
+				*pResultSize = resultSize;
+			}
+
+			::memcpy (pResult, result.data (), resultSize);
+		} else {
 			return kylaResult_ErrorInvalidArgument;
 		}
 
-		*pFilesetCount = resultSize;
+		break;
 	}
 
-	if (pFilesetInfos) {
-		if (pFilesetCount == nullptr) {
-			return kylaResult_ErrorInvalidArgument;
-		}
-
-		if (*pFilesetCount < resultSize) {
-			return kylaResult_ErrorInvalidArgument;
-		}
-
-		for (const auto& item : result) {
-			pFilesetInfos->fileCount = item.fileCount;
-			pFilesetInfos->fileSize = item.fileSize;
-			::memcpy (pFilesetInfos->id, item.id.GetData (), sizeof (pFilesetInfos->id));
-
-			++pFilesetInfos;
-		}
+	default:
+		return kylaResult_ErrorInvalidArgument;
 	}
 
 	return kylaResult_Ok;
@@ -324,11 +323,12 @@ int kylaQueryFilesets (KylaInstaller* installer,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaQueryFilesetName (KylaInstaller* installer,
+int kylaQueryFileset (KylaInstaller* installer,
 	KylaSourceRepository repository,
-	const uint8_t* pId,
-	int* pLength,
-	char* pResult)
+	struct KylaUuid id,
+	int propertyId,
+	size_t* pResultSize,
+	void* pResult)
 {
 	KYLA_C_API_BEGIN ()
 
@@ -348,40 +348,74 @@ int kylaQueryFilesetName (KylaInstaller* installer,
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	if (pId == nullptr) {
-		i->log->Error ("kylaQueryFilesetName", "id was null, but must not be null");
+	const kyla::Uuid uuid{ id.bytes };
+	
+	switch (propertyId) {
+	case kylaFilesetProperty_FileCount:
+	{
+		const auto resultSize = sizeof (std::int64_t);
+		if (pResultSize && !pResult) {
+			*pResultSize = resultSize;
+		} else if (pResultSize && pResult) {
+			if (*pResultSize < resultSize) {
+				return kylaResult_ErrorInvalidArgument;
+			} else {
+				*pResultSize = resultSize;
+			}
 
+			*static_cast<std::int64_t*> (pResult) =
+				repository->p->GetFilesetFileCount (uuid);
+		} else {
+			return kylaResult_ErrorInvalidArgument;
+		}
+
+		break;
+	}
+	case kylaFilesetProperty_Size:
+	{
+		const auto resultSize = sizeof (std::int64_t);
+		if (pResultSize && !pResult) {
+			*pResultSize = resultSize;
+		} else if (pResultSize && pResult) {
+			if (*pResultSize < resultSize) {
+				return kylaResult_ErrorInvalidArgument;
+			} else {
+				*pResultSize = resultSize;
+			}
+
+			*static_cast<std::int64_t*> (pResult) =
+				repository->p->GetFilesetSize (uuid);
+		} else {
+			return kylaResult_ErrorInvalidArgument;
+		}
+
+		break;
+	}
+	case kylaFilesetProperty_Name:
+	{
+		const auto name = repository->p->GetFilesetName (uuid);
+		const auto resultSize = name.size () + 1;
+
+		if (pResultSize && !pResult) {
+			*pResultSize = resultSize;
+		} else if (pResultSize && pResult) {
+			if (*pResultSize < resultSize) {
+				return kylaResult_ErrorInvalidArgument;
+			} else {
+				*pResultSize = resultSize;
+			}
+			
+			::memset (pResult, 0, name.size () + 1);
+			::memcpy (pResult, name.data (), name.size ());
+		} else {
+			return kylaResult_ErrorInvalidArgument;
+		}
+
+		break;
+	}
+
+	default:
 		return kylaResult_ErrorInvalidArgument;
-	}
-
-	const kyla::Uuid uuid{ pId };
-	const auto result = repository->p->GetFilesetName (uuid);
-	const auto resultSize = static_cast<int> (result.size () + 1 /* trailing zero */);
-
-	if (pLength) {
-		if (resultSize < 0) {
-			// overflow
-			return kylaResult_ErrorInvalidArgument;
-		}
-
-		*pLength = resultSize;
-	}
-
-	if (pResult) {
-		if (pLength == nullptr) {
-			i->log->Error ("kylaQueryFilesetName",
-				"length must be non-null if pResult is non-null.");
-			return kylaResult_ErrorInvalidArgument;
-		}
-
-		if (*pLength < resultSize) {
-			i->log->Error ("kylaQueryFilesetName",
-				boost::format ("Output size must be at least %1% but was %2%")
-					% resultSize % *pLength);
-			return kylaResult_ErrorInvalidArgument;
-		}
-
-		::memcpy (pResult, result.c_str (), result.size () + 1);
 	}
 
 	return kylaResult_Ok;
@@ -435,8 +469,8 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** installer)
 	internal->Execute = kylaExecute;
 	internal->OpenSourceRepository = kylaOpenSourceRepository;
 	internal->OpenTargetRepository = kylaOpenTargetRepository;
-	internal->QueryFilesetName = kylaQueryFilesetName;
-	internal->QueryFilesets = kylaQueryFilesets;
+	internal->QueryRepository = kylaQueryRepository;
+	internal->QueryFileset = kylaQueryFileset;
 	internal->SetLogCallback =
 	[](KylaInstaller* installer, KylaLogCallback logCallback, void* callbackContext) -> int {
 		KYLA_C_API_BEGIN ()

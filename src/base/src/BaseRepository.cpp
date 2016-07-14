@@ -5,38 +5,64 @@
 
 namespace kyla {
 ///////////////////////////////////////////////////////////////////////////////
-std::vector<FilesetInfo> BaseRepository::GetFilesetInfosImpl ()
+std::vector<Uuid> BaseRepository::GetFilesetsImpl ()
 {
 	static const char* querySql =
-		"SELECT file_sets.Uuid, COUNT(content_objects.Id), SUM(content_objects.size) "
-		"FROM file_sets "
-		"INNER JOIN files ON file_sets.Id = files.FileSetId "
-		"INNER JOIN content_objects ON content_objects.Id = files.ContentObjectId "
-		"GROUP BY file_sets.Uuid";
+		"SELECT file_sets.Uuid FROM file_sets ";
 
 	auto query = GetDatabase ().Prepare (querySql);
 
-	std::vector<FilesetInfo> result;
+	std::vector<Uuid> result;
 
 	while (query.Step ()) {
-		FilesetInfo info;
+		Uuid id;
+		query.GetBlob (0, id);
 
-		query.GetBlob (0, info.id);
-		info.fileCount = query.GetInt64 (1);
-		info.fileSize = query.GetInt64 (2);
-
-		result.push_back (info);
+		result.push_back (id);
 	}
 
 	return result;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+int64_t BaseRepository::GetFilesetSizeImpl (const Uuid& id)
+{
+	static const char* querySql =
+		"SELECT SUM(content_objects.size) "
+		"FROM file_sets "
+		"INNER JOIN files ON file_sets.Id = files.FileSetId "
+		"INNER JOIN content_objects ON content_objects.Id = files.ContentObjectId "
+		"WHERE file_sets.Uuid = ?";
+
+	auto query = GetDatabase ().Prepare (querySql);
+	query.BindArguments (id);
+	query.Step ();
+
+	return query.GetInt64 (0);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+int64_t BaseRepository::GetFilesetFileCountImpl (const Uuid& id)
+{
+	static const char* querySql =
+		"SELECT COUNT(content_objects.Id) "
+		"FROM file_sets "
+		"INNER JOIN files ON file_sets.Id = files.FileSetId "
+		"INNER JOIN content_objects ON content_objects.Id = files.ContentObjectId "
+		"WHERE file_sets.Uuid = ?";
+
+	auto query = GetDatabase ().Prepare (querySql);
+	query.BindArguments (id);
+	query.Step ();
+
+	return query.GetInt64 (0);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 std::string BaseRepository::GetFilesetNameImpl (const Uuid& id)
 {
 	static const char* querySql =
-		"SELECT Name FROM file_sets "
-		"WHERE Uuid = ?";
+		"SELECT Name FROM file_sets WHERE Uuid = ?";
 
 	auto query = GetDatabase ().Prepare (querySql);
 	query.BindArguments (id);

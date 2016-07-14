@@ -29,8 +29,10 @@ public:
 	virtual ~BaseRepository () = default;
 
 private:
-	std::vector<FilesetInfo> GetFilesetInfosImpl () override;
-	std::string GetFilesetNameImpl (const Uuid& filesetId) override;
+	virtual std::vector<Uuid> GetFilesetsImpl () override;
+	virtual std::string GetFilesetNameImpl (const Uuid& filesetId) override;
+	virtual int64_t GetFilesetFileCountImpl (const Uuid& filesetId) override;
+	virtual int64_t GetFilesetSizeImpl (const Uuid& filesetId) override;
 
 	void RepairImpl (Repository& source) override;
 	void ValidateImpl (const ValidationCallback& validationCallback) override;
