@@ -3,16 +3,24 @@ PROJECT(KYLA_UI)
 SET(SOURCES
 	src/main.cpp
 
-	src/startdialog.cpp)
+	src/SetupContext.cpp
+	src/SplashDialog.cpp
+	src/SetupDialog.cpp)
 
 SET(HEADERS
+	inc/SetupDialog.h
+	inc/SplashDialog.h
+	inc/SetupContext.h
 	)
 
 SET(MOC_SOURCES
-	inc/startdialog.h)
+	inc/SetupDialog.h
+	inc/SplashDialog.h
+	inc/SetupContext.h)
 
 SET(UI_FILES
-	ui/startdialog.ui)
+	ui/SetupDialog.ui
+	ui/SplashDialog.ui)
 
 FIND_PACKAGE(Qt5Core)
 FIND_PACKAGE(Qt5Widgets)

@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
- <class>StartDialog</class>
- <widget class="QDialog" name="StartDialog">
+ <class>SetupDialog</class>
+ <widget class="QDialog" name="SetupDialog">
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>631</width>
-    <height>453</height>
+    <width>640</width>
+    <height>279</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>StartDialog</string>
+   <string>Setup</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout_4">
    <item>
@@ -28,13 +28,6 @@
      </item>
      <item>
       <layout class="QHBoxLayout" name="horizontalLayout_3">
-       <item>
-        <widget class="QLabel" name="requiredDiskSpaceLabel">
-         <property name="text">
-          <string>Required disk space</string>
-         </property>
-        </widget>
-       </item>
        <item>
         <widget class="QLabel" name="requiredDiskSpaceValue">
          <property name="text">

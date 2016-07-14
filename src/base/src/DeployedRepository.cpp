@@ -472,6 +472,8 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 		while (getTargetFilesQuery.Step ()) {
 			const Path targetPath{ getTargetFilesQuery.GetText (0) };
 
+			progress.SetAction (getTargetFilesQuery.GetText (0));
+
 			boost::filesystem::create_directories (path_ / targetPath.parent_path ());
 
 			if (hasStagingFile) {
@@ -510,8 +512,6 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 		}
 
 		transaction.Commit ();
-
-		progress.SetAction (hashString.c_str ());
 		++progress;
 	});
 }
