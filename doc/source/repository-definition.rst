@@ -32,7 +32,7 @@ Reference
 
 * ``FileSets`` describes all file sets stored in this package.
 
-  * ``FileSet`` describes the files stored within a file set. All files across *all* file sets must have a unique path. Each file set id must be unique within one file repository.
+  * ``FileSet`` describes the files stored within a file set. The file sets must be disjoint - that means every file path must be unique inside the repository, and must be only assigned to one file set. Each file set id must be unique within one file repository.
 
     A file set must contain an ``Id`` attribute which must be a valid Uuid. The id is used during the installation to uniquely identify a file set.
 
