@@ -100,7 +100,7 @@ Configuring
 
 Configuring a repository means adding or removing file sets from it. We'll create three filesets for GLFW, a general one, one for the ``docs/`` folder, and one for the ``examples/`` folder. For this sample, you need to build the ``glfw-3.1.2-filesets.xml`` repository. Let's query it::
 
-    $ .\kcl query-filesets -n source-fs
+    $ .\kcl query-filesets -n source-with-filesets
 
 This yields::
 
@@ -110,11 +110,11 @@ This yields::
 
 We can now install only one feature::
 
-    $ .\kcl install source-fs deploy-fs 82511c20-841a-49c5-9388-41ca8a068f93
+    $ .\kcl install source-with-filesets deploy-with-filesets 82511c20-841a-49c5-9388-41ca8a068f93
 
 Let's add the examples now, and remove the docs::
 
-    $ .\kcl configure source-fs deploy-fs b5badd20-d6cf-4420-aadc-0f6b62fa9e02
+    $ .\kcl configure source-with-filesets deploy-with-filesets b5badd20-d6cf-4420-aadc-0f6b62fa9e02
 
 Updating
 --------
