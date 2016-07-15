@@ -1,5 +1,6 @@
 #include "SetupContext.h"
 
+///////////////////////////////////////////////////////////////////////////////
 SetupContext::~SetupContext ()
 {
 	if (installer) {
@@ -14,6 +15,7 @@ SetupContext::~SetupContext ()
 	}
 }
 
+///////////////////////////////////////////////////////////////////////////////
 void SetupContext::Setup (const char* repositoryPath)
 {
 	kylaLib_ = new QLibrary ("kyla", this);

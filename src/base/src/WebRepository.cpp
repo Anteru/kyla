@@ -126,7 +126,7 @@ struct WebRepository::Impl
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-WebRepository::WebRepository (const char* path)
+WebRepository::WebRepository (const std::string& path)
 	: impl_ (new Impl)
 {
 	const auto dbWebFile = impl_->Open (std::string (path) + "repository.db");
@@ -217,7 +217,7 @@ void WebRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& request
 		const auto filename = findSourcePackagesQuery.GetText (0);
 		const auto id = findSourcePackagesQuery.GetInt64 (1);
 
-		auto packageFile = impl_->Open (std::string (url_) + filename);
+		auto packageFile = impl_->Open (url_ + filename);
 
 		contentObjectsInPackageQuery.BindArguments (id);
 

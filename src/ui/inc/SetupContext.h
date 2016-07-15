@@ -43,33 +43,6 @@ private:
 
 	kylaCreateInstallerFunction createInstaller_ = nullptr;
 	kylaDestroyInstallerFunction destroyInstaller_ = nullptr;
-}; 
-
-class SetupThread : public QThread
-{
-	Q_OBJECT
-
-public:
-	SetupThread (SetupContext* context, const char* sourceRepositoryPath)
-		: context_ (context)
-		, sourceRepositoryPath_ (sourceRepositoryPath)
-	{
-	}
-
-	void run ()
-	{
-		context_->Setup (sourceRepositoryPath_);
-		context_->installer->OpenSourceRepository (context_->installer,
-			sourceRepositoryPath_,
-			kylaRepositoryOption_ReadOnly,
-			&context_->sourceRepository);
-	}
-
-private:
-	SetupContext* context_;
-	const char* sourceRepositoryPath_;
 };
-
-
 
 #endif

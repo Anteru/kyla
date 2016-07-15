@@ -605,7 +605,6 @@ void DeployedRepository::Cleanup (Log& log)
 
 			boost::filesystem::remove (path_ / Path{ unusedFilesQuery.GetText (0) });
 
-
 			log.Debug ("Configure", boost::format ("Deleted file '%1%'") % unusedFilesQuery.GetText (0));
 		}
 

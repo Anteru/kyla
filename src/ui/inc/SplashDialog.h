@@ -28,6 +28,32 @@ namespace Ui {
 	class SplashDialog;
 }
 
+class SetupThread : public QThread
+{
+	Q_OBJECT
+
+public:
+	SetupThread (SetupContext* context, const QString& sourceRepositoryPath)
+		: context_ (context)
+		, sourceRepositoryPath_ (sourceRepositoryPath)
+	{
+	}
+
+	void run ()
+	{
+		auto sourceRepositoryPath = sourceRepositoryPath_.toUtf8 ();
+		context_->Setup (sourceRepositoryPath.data ());
+		context_->installer->OpenSourceRepository (context_->installer,
+			sourceRepositoryPath.data (),
+			kylaRepositoryOption_ReadOnly,
+			&context_->sourceRepository);
+	}
+
+private:
+	SetupContext* context_;
+	QString sourceRepositoryPath_;
+};
+
 class SplashDialog : public QDialog
 {
 	Q_OBJECT

@@ -27,7 +27,7 @@ namespace kyla {
 class WebRepository final : public BaseRepository
 {
 public:
-	WebRepository (const char* path);
+	WebRepository (const std::string& path);
 	~WebRepository ();
 
 private:
@@ -38,7 +38,7 @@ private:
 
 	Sql::Database db_;
 	Path dbPath_;
-	const char* url_;
+	std::string url_;
 
 	struct Impl;
 	std::unique_ptr<Impl> impl_;

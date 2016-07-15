@@ -42,6 +42,7 @@ public:
 signals:
 	void ProgressChanged (const int progress, const char* action,
 		const char* detail);
+	void InstallationFinished (const bool success);
 
 private:
 	const SetupDialog* parent_;
@@ -62,6 +63,7 @@ public:
 public slots:
 	void UpdateProgress (const int progress, const char* action,
 		const char* detail);
+	void InstallationFinished (const bool success);
 
 private:
 	Ui::SetupDialog *ui;

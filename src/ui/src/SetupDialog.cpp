@@ -21,6 +21,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <ui_SetupDialog.h>
 
 #include <QFileDialog>
+#include <QMessageBox>
 
 #include <vector>
 
@@ -125,6 +126,8 @@ void InstallThread::run ()
 		parent_->GetSetupContext ()->sourceRepository, &desiredState);
 
 	installer->CloseRepository (installer, targetRepository);
+
+	InstallationFinished (true);
 }
 
 SetupDialog::SetupDialog(SetupContext* context, QWidget *parent) 
@@ -211,6 +214,8 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 		setupThread_ = new InstallThread (this);
 		connect (setupThread_, &InstallThread::ProgressChanged,
 			this, &SetupDialog::UpdateProgress);
+		connect (setupThread_, &InstallThread::InstallationFinished,
+			this, &SetupDialog::InstallationFinished);
 		setupThread_->start ();
 	});
 }
@@ -221,6 +226,22 @@ void SetupDialog::UpdateProgress (const int progress, const char* message,
 {
 	ui->installationProgressLabel->setText (QString ("%1: %2").arg (message).arg (detail));
 	ui->progressBar->setValue (progress);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void SetupDialog::InstallationFinished (const bool success)
+{
+	if (success) {
+		QMessageBox::information (this,
+			"Installation finished",
+			"The installation finished successfully");
+	} else {
+		QMessageBox::critical (this,
+			"Installation error",
+			"An error occured during the installation");
+	}
+
+	close ();
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -19,25 +19,40 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "SplashDialog.h"
 #include <ui_SplashDialog.h>
+#include <QJsonDocument>
+#include <QFile>
+#include <QJsonObject>
 
 #include "SetupDialog.h"
 
-
-SplashDialog::SplashDialog (SetupContext* context, const QString& appName, QWidget *parent)
+///////////////////////////////////////////////////////////////////////////////
+SplashDialog::SplashDialog (SetupContext* context, const QString& appName,
+	QWidget *parent)
 	: QDialog (parent)
 	, ui (new Ui::SplashDialog)
 	, context_ (context)
 {
 	ui->setupUi (this);
-	ui->productNameLabel->setText (appName);
 
-	setupThread_ = new SetupThread (context, "http://work.anteru.net/kyla/glfw/");
+	QFile setupInfoFile{ "info.json" };
+	setupInfoFile.open (QIODevice::ReadOnly);
+
+	QJsonDocument setupInfoDocument = QJsonDocument::fromJson (
+		setupInfoFile.readAll ());
+
+	auto setupInfo = setupInfoDocument.object ();
+
+	ui->productNameLabel->setText (setupInfo ["applicationName"].toString ());
+
+	setupThread_ = new SetupThread (context,
+		setupInfo ["repository"].toString ());
 
 	connect (setupThread_, &QThread::finished,
 		this, &SplashDialog::OnSetupCompleted);
 	setupThread_->start ();
 }
 
+///////////////////////////////////////////////////////////////////////////////
 SplashDialog::~SplashDialog ()
 {
 	setupThread_->wait ();
@@ -45,6 +60,7 @@ SplashDialog::~SplashDialog ()
 	delete ui;
 }
 
+///////////////////////////////////////////////////////////////////////////////
 void SplashDialog::OnSetupCompleted ()
 {
 	hide ();
