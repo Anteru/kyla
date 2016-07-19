@@ -360,22 +360,18 @@ private:
 
 int ConvertOpenMode (const FileOpenMode openMode)
 {
-	int mode;
 	switch (openMode) {
 	case FileOpenMode::Read:
-		mode = GENERIC_READ;
-		break;
+		return GENERIC_READ;
 
 	case FileOpenMode::Write:
-		mode = GENERIC_WRITE;
-		break;
+		return GENERIC_WRITE;
 
 	case FileOpenMode::ReadWrite:
-		mode = GENERIC_READ | GENERIC_WRITE;
-		break;
+		return GENERIC_READ | GENERIC_WRITE;
 	}
 
-	return mode;
+	return GENERIC_READ;
 }
 
 std::unique_ptr<File> CreateFile (const char* path)
@@ -434,27 +430,6 @@ std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode)
 #else
 #error Unsupported platform
 #endif
-
-////////////////////////////////////////////////////////////////////////////////
-void BlockCopy (File& input, File& output)
-{
-	static const int BufferSize = 1 << 20;
-	std::unique_ptr<unsigned char []> buffer{ new unsigned char [BufferSize] };
-	BlockCopy (input, output, MutableArrayRef<unsigned char> {buffer.get (), BufferSize});
-}
-
-////////////////////////////////////////////////////////////////////////////////
-void BlockCopy (File& input, File& output, const MutableArrayRef<byte>& buffer)
-{
-	for (;;) {
-		auto bytesRead = input.Read (buffer);
-		output.Write (buffer.Slice (0, bytesRead));
-
-		if (bytesRead == 0) {
-			return;
-		}
-	}
-}
 
 ///////////////////////////////////////////////////////////////////////////////
 Path GetTemporaryFilename ()

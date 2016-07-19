@@ -99,9 +99,6 @@ std::unordered_map<std::string, SourcePackage> GetSourcePackages (const pugi::xm
 	const BuildContext& ctx)
 {
 	std::unordered_map<std::string, SourcePackage> result;
-
-	bool mainFound = false;
-
 	std::unordered_set<std::string> sourcePackageIds;
 
 	for (const auto& sourcePackageNode : doc.select_nodes ("//SourcePackage")) {
@@ -111,7 +108,7 @@ std::unordered_map<std::string, SourcePackage> GetSourcePackages (const pugi::xm
 
 		if (sourcePackageIds.find (sourcePackage.name) != sourcePackageIds.end ()) {
 			throw RuntimeException (
-				str (boost::format ("Source %1% package already exists") % sourcePackage.name),
+				str (boost::format ("Source package '%1%' already exists") % sourcePackage.name),
 				KYLA_FILE_LINE);
 		} else {
 			sourcePackageIds.insert (sourcePackage.name);
@@ -129,7 +126,8 @@ std::unordered_map<std::string, SourcePackage> GetSourcePackages (const pugi::xm
 	}
 
 	if (sourcePackageIds.find ("main") == sourcePackageIds.end ()) {
-		// Add the default (== main) package
+		// Add the default (== main) package, which is compressed using Brotli
+		// by default
 		result ["main"] = SourcePackage{"main", CompressionAlgorithm::Brotli};
 	}
 
@@ -276,6 +274,9 @@ struct LooseRepositoryBuilder final : public RepositoryBuilder
 	}
 
 private:
+	/**
+	Store all file sets, and return a mapping of every file to its file set id.
+	*/
 	std::map<Path, std::int64_t> PopulateFileSets (Sql::Database& db,
 		const std::vector<FileSet>& fileSets)
 	{
@@ -304,6 +305,9 @@ private:
 		return result;
 	}
 
+	/**
+	Write the content objects and files table.
+	*/
 	void PopulateContentObjectsAndFiles (Sql::Database& db,
 		const std::vector<ContentObject>& uniqueFiles,
 		const std::map<Path, std::int64_t>& fileToFileSetId,
@@ -352,12 +356,19 @@ compressed as well.
 */
 struct PackedRepositoryBuilder final : public RepositoryBuilder
 {
+	using HashIntMap = std::unordered_map<SHA256Digest, int64, HashDigestHash, HashDigestEqual>;
+
 	void Configure (const pugi::xml_document& repositoryDefinition) override
 	{
 		auto chunkSizeNode = repositoryDefinition.select_node ("//Package/ChunkSize");
 
 		if (chunkSizeNode) {
 			chunkSize_ = chunkSizeNode.node ().text ().as_llong ();
+
+			// Some compressors expect integer-sized chunks, so we clamp to
+			// 2^31-1 here - this is a safety measure, as 2 GiB sized chunks
+			// should never be used
+			chunkSize_ = std::min (chunkSize_, (1ll << 31) - 1);
 
 			assert (chunkSize_ >= 1);
 		}
@@ -399,14 +410,18 @@ struct PackedRepositoryBuilder final : public RepositoryBuilder
 	}
 
 private:
-	std::unordered_map<SHA256Digest, int64, HashDigestHash, HashDigestEqual> PopulateUniqueContentObjects (Sql::Database& db,
+	/**
+	Store unique content objects from all source packages and return a mapping
+	of the content object to its id.
+	*/
+	HashIntMap PopulateUniqueContentObjects (Sql::Database& db,
 		const std::unordered_map<std::string, SourcePackage>& packages)
 	{
 		auto contentObjectInsert = db.BeginTransaction ();
 		auto contentObjectInsertQuery = db.Prepare (
 			"INSERT INTO content_objects (Hash, Size) VALUES (?, ?);");
 
-		std::unordered_map<SHA256Digest, int64, HashDigestHash, HashDigestEqual> uniqueObjects;
+		HashIntMap uniqueObjects;
 
 		for (const auto& package : packages) {
 			for (const auto& contentObject : package.second.contentObjects) {
@@ -429,6 +444,9 @@ private:
 		return uniqueObjects;
 	}
 
+	/**
+	Store all file sets, and return a mapping of every file to its file set id.
+	*/
 	std::map<Path, std::int64_t> PopulateFileSets (Sql::Database& db,
 		const std::vector<FileSet>& fileSets)
 	{
@@ -477,7 +495,7 @@ private:
 	void WritePackage (Sql::Database& db,
 		const SourcePackage& sourcePackage,
 		const std::map<Path, int64>& fileToFileSetId,
-		const std::unordered_map<SHA256Digest, int64, HashDigestHash, HashDigestEqual>& uniqueContentObjects,
+		const HashIntMap& uniqueContentObjects,
 		const Path& packagePath)
 	{
 		auto contentObjectInsert = db.BeginTransaction ();
@@ -490,6 +508,7 @@ private:
 			"(ContentObjectId, SourcePackageId, PackageOffset, PackageSize, SourceOffset, SourceSize, Compression) "
 			"VALUES (?, ?, ?, ?, ?, ?, ?)");
 
+		///@TODO(minor) Support splitting packages for media limits
 		auto package = CreateFile (packagePath / (sourcePackage.name + ".kypkg"));
 
 		PackageHeader packageHeader;
@@ -503,9 +522,7 @@ private:
 		packageInsertQuery.Reset ();
 
 		const auto packageId = db.GetLastRowId ();
-
-		// For now we support only a single package
-
+		
 		auto compressor = CreateBlockCompressor (sourcePackage.compressionAlgorithm);
 		auto compressorId = IdFromCompressionAlgorithm (sourcePackage.compressionAlgorithm);
 
@@ -527,8 +544,6 @@ private:
 			}
 
 			///@TODO(minor) Chunk the input file here based on uncompressed size
-			///@TODO(minor) Ensure chunk size is < 2 GiB
-			///@TODO(minor) Check this handles 0-byte files
 			///@TODO(minor) Support per-file compression algorithms
 			
 			auto inputFile = OpenFile (kv.sourceFile, FileOpenMode::Read);
@@ -625,15 +640,15 @@ void BuildRepository (const char* descriptorFile,
 			builder.reset (new LooseRepositoryBuilder);
 		} else if (strcmp (packageType, "Packed") == 0) {
 			builder.reset (new PackedRepositoryBuilder);
+		} else {
+			throw RuntimeException ("Unsupported package type",
+				KYLA_FILE_LINE);
 		}
+	} else {
+		builder.reset (new PackedRepositoryBuilder);
 	}
 
-	if (builder) {
-		builder->Configure (doc);
-		builder->Build (ctx, sourcePackages);
-	} else {
-		throw RuntimeException ("Package type not specified.",
-			KYLA_FILE_LINE);
-	}
+	builder->Configure (doc);
+	builder->Build (ctx, sourcePackages);
 }
 }
