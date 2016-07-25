@@ -14,12 +14,13 @@ Introduction
 
 kyla is a file content management system. It handles file contents, similar to an installer, and can be used for deploying builds, patching and installation management. The main features are:
 
-* kyla allows to install applications with *features*.
-* kyla works on file contents, not file names. No data is duplicated, and only content that changed is used. If you have a 10.000 file installation, and only one file changes between revisions, the update will only change this one file.
-* kyla has a unified system for configure (i.e. adding/removing features), updating and downgrading. You can configure from one product to another and kyla will only update changed files - just like for a normal update.
-* kyla provides repair and validation.
-* kyla is fast: Files are only read sequentially, data is read only once if possible, etc.
+* kyla is fast: Files are only read sequentially, data is read or written only once if possible.
 * kyla is reliable: It uses the `SQLite <https://sqlite.org>`_ storage engine for durability - one of the most robust databases in the world.
+* kyla supports *feature-based* installation - install only parts of your application.
+* kyla supports configure (i.e. adding/removing features), updating and downgrading. You can configure from one product to another and kyla will only update changed files - just like for a normal update.
+* kyla supports various installation sources out of the box: Web deployment, installation packages, and loose files. kyla can also use an existing installation as a source.
+* kyla provides repair and validation for installations and source packages alike.
+* kyla works on file contents, not file names. No data is duplicated, and only content that changed is used. If you have a 10.000 file installation, and only one file changes between revisions, the update will only change this one file.
 
 .. note::
 

@@ -1,134 +1,59 @@
 Tutorial
 ========
 
-Let's get started with building a basic file repository. We'll use the ``pykyla`` builder for this. The tutorial assumes that you have Python 3 installed and in your path.
+In this tutorial, we'll go through the life cycle of a basic application - installation, updating, and configuration. To follow along, open the ``samples/glfw`` directory which contains the ``GLFW`` library -- and everything you need to get started with the first installer.
 
-Getting test data
------------------
+Throughout the tutorial, we'll be using the ``kcl`` command line binary which provides access to all of kyla's API, and provides the entry point to build repositories, too. Make sure you add it to your ``PATH`` variable so it can be found by calling ``.\kcl``.
 
-We'll start by grabbing some test data. In ``samples/glfw``, you can find a ``fetch.py`` script which will download two versions of the GLFW library.
+.. note::
 
-To create the build scripts, run ``create.py`` which will result in two Xml files -- ``glfw-3.1.2.xml`` and ``glfw-3.1.2-filesets.xml``. Those build files contain everything necessary to create a repository from the extracted archives.
+    Throughout this tutorial, various Uuids are used (like ``fc996a11-e205-4701-be7a-57694707edd1``). Those are dependent on the particular installation you get. Every time you see an Uuid here, make sure to adjust it for your particular use case.
 
 Building
 --------
 
-The next step is to build a repository. This is done using the ``kcl`` command line binary, which is expected to be found in the path. We'll build a repository for ``glfw-3.1.2`` first, using the ``build.bat`` batch file. All it does is call the ``kcl`` binary and pass the build file generated previously. The script will actually build twice into two separate output folders, one is ``source``, and one is ``target`` - more on that in a moment.
+The first step for any installation is to build a *repository*. A repository contains all file contents and describes how they should be deployed. Building a repository requires a repository description, which is a Xml file describing what should go into the repository.
 
-Validating
-----------
+In this tutorial, three repository descriptions are provided which we'll use throughout the sample. These are the three ``.xml`` files - on for each repository we're about to build. For building, just run the ``build.bat`` script. Afterwards, you should see three new folders - ``source-3.1`` and ``source-3.1.2`` which contain all of ``GFLW`` in a single repository, and ``source-3.1.2-filesets`` which contains ``GLFW`` 3.1.2 but using file sets. We'll come back to this in the *Configuring* part.
 
-Any kyla repository can self-validate for consistency. Let's try on the repository we just built - use::
+For more information about the repository descriptions, check :ref:`repository-description`.
 
-    $ .\kcl validate source
+Installation
+------------
 
-This will validate the ``source`` repository. You should see::
+You're ready to go - let's install. You can just call ``install.bat`` which performs the install, but let's take a look at the file contents to understand how this actually works! Let's take a peek at the file::
 
-    OK 362 CORRUPTED/MISSING 0
+    kcl install source-3.1 deploy-3.1 b7705480-903e-455a-9512-483c50c4af36
 
-Open the ``target/.ky/objects`` folder and let's damage some data. Open ``99a170b76f0c25536a080e78cb5d7ebd9e5cf6befcdb76645ba953c43d9f03ef`` (this is a text file) and do some random changes to this file. Next, delete ``45857f4db2fd924afc4859e640d9c8bd6e6128d3a03caf1843f240b036f48f06``. Let's verify again::
+This calls ``kcl``, requests an ``install`` and then it provides the source and target folders. But what's that Uuid at the end? At it's core, kyla works with file sets and repositories. A single repository must contain at least one file set, and that is the basic unit used during installation. To find out which file sets a repository has, use::
 
-    $ .\kcl validate target
+    kcl query-filesets source-3.1
 
-The output should be::
+This will yield some output like::
 
-    OK 360 CORRUPTED/MISSING 2
+    b7705480-903e-455a-9512-483c50c4af36 382 4669894
 
-Let's fine out what is damaged or missing, by using the verbose output::
-
-    $ .\kcl validate -v target
-
-You'll notice the output starts with::
-
-    MISSING   target\.ky\objects\45857f4db2fd924afc4859e640d9c8bd6e6128d3a03caf1843f240b036f48f06
-    CORRUPTED target\.ky\objects\99a170b76f0c25536a080e78cb5d7ebd9e5cf6befcdb76645ba953c43d9f03ef
-
-Repairing
----------
-
-Let's repair the repository. As we have a pristine copy (``source``) we can simply repair the target repository using the source repository. Notice that the repositories don't even have to be related at all - they just need to contain the same contents. Let's give it a try::
-
-    $ .\kcl repair source target
-
-If we validate now, we'll get::
-
-    OK 362 CORRUPTED/MISSING 0
-
-That was easy.
-
-Installing
-----------
-
-Let's try to actually install - or deploy - the repository. Any deploy requires to specify which file sets are about to be deployed. We can find out which file sets the repository contains by calling::
-
-    $ .\kcl query-filesets source
-
-This will give us::
-
-    bd4f8902-087f-401b-819c-f978c6e14d6b 377 4688725
-
-.. note:: The uuid will be different if you run this!
-
-The output consists of the file set Uuid, followed by the number of files in the file set and the total size in bytes. The file set id is needed so we can tell kyla what to install. On the command line, we can start an installation by using the ``install`` command, followed by the source and target repository, and the ids of the file sets we want to deploy::
-
-    $ .\kcl install source deploy bd4f8902-087f-401b-819c-f978c6e14d6b
-
-An installation is also a file repository, so we can use the usual actions on it. Let's start by validating the installation::
-
-    $ .\kcl validate deploy
-
-This yields::
-
-    OK 377 CORRUPTED/MISSING 0
-
-Let's try the previous example of damaging the installation. Delete the ``CMakeLists.txt`` file and change a byte in ``COPYING``, and check again::
-
-    OK 375 CORRUPTED/MISSING 2
-
-We can repair the repository using our source repository as before::
-
-    $ .\kcl repair source deploy
-
-In fact, we could have also repaired the source repository using the deploy repository, as all repository types are equivalent. Wait a moment, does this mean we can install from the just installed repository? Yes, this is indeed possible::
-
-    $ .\kcl install deploy deploy2 bd4f8902-087f-401b-819c-f978c6e14d6b
-
-This will install from our freshly deployed repository into a new deployed repository.
-
-Configuring
------------
-
-Configuring a repository means adding or removing file sets from it. We'll create three filesets for GLFW, a general one, one for the ``docs/`` folder, and one for the ``examples/`` folder. For this sample, you need to build the ``glfw-3.1.2-filesets.xml`` repository. Let's query it::
-
-    $ .\kcl query-filesets -n source-with-filesets
-
-This yields::
-
-    82511c20-841a-49c5-9388-41ca8a068f93 docs 268 2594580
-    aa1bc840-5432-45cc-8880-ab4f8fc3ce87 core 101 1982061
-    b5badd20-d6cf-4420-aadc-0f6b62fa9e02 examples 8 112084
-
-We can now install only one feature::
-
-    $ .\kcl install source-with-filesets deploy-with-filesets 82511c20-841a-49c5-9388-41ca8a068f93
-
-Let's add the examples now, and remove the docs::
-
-    $ .\kcl configure source-with-filesets deploy-with-filesets b5badd20-d6cf-4420-aadc-0f6b62fa9e02
+The first entry is the file set id, the second one is the number of files, and the last one is the total size of this file set in bytes. In this repository, there's only one file set, so by invoking install and passing on this single file set id, we've installed everything!
 
 Updating
 --------
 
-For updating, we'll update from ``GLFW-3.1`` to ``GLFW-3.1.2``. Let's install the old one as usual, by querying the filesets in ``source-old`` and issuing a deploy into ``deploy``::
+For updating, we'll update from ``GLFW-3.1`` to ``GLFW-3.1.2``. This is covered by ``update.bat`` - in the meantime, let's take a look at what it does. First, it installs from ``source-3.1`` into ``deploy-3.x-update``. The next command is where the magic happens: It invokes ``kcl``, but it requests a ``configure`` to happen, and provides the file set id from the *new* source repository but passes in the path where the *old* repository was deployed to.
 
-    $ .\kcl query-filesets source-old
-    0d773cdb-998a-4323-a083-6dd68d950dbd 382 4669894
-    $ .\kcl install source-old deploy 0d773cdb-998a-4323-a083-6dd68d950dbd
+What happens here is that kyla *configures* the target (which is stored in ``deploy-3.x-update``) into the desired state. The desired state is that the file sets provided on the command line should be present after the configuration step finished. We're only asking for a file set from the *new* source repository, so this means kyla will remove all existing file sets first, and then deploy the new file sets. The final state is the same as a direct installation from ``source-3.1.2`` into the target directory. The main difference is that kyla only touches *changed* files, so the update requires much less I/O traffic than an uninstall followed by an installation.
 
-Now we update - simply by using configure into the new, desired state::
+Configuring
+-----------
 
-    $ .\kcl query-filesets source
-    bd4f8902-087f-401b-819c-f978c6e14d6b 377 4688725
-    $ .\kcl configure source deploy bd4f8902-087f-401b-819c-f978c6e14d6b
+Now that we've seen how configure can change a repository, it's easy to understand how a repository with multiple file sets works. Each file set is treated independently, and by specifying which file sets should be present, we can add or remove features. For this, we need a repository with multiple file sets, and that is exactly what we'll find in ``source-3.1.2-filesets``. If you want to give it a quick try, run ``configure.bat`` which will install a file set first, and then change the installation to another file set.
 
-We can validate that everything is in order - open the ``CMakeLists.txt`` and you'll see it's set for GLFW 3.1.2.
+That source repository contains three file sets, one for the binaries, one for the docs, and one for the examples. The first installation deployed the docs, the second one requests that the target only contains the examples, so the docs get removed and the examples get installed instead. If you change the second command to include the Uuid from the initial installation, the docs will be preserved and the examples will be added.
+
+.. note::
+
+    An update is just a configuration. kyla always identifies the minimal set of changes required to transform a repository, no matter what changes have been requested. This means that you can cross-install (i.e. change from one product to a completely unrelated one), downgrade, upgrade, add/remove features, all from the configuration command.
+
+Uninstall
+---------
+
+kyla stores all it's state in a database inside the target directory. A full uninstall is thus a simple directory removal.

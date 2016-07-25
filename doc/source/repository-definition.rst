@@ -1,5 +1,7 @@
-Build format
-============
+.. _repository-description:
+
+Repository build description
+============================
 
 Installer repositories are compiled by using ``kcl build``. This requires an Xml file that describes how to build a file repository. Here's an example repository file:
 
