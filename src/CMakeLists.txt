@@ -15,3 +15,23 @@ ADD_SUBDIRECTORY(extern)
 ADD_SUBDIRECTORY(util)
 
 ADD_SUBDIRECTORY(ui)
+
+find_package(PythonInterp)
+
+ADD_CUSTOM_TARGET (docs
+    ${PYTHON_EXECUTABLE} -m venv env
+    COMMAND env/scripts/activate.bat
+    COMMAND python -m pip install --upgrade pip
+    COMMAND pip install -U Sphinx sphinx_rtd_theme
+    COMMAND make.bat html
+
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../doc)
+
+ADD_CUSTOM_TARGET (deploy
+    ${PYTHON_EXECUTABLE}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../samples/gen-sdk.py
+    ${CMAKE_CURRENT_SOURCE_DIR}/..
+    ${PROJECT_BINARY_DIR}/bin/Release
+    WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
+
+ADD_DEPENDENCIES(deploy docs)

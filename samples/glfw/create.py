@@ -16,8 +16,7 @@ def DownloadFile (url, filename):
                 chunk = dl.read (65536)
                 bytesRead += len (chunk)
                 output.write (chunk)
-                print ('Received: {}/{}'.format (bytesRead, cl), end='\r')
-            print (' ' * 40, end='\r')
+                print ('Received: {}/{}'.format (bytesRead, cl))
             print ('File downloaded')
         else:
             output.write (dl.read ())
@@ -93,6 +92,6 @@ def GenerateGLFWSamples (baseDirectory = os.getcwd ()):
         outputFile.write ('kcl configure source-3.1.2-filesets deploy-3.1.2-filesets {}\n'.format (examples.GetId ()))
 
 if __name__=='__main__':
-    sys.path.append ('../../scripts')
+    sys.path.append (os.path.join (os.path.dirname (os.path.abspath (__file__)), '../../scripts'))
 
     GenerateGLFWSamples ()
