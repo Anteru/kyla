@@ -438,5 +438,8 @@ int main (int argc, char* argv [])
 		return QueryFilesets (options, vm);
 	} else if (cmd == "install" || cmd == "configure") {
 		return ConfigureOrInstall (cmd, options, vm);
+	} else {
+		std::cerr << "No command was specified" << std::endl;
+		return 1;
 	}
 }
