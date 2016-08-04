@@ -16,3 +16,4 @@ samples/glfw/glfw-*
 **/__pycache__/*
 **/build.log
 package/**
+doc/env/**
