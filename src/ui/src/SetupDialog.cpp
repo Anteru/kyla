@@ -96,11 +96,26 @@ void InstallThread::run ()
 			progress->action, progress->detailMessage);
 	}, this);
 
-	KylaTargetRepository targetRepository;
+	KylaTargetRepository targetRepository = nullptr;
 	auto targetDirectory = parent_->GetTargetDirectory ();
+	
+	kylaAction action = kylaAction_Configure;
+	// We try to open - if that fails, we create a new one
 	installer->OpenTargetRepository (installer,
 		targetDirectory.toUtf8 ().data (),
-		kylaRepositoryOption_Create, &targetRepository);
+		0, &targetRepository);
+
+	if (! targetRepository) {
+		installer->OpenTargetRepository (installer,
+			targetDirectory.toUtf8 ().data (),
+			kylaRepositoryOption_Create, &targetRepository);
+		action = kylaAction_Install;
+	}
+
+	if (!targetRepository) {
+		// Something went seriously wrong
+		return;
+	}
 
 	KylaDesiredState desiredState;
 
@@ -121,7 +136,7 @@ void InstallThread::run ()
 	desiredState.filesetCount = itemCount;
 	desiredState.filesetIds = idPointers.data ();
 
-	installer->Execute (installer, kylaAction_Install,
+	installer->Execute (installer, action,
 		targetRepository, 
 		parent_->GetSetupContext ()->sourceRepository, &desiredState);
 
@@ -169,7 +184,8 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 		}
 
 		if (totalSize > 0) {
-			ui->requiredDiskSpaceValue->setText (FormatMemorySize (totalSize, 3, 0.1f));
+			ui->requiredDiskSpaceValue->setText (tr("Required disk space: %1")
+				.arg (FormatMemorySize (totalSize, 3, 0.1f)));
 		} else {
 			ui->requiredDiskSpaceValue->setText (tr ("No features selected"));
 		}

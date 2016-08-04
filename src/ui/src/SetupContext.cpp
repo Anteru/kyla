@@ -7,6 +7,7 @@ SetupContext::~SetupContext ()
 		if (sourceRepository) {
 			installer->CloseRepository (installer, sourceRepository);
 		}
+
 		destroyInstaller_ (installer);
 	}
 
