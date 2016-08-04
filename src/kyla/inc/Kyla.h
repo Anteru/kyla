@@ -88,9 +88,20 @@ typedef struct KylaRepositoryImpl* KylaRepository;
 
 enum kylaRepositoryOption
 {
+	/**
+	Create the repository. If it's present already, it will be overriden.
+
+	Cannot be set for a source repository.
+	*/
 	kylaRepositoryOption_Create		= 1 << 0,
-	kylaRepositoryOption_ReadOnly	= 1 << 1,
-	kylaRepositoryOption_Discover	= 1 << 2
+	/**
+	Open the repository in read-only mode.
+
+	This is useful for operations like validation.
+
+	For a source repository, this flag is always set.
+	*/
+	kylaRepositoryOption_ReadOnly	= 1 << 1
 };
 
 struct KylaFilesetInfo
@@ -126,33 +137,90 @@ enum kylaRepositoryProperty
 
 enum kylaFilesetProperty
 {
+	/**
+	The name of the fileset, as a null-terminated, UTF8 encoded string.
+	*/
 	kylaFilesetProperty_Name,
+
+	/**
+	The size of the file set when deployed, stored in an int64_t.
+	*/
 	kylaFilesetProperty_Size,
+
+	/**
+	The number of files when deployed, stored in an int64_t.
+	*/
 	kylaFilesetProperty_FileCount
 };
 
 struct KylaInstaller
 {
+	/**
+	Set the log callback. The callbackContext will be passed on into the
+	log callback function.
+	*/
 	int (*SetLogCallback)(KylaInstaller* installer,
 		KylaLogCallback logCallback, void* callbackContext);
+	/**
+	Set the progress callback. The callbackContext will be passed on into the
+	progress callback function.
+	*/
 	int (*SetProgressCallback)(KylaInstaller* installer,
 		KylaProgressCallback, void* progressContext);
+	/**
+	Set the validation callback. The callbackContext will be passed on into the
+	validation callback function.
+	*/
 	int (*SetValidationCallback)(KylaInstaller* installer,
 		KylaValidationCallback validationCallback, void* validationContext);
+	/**
+	Open a source repository.
+
+	A source repository is opened for read-only access. The options is a
+	combination of kylaRepositoryOption.
+	*/
 	int (*OpenSourceRepository)(KylaInstaller* installer, const char* path,
 		int options, KylaSourceRepository* repository);
+
+	/**
+	Open a target repository.
+
+	The options is a combination of kylaRepositoryOption. By default, it's
+	opened for writing (and assumed to exist already).
+	*/
 	int (*OpenTargetRepository)(KylaInstaller* installer, const char* path,
 		int options, KylaTargetRepository* repository);
-
+	
+	/**
+	Close a source or target repository.
+	*/
 	int (*CloseRepository)(KylaInstaller* installer,
 		KylaRepository impl);
 
+	/**
+	Query a repository property.
+
+	The propertyId must be one of enumeration values from 
+	kylaRepositoryProperty. If resultSize is provided, the size of the result
+	is written into it. If result is provided, the result is written into it.
+	If result is not null, resultSize must be set to the size of the buffer
+	result points to.
+	*/
 	int (*QueryRepository)(KylaInstaller* installer,
 		KylaSourceRepository repository,
 		int propertyId,
 		size_t* resultSize,
 		void* result);
 
+	/**
+	Query a file set property.
+
+	The propertyId must be one of enumeration values from
+	kylaFilesetProperty. If resultSize is provided, the size of the result
+	is written into it. If result is provided, the result is written into it.
+	If result is not null, resultSize must be set to the size of the buffer
+	result points to.
+	*/
 	int (*QueryFileset)(KylaInstaller* installer,
 		KylaSourceRepository repository,
 		struct KylaUuid id,
@@ -160,6 +228,11 @@ struct KylaInstaller
 		size_t* resultSize,
 		void* result);
 
+	/**
+	Execute an action on the target repository.
+
+	Most actions require a desired state.
+	*/
 	int (*Execute)(KylaInstaller* installer, kylaAction action,
 		KylaTargetRepository target, KylaSourceRepository source,
 		const KylaDesiredState* desiredState);
@@ -168,7 +241,17 @@ struct KylaInstaller
 #define KYLA_MAKE_API_VERSION(major,minor,patch) (major << 22 | minor << 12 | patch);
 #define KYLA_API_VERSION_1_0 (1<<22)
 
+/**
+Create a new installer. Installer must be non-null, and kylaApiVersion must be
+a supported version created using either KYLA_MAKE_API_VERSION or by using one
+of the pre-defined constants like KYLA_API_VERSION_1_0.
+*/
 KYLA_EXPORT int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** installer);
+
+/**
+Destroy an installer. All objects queried off the installer become invalid
+after this call.
+*/
 KYLA_EXPORT int kylaDestroyInstaller (KylaInstaller* installer);
 
 #ifdef __cplusplus

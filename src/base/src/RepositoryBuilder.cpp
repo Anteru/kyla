@@ -489,6 +489,9 @@ private:
 
 			memcpy (header.id, "KYLAPKG", 8);
 			header.version = 0x0001000000000000ULL;
+			// Major           ^^^^
+			// Minor               ^^^^
+			// Patch                   ^^^^^^^^
 		}
 	};
 
@@ -543,7 +546,6 @@ private:
 				filesInsertQuery.Reset ();
 			}
 
-			///@TODO(minor) Chunk the input file here based on uncompressed size
 			///@TODO(minor) Support per-file compression algorithms
 			
 			auto inputFile = OpenFile (kv.sourceFile, FileOpenMode::Read);
@@ -551,7 +553,6 @@ private:
 
 			if (inputFileSize == 0) {
 				// If it's a null-byte file, we still store a storage mapping
-				// but uncompressed with size 0
 				const auto startOffset = package->Tell ();
 
 				storageMappingInsertQuery.BindArguments (contentObjectId, 

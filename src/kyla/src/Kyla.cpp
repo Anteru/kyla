@@ -38,6 +38,7 @@ struct KylaRepositoryImpl
 	} repositoryType;
 
 	kyla::Path path;
+	int options = 0;
 };
 
 namespace {
@@ -62,7 +63,7 @@ struct KylaInstallerInternal : public KylaInstaller
 ///////////////////////////////////////////////////////////////////////////////
 int kylaOpenSourceRepository (
 	KylaInstaller* installer,
-	const char* path, int /* options */,
+	const char* path, int options,
 	KylaSourceRepository* repository)
 {
 	KYLA_C_API_BEGIN ()
@@ -76,6 +77,10 @@ int kylaOpenSourceRepository (
 	}
 
 	if (repository == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if ((options & kylaRepositoryOption_Create) == kylaRepositoryOption_Create) {
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -93,7 +98,7 @@ int kylaOpenSourceRepository (
 ///////////////////////////////////////////////////////////////////////////////
 int kylaOpenTargetRepository (
 	KylaInstaller* installer,
-	const char* path, int /*options*/,
+	const char* path, int options,
 	KylaTargetRepository* repository)
 {
 	KYLA_C_API_BEGIN ()
@@ -113,6 +118,7 @@ int kylaOpenTargetRepository (
 	KylaTargetRepository repo = new KylaRepositoryImpl;
 	repo->repositoryType = KylaRepositoryImpl::RepositoryType::Target;
 	repo->path = path;
+	repo->options = options;
 
 	*repository = repo;
 
@@ -219,6 +225,10 @@ int kylaExecute (
 		break;
 
 	case kylaAction_Configure:
+		if ((targetRepository->options & kylaRepositoryOption_ReadOnly) == kylaRepositoryOption_ReadOnly) {
+			return kylaResult_Error;
+		}
+
 		targetRepository->p = kyla::OpenRepository (
 			targetRepository->path.string ().c_str (), true);
 		targetRepository->p->Configure (
@@ -227,6 +237,10 @@ int kylaExecute (
 		break;
 
 	case kylaAction_Repair:
+		if ((targetRepository->options & kylaRepositoryOption_ReadOnly) == kylaRepositoryOption_ReadOnly) {
+			return kylaResult_Error;
+		}
+
 		targetRepository->p = kyla::OpenRepository (
 			targetRepository->path.string ().c_str (), true);
 
@@ -237,7 +251,8 @@ int kylaExecute (
 
 	case kylaAction_Verify:
 		targetRepository->p = kyla::OpenRepository (
-			targetRepository->path.string ().c_str (), false);
+			targetRepository->path.string ().c_str (), 
+			(targetRepository->options & kylaRepositoryOption_ReadOnly) == kylaRepositoryOption_ReadOnly);
 
 		///@TODO(minor) Pass through the source file set and fileset ids
 		targetRepository->p->Validate ([&](const kyla::SHA256Digest& object,
@@ -339,8 +354,6 @@ int kylaQueryFileset (KylaInstaller* installer,
 	auto i = static_cast<KylaInstallerInternal*> (installer);
 
 	if (repository == nullptr) {
-		i->log->Error ("kylaQueryFilesetName", "repository was null, but must not be null");
-
 		return kylaResult_ErrorInvalidArgument;
 	}
 

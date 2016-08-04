@@ -30,7 +30,7 @@ namespace po = boost::program_options;
 extern int kylaBuildRepository (const char* repositoryDescription,
 	const char* sourceDirectory, const char* targetDirectory);
 
-void StdcoutLog (const char* source, const kylaLogSeverity severity,
+void StdoutLog (const char* source, const kylaLogSeverity severity,
 	const char* message, void*)
 {
 	switch (severity) {
@@ -43,7 +43,7 @@ void StdcoutLog (const char* source, const kylaLogSeverity severity,
 	std::cout << source << ":" << message << "\n";
 }
 
-void StdcoutProgress (const KylaProgress* progress, void* context)
+void StdoutProgress (const KylaProgress* progress, void* context)
 {
 	static const char* padding = 
 		"                                        ";
@@ -160,7 +160,7 @@ int Validate (const std::vector<std::string>& options,
 	assert (installer);
 
 	if (vm ["log"].as<bool> ()) {
-		installer->SetLogCallback (installer, StdcoutLog, nullptr);
+		installer->SetLogCallback (installer, StdoutLog, nullptr);
 	}
 
 	KylaTargetRepository repository;
@@ -207,7 +207,7 @@ int Repair (const std::vector<std::string>& options,
 	assert (installer);
 
 	if (vm ["log"].as<bool> ()) {
-		installer->SetLogCallback (installer, StdcoutLog, nullptr);
+		installer->SetLogCallback (installer, StdoutLog, nullptr);
 	}
 
 	KylaTargetRepository source;
@@ -255,7 +255,7 @@ int QueryFilesets (const std::vector<std::string>& options,
 	assert (installer);
 
 	if (vm ["log"].as<bool> ()) {
-		installer->SetLogCallback (installer, StdcoutLog, nullptr);
+		installer->SetLogCallback (installer, StdoutLog, nullptr);
 	}
 
 	KylaTargetRepository source;
@@ -340,11 +340,11 @@ int ConfigureOrInstall (const std::string& cmd,
 	assert (installer);
 
 	if (vm ["log"].as<bool> ()) {
-		installer->SetLogCallback (installer, StdcoutLog, nullptr);
+		installer->SetLogCallback (installer, StdoutLog, nullptr);
 	}
 
 	if (vm ["progress"].as<bool> ()) {
-		installer->SetProgressCallback (installer, StdcoutProgress, nullptr);
+		installer->SetProgressCallback (installer, StdoutProgress, nullptr);
 	}
 
 	KylaSourceRepository source;

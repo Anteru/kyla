@@ -358,6 +358,7 @@ private:
 	std::unordered_map<const void*, HANDLE> mappings_;
 };
 
+///////////////////////////////////////////////////////////////////////////////
 int ConvertOpenMode (const FileOpenMode openMode)
 {
 	switch (openMode) {
@@ -374,6 +375,7 @@ int ConvertOpenMode (const FileOpenMode openMode)
 	return GENERIC_READ;
 }
 
+///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<File> CreateFile (const char* path)
 {
 	auto fd = ::CreateFileA (path, GENERIC_READ | GENERIC_WRITE,
@@ -386,6 +388,7 @@ std::unique_ptr<File> CreateFile (const char* path)
 	return std::unique_ptr<File> (new WindowsFile (fd, GENERIC_READ | GENERIC_WRITE));
 }
 
+///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode)
 {
 	const int mode = ConvertOpenMode (openMode);
@@ -401,6 +404,7 @@ std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode)
 	return std::unique_ptr<File> (new WindowsFile (fd, mode));
 }
 
+///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<File> CreateFile (const Path& path)
 {
 	auto fd = ::CreateFileW (path.c_str (), GENERIC_READ | GENERIC_WRITE,
@@ -413,6 +417,7 @@ std::unique_ptr<File> CreateFile (const Path& path)
 	return std::unique_ptr<File> (new WindowsFile (fd, GENERIC_READ | GENERIC_WRITE));
 }
 
+///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode)
 {
 	const int mode = ConvertOpenMode (openMode);

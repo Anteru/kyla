@@ -26,6 +26,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <vector>
 
 namespace {
+///////////////////////////////////////////////////////////////////////////////
 class FilesetListItem : public QListWidgetItem
 {
 public:
@@ -53,6 +54,7 @@ private:
 	std::int64_t size_;
 };
 
+///////////////////////////////////////////////////////////////////////////////
 QString FormatMemorySize (const std::int64_t size, const int precision, const float slack)
 {
 	static const struct { const char* suffix; std::int64_t divisor; } scale [] = {
@@ -82,7 +84,6 @@ QString FormatMemorySize (const std::int64_t size, const int precision, const fl
 		.arg (quot, 0, 'g', precision)
 		.arg (scale [unit].suffix);
 }
-
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -145,6 +146,7 @@ void InstallThread::run ()
 	InstallationFinished (true);
 }
 
+///////////////////////////////////////////////////////////////////////////////
 SetupDialog::SetupDialog(SetupContext* context, QWidget *parent) 
 	: QDialog(parent)
 	, ui(new Ui::SetupDialog)

@@ -66,11 +66,7 @@ void DeployedRepository::ValidateImpl (const Repository::ValidationCallback& val
 		"FROM files "
 		"LEFT JOIN content_objects ON content_objects.Id = files.ContentObjectId "
 		"ORDER BY size";
-
-	///@TODO(major) On Windows, sort this by disk cluster to get best
-	/// disk access pattern
-	/// See: https://msdn.microsoft.com/en-us/library/windows/desktop/aa364572%28v=vs.85%29.aspx
-
+	
 	auto query = db_.Prepare (querySql);
 
 	while (query.Step ()) {

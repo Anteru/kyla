@@ -42,7 +42,7 @@ public:
 
 #define SAFE_SQLITE_INTERNAL(expr, file, line) do { const int r_ = (expr); if (r_ != SQLITE_OK) { throw  SQLException (db_, r_, file, line); } } while (0)
 
-#define K_S(expr) SAFE_SQLITE_INTERNAL(expr, __FILE__, __LINE__)
+#define SAFE_SQLITE(expr) SAFE_SQLITE_INTERNAL(expr, __FILE__, __LINE__)
 
 namespace kyla {
 namespace Sql {
@@ -79,24 +79,24 @@ public:
 			break;
 		}
 
-		K_S (sqlite3_open_v2(name, &db_, sqliteOpenMode, nullptr));
+		SAFE_SQLITE (sqlite3_open_v2(name, &db_, sqliteOpenMode, nullptr));
 	}
 
 	void Create (const char* name)
 	{
-		K_S(sqlite3_open_v2 (name, &db_,
+		SAFE_SQLITE(sqlite3_open_v2 (name, &db_,
 			SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE, nullptr));
 	}
 
 	void Create ()
 	{
-		K_S(sqlite3_open (":memory:", &db_));
+		SAFE_SQLITE(sqlite3_open (":memory:", &db_));
 	}
 
 	void Close ()
 	{
 		if (db_) {
-			K_S(sqlite3_close (db_));
+			SAFE_SQLITE(sqlite3_close (db_));
 			db_ = nullptr;
 		}
 	}
@@ -110,57 +110,57 @@ public:
 
 	void TransactionBegin ()
 	{
-		K_S(sqlite3_exec (db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr));
+		SAFE_SQLITE(sqlite3_exec (db_, "BEGIN TRANSACTION;", nullptr, nullptr, nullptr));
 	}
 
 	void TransactionBegin (TransactionType type)
 	{
 		switch (type) {
 		case TransactionType::Deferred:
-			K_S (sqlite3_exec (db_, "BEGIN DEFERRED TRANSACTION;", nullptr, nullptr, nullptr));
+			SAFE_SQLITE (sqlite3_exec (db_, "BEGIN DEFERRED TRANSACTION;", nullptr, nullptr, nullptr));
 			return;
 
 		case TransactionType::Immediate:
-			K_S (sqlite3_exec (db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr, nullptr));
+			SAFE_SQLITE (sqlite3_exec (db_, "BEGIN IMMEDIATE TRANSACTION;", nullptr, nullptr, nullptr));
 			return;
 		}
 	}
 
 	void TransactionCommit ()
 	{
-		K_S(sqlite3_exec (db_, "COMMIT;", nullptr, nullptr, nullptr));
+		SAFE_SQLITE(sqlite3_exec (db_, "COMMIT;", nullptr, nullptr, nullptr));
 	}
 
 	void TransactionRollback ()
 	{
-		K_S(sqlite3_exec (db_, "ROLLBACK;", nullptr, nullptr, nullptr));
+		SAFE_SQLITE(sqlite3_exec (db_, "ROLLBACK;", nullptr, nullptr, nullptr));
 	}
 
 	void StatementPrepare (const char* sql, void** result)
 	{
 		sqlite3_stmt* stmt;
-		K_S(sqlite3_prepare_v2 (db_, sql, -1, &stmt, nullptr));
+		SAFE_SQLITE(sqlite3_prepare_v2 (db_, sql, -1, &stmt, nullptr));
 		*result = static_cast<void*> (stmt);
 	}
 
 	void StatementBind (void* statement, const int index,
 		const std::int64_t value)
 	{
-		K_S (sqlite3_bind_int64(static_cast<sqlite3_stmt*>(statement), index,
+		SAFE_SQLITE (sqlite3_bind_int64(static_cast<sqlite3_stmt*>(statement), index,
 			value));
 	}
 
 	void StatementBind (void* statement, const int index,
 		const char* value, const ValueBinding binding)
 	{
-		K_S (sqlite3_bind_text(static_cast<sqlite3_stmt*>(statement), index,
+		SAFE_SQLITE (sqlite3_bind_text(static_cast<sqlite3_stmt*>(statement), index,
 			value, -1, SQLiteValueBinding (binding)));
 	}
 
 	void StatementBind (void* statement, const int index,
 		const Null&)
 	{
-		K_S (sqlite3_bind_null (static_cast<sqlite3_stmt*>(statement), index));
+		SAFE_SQLITE (sqlite3_bind_null (static_cast<sqlite3_stmt*>(statement), index));
 	}
 
 	void StatementBind (void* statement, const int index,
@@ -168,7 +168,7 @@ public:
 		const ValueBinding binding)
 	{
 		///@TODO(minor) Check for overflow
-		K_S (sqlite3_bind_blob (static_cast<sqlite3_stmt*>(statement), index,
+		SAFE_SQLITE (sqlite3_bind_blob (static_cast<sqlite3_stmt*>(statement), index,
 			data, static_cast<int> (size), SQLiteValueBinding (binding)));
 	}
 
@@ -187,13 +187,13 @@ public:
 
 	void StatementReset (void* statement)
 	{
-		K_S (sqlite3_reset (static_cast<sqlite3_stmt*> (statement)));
+		SAFE_SQLITE (sqlite3_reset (static_cast<sqlite3_stmt*> (statement)));
 	}
 
 	void StatementFinalize (void* statement)
 	{
 		///@TODO This should not throw because it's called from destructur
-		K_S (sqlite3_finalize (static_cast<sqlite3_stmt*> (statement)));
+		SAFE_SQLITE (sqlite3_finalize (static_cast<sqlite3_stmt*> (statement)));
 	}
 
 	std::int64_t StatementGetInt64 (void* statement, const int column)
@@ -244,7 +244,7 @@ public:
 
 	bool Execute (const char* statement)
 	{
-		K_S (sqlite3_exec (db_, statement, nullptr, nullptr, nullptr));
+		SAFE_SQLITE (sqlite3_exec (db_, statement, nullptr, nullptr, nullptr));
 		return true;
 	}
 
@@ -268,7 +268,7 @@ public:
 	{
 		std::string sql = "ATTACH DATABASE ':memory:' AS ";
 		sql += name;
-		K_S (sqlite3_exec (db_, sql.c_str (), nullptr, nullptr, nullptr));
+		SAFE_SQLITE (sqlite3_exec (db_, sql.c_str (), nullptr, nullptr, nullptr));
 
 		auto backup = sqlite3_backup_init (db_, name, other->db_, "main");
 

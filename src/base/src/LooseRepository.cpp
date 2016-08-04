@@ -65,7 +65,7 @@ void LooseRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& reque
 
 	for (const auto& hash : requestedObjects) {
 		const auto filePath = Path{ path_ } / Path{ ".ky" }
-		/ Path{ "objects" } / ToString (hash);
+			/ Path{ "objects" } / ToString (hash);
 
 		auto file = OpenFile (filePath, FileOpenMode::Read);
 		const auto fileSize = file->GetSize ();
@@ -94,11 +94,7 @@ void LooseRepository::ValidateImpl (const Repository::ValidationCallback& valida
 		"SELECT Hash, Size "
 		"FROM content_objects "
 		"ORDER BY Size";
-
-	///@TODO(major) On Windows, sort this by disk cluster to get best
-	/// disk access pattern
-	/// See: https://msdn.microsoft.com/en-us/library/windows/desktop/aa364572%28v=vs.85%29.aspx
-
+	
 	auto query = db_.Prepare (querySql);
 
 	while (query.Step ()) {
