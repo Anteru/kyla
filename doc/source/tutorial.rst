@@ -16,7 +16,7 @@ The first step for any installation is to build a *repository*. A repository con
 
 In this tutorial, three repository descriptions are provided which we'll use throughout the sample. These are the three ``.xml`` files - on for each repository we're about to build. For building, just run the ``build.bat`` script. Afterwards, you should see three new folders - ``source-3.1`` and ``source-3.1.2`` which contain all of ``GFLW`` in a single repository, and ``source-3.1.2-filesets`` which contains ``GLFW`` 3.1.2 but using file sets. We'll come back to this in the *Configuring* part.
 
-For more information about the repository descriptions, check :ref:`repository-description`.
+For more information about the repository descriptions, check the :ref:`repository-description`.
 
 Installation
 ------------

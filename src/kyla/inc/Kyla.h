@@ -178,6 +178,8 @@ struct KylaInstaller
 
 	A source repository is opened for read-only access. The options is a
 	combination of kylaRepositoryOption.
+
+	If the path starts with "http", the repository is opened via HTTP.
 	*/
 	int (*OpenSourceRepository)(KylaInstaller* installer, const char* path,
 		int options, KylaSourceRepository* repository);
@@ -190,7 +192,7 @@ struct KylaInstaller
 	*/
 	int (*OpenTargetRepository)(KylaInstaller* installer, const char* path,
 		int options, KylaTargetRepository* repository);
-	
+
 	/**
 	Close a source or target repository.
 	*/
@@ -200,7 +202,7 @@ struct KylaInstaller
 	/**
 	Query a repository property.
 
-	The propertyId must be one of enumeration values from 
+	The propertyId must be one of enumeration values from
 	kylaRepositoryProperty. If resultSize is provided, the size of the result
 	is written into it. If result is provided, the result is written into it.
 	If result is not null, resultSize must be set to the size of the buffer

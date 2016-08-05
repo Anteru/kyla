@@ -29,7 +29,7 @@ Reference
 * ``FileRepository`` is the root node and must be present in every repository definition.
 * ``Package`` within ``FileRepository`` provides meta-information about the package. It may contain two elements:
 
-  * ``Type`` to specify the package type. ``Packed`` and ``Loose`` are valid options.
+  * ``Type`` to specify the package type. The type must be either ``Packed`` and ``Loose``.
   * ``ChunkSize`` if the package type is ``Packed``. This determines the chunk size at which objects are stored (specified in bytes). The default size is 4 MiB.
 
 * ``FileSets`` describes all file sets stored in this package.
@@ -38,7 +38,7 @@ Reference
 
     A file set must contain an ``Id`` attribute which must be a valid Uuid. The id is used during the installation to uniquely identify a file set.
 
-    A file set must contain one or more ``File`` elements. A ``File`` element must have the ``Source`` attribute set and it must point to an existing file. Optionally, the ``Target`` attribute can be specified to store a file at a different location. If no ``Target`` is present, the default is to use the ``Source`` path.
+    A file set must contain one or more ``File`` elements. A ``File`` element must have the ``Source`` attribute set and it must point to an existing file. Optionally, the ``Target`` attribute can be specified to store a file at a different location. This can be used to have a single source file deployed to two different folders, for instance. If no ``Target`` is present, the default is to use the ``Source`` path.
 
     A file set may contain an optional ``SourcePackageId`` attribute which references a source package defined in this repository definition. More on this below.
 
@@ -66,8 +66,12 @@ There's also a couple of optional elements:
   * ``Name`` - a valid file name which will be used for the package file
   * ``Id`` - a unique id within the repository. This is referenced from a file set using ``SourcePackageId``
 
-  Optionally, all content objects in a source package can be compressed. The compression algorithm can be set using the optional ``Compression`` attribute. Valid compression algorithms are: ``Uncompressed``, ``Zip``.
+  Optionally, all content objects in a source package can be compressed. The compression algorithm can be set using the optional ``Compression`` attribute. Valid compression algorithms are: ``Uncompressed``, ``Zip``, ``Brotli``.
 
   .. note::
 
       If two files with the same contents are in separate file sets and separate source packages, the contents of the files will be duplicated.
+
+  .. note::
+
+      ``Zip`` compression does not turn a source package into a ZIP archive - the package format is always kyla specific.

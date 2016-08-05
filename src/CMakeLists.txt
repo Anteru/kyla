@@ -21,8 +21,8 @@ find_package(PythonInterp)
 ADD_CUSTOM_TARGET (docs
     ${PYTHON_EXECUTABLE} -m venv env
     COMMAND env/scripts/activate.bat
-    COMMAND python -m pip install --upgrade pip
-    COMMAND pip install -U Sphinx sphinx_rtd_theme
+    COMMAND python -m pip install -q --upgrade pip
+    COMMAND pip install -q -U Sphinx sphinx_rtd_theme
     COMMAND make.bat html
 
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../doc)
