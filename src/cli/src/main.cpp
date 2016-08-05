@@ -249,6 +249,11 @@ int QueryFilesets (const std::vector<std::string>& options,
 		return 1;
 	}
 
+	if (vm ["source"].empty ()) {
+		std::cerr << "No repository specified" << std::endl;
+		return 1;
+	}
+
 	KylaInstaller* installer = nullptr;
 	kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer);
 
