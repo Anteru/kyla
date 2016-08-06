@@ -118,7 +118,12 @@ int kylaOpenTargetRepository (
 	KylaTargetRepository repo = new KylaRepositoryImpl;
 	repo->repositoryType = KylaRepositoryImpl::RepositoryType::Target;
 	repo->path = path;
-	repo->options = options;
+
+	// If create is not set, we're opening it right away
+	if ((options & kylaRepositoryOption_Create) == 0) {
+		repo->p = kyla::OpenRepository (path,
+			(options & kylaRepositoryOption_ReadOnly) != 1);
+	}
 
 	*repository = repo;
 
@@ -228,9 +233,6 @@ int kylaExecute (
 		if ((targetRepository->options & kylaRepositoryOption_ReadOnly) == kylaRepositoryOption_ReadOnly) {
 			return kylaResult_Error;
 		}
-
-		targetRepository->p = kyla::OpenRepository (
-			targetRepository->path.string ().c_str (), true);
 		targetRepository->p->Configure (
 			*sourceRepository->p, filesetIds, *internal->log, *internal->progress);
 
@@ -240,9 +242,6 @@ int kylaExecute (
 		if ((targetRepository->options & kylaRepositoryOption_ReadOnly) == kylaRepositoryOption_ReadOnly) {
 			return kylaResult_Error;
 		}
-
-		targetRepository->p = kyla::OpenRepository (
-			targetRepository->path.string ().c_str (), true);
 
 		///@TODO(minor) Pass through the fileset ids
 		targetRepository->p->Repair (*sourceRepository->p);
