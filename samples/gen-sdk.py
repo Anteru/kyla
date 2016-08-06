@@ -10,7 +10,7 @@ import subprocess
 
 if __name__ == '__main__':
     srcDir = sys.argv [1]
-    binaryDir = sys.argv [2]
+    kclBinaryPath = sys.argv [2]
 
     print ('Preparing directories', flush=True)
     shutil.rmtree ('staging_sdk', ignore_errors=True)
@@ -45,7 +45,7 @@ if __name__ == '__main__':
     ]
 
     for binary in binaryFiles:
-     shutil.copyfile (os.path.join (binaryDir, binary), 'staging_sdk/bin/' + binary)
+     shutil.copyfile (os.path.join (os.path.dirname (kclBinaryPath), binary), 'staging_sdk/bin/' + binary)
 
     binaries.AddFilesFromDirectory ('staging_sdk/bin', prefix='bin')
     include_files = sdk.AddFileSet ('include_files')
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     open ('sdk.xml', 'w').write (doc)
 
     print ('Packaging installer', flush=True)
-    subprocess.check_call ([os.path.join (binaryDir, 'kcl.exe'), 'build',
+    subprocess.check_call ([kclBinaryPath, 'build',
         '--source-directory=staging_sdk', 'sdk.xml', 'sdk'])
 
     print ('Cleaning up', flush=True)
