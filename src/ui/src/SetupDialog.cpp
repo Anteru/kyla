@@ -265,7 +265,9 @@ void SetupDialog::InstallationFinished (const bool success)
 ///////////////////////////////////////////////////////////////////////////////
 SetupDialog::~SetupDialog()
 {
-	setupThread_->wait ();
+	if (setupThread_) {
+		setupThread_->wait ();
+	}
 	delete ui;
 }
 
