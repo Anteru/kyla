@@ -629,6 +629,8 @@ std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (Repository& 
 	const Path& targetDirectory,
 	Log& log, Progress& progress)
 {
+	boost::filesystem::create_directories (targetDirectory);
+
 	auto db = Sql::Database::Create ((targetDirectory / "k.db").string ().c_str ());
 
 	db.Execute (install_db_structure);
