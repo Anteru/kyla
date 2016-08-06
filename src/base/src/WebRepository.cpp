@@ -254,7 +254,9 @@ void WebRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& request
 				getStorageHashQuery.GetBlob (0, digest);
 
 				if (ComputeSHA256 (readBuffer) != digest) {
-					throw RuntimeException ("Corrupted chunk",
+					throw RuntimeException (
+						str (boost::format ("Source data for chunk '%1%' is corrupted") %
+							ToString (hash)),
 						KYLA_FILE_LINE);
 				}
 			}
@@ -276,9 +278,7 @@ void WebRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& request
 
 			compressionOutputBuffer.resize (sourceSize);
 			compressor->Decompress (readBuffer,	compressionOutputBuffer);
-
-
-
+			
 			getCallback (hash, compressionOutputBuffer, sourceOffset, totalSize);
 		}
 
