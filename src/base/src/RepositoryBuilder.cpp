@@ -511,6 +511,11 @@ private:
 			"INSERT INTO storage_mapping "
 			"(ContentObjectId, SourcePackageId, PackageOffset, PackageSize, SourceOffset, SourceSize, Compression) "
 			"VALUES (?, ?, ?, ?, ?, ?, ?)");
+		auto storageHashesInsertQuery = db.Prepare (
+			"INSERT INTO storage_hashes "
+			"(StorageMappingId, Hash) "
+			"VALUES (?, ?)"
+		);
 
 		///@TODO(minor) Support splitting packages for media limits
 		auto package = CreateFile (packagePath / (sourcePackage.name + ".kypkg"));
@@ -578,8 +583,9 @@ private:
 						compressionOutputBuffer);
 
 					const auto startOffset = package->Tell ();
-					package->Write (ArrayRef<byte> (compressionOutputBuffer.data (), compressedSize));
+					package->Write (ArrayRef<byte> (compressionOutputBuffer).Slice (0, compressedSize));
 					const auto endOffset = package->Tell ();
+					assert ((endOffset - startOffset) == compressedSize);
 
 					storageMappingInsertQuery.BindArguments (contentObjectId, packageId,
 						startOffset, endOffset - startOffset, 
@@ -588,6 +594,17 @@ private:
 						compressorId);
 					storageMappingInsertQuery.Step ();
 					storageMappingInsertQuery.Reset ();
+
+					auto storageMappingId = db.GetLastRowId ();
+
+					// We also store the hashes, for safety
+					const auto compressedChunkHash = ComputeSHA256 (
+						ArrayRef<byte> (compressionOutputBuffer).Slice (0, compressedSize));
+					storageHashesInsertQuery.BindArguments (
+						storageMappingId, compressedChunkHash
+					);
+					storageHashesInsertQuery.Step ();
+					storageHashesInsertQuery.Reset ();
 
 					readOffset += bytesRead;
 				}

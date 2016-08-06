@@ -196,19 +196,25 @@ void WebRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& request
 	);
 
 	auto contentObjectsInPackageQuery = db_.Prepare ("SELECT  "
-		"    storage_mapping.PackageOffset AS PackageOffset,  "
-		"    storage_mapping.PackageSize AS PackageSize, "
-		"    storage_mapping.SourceOffset AS SourceOffset,  "
-		"    content_objects.Hash AS Hash, "
-		"    content_objects.Size as TotalSize, "
-		"    storage_mapping.Compression AS Compression, "
-		"	 storage_mapping.SourceSize AS SourceSize "
+		"    storage_mapping.PackageOffset AS PackageOffset,  "	// = 0
+		"    storage_mapping.PackageSize AS PackageSize, "		// = 1
+		"    storage_mapping.SourceOffset AS SourceOffset,  "	// = 2
+		"    content_objects.Hash AS Hash, "					// = 3
+		"    content_objects.Size as TotalSize, "				// = 4
+		"    storage_mapping.Compression AS Compression, "		// = 5
+		"	 storage_mapping.SourceSize AS SourceSize, "		// = 6
+		"    storage_mapping.Id AS StorageMappingId "			// = 7
 		"FROM storage_mapping "
 		"INNER JOIN content_objects ON storage_mapping.ContentObjectId = content_objects.Id "
 		"INNER JOIN source_packages ON storage_mapping.SourcePackageId = source_packages.Id "
 		"WHERE content_objects.Hash IN (SELECT Hash FROM requested_content_objects) "
 		"    AND source_packages.Id = ? "
 		"ORDER BY PackageOffset ");
+
+	auto getStorageHashQuery = db_.Prepare (
+		"SELECT Hash "
+		"FROM storage_hashes "
+		"WHERE StorageMappingId = ?");
 
 	std::vector<byte> compressionOutputBuffer;
 	std::vector<byte> readBuffer;
@@ -233,11 +239,29 @@ void WebRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& request
 			const auto totalSize = contentObjectsInPackageQuery.GetInt64 (4);
 			const char* compression = contentObjectsInPackageQuery.GetText (5);
 			const auto sourceSize = contentObjectsInPackageQuery.GetInt64 (6);
+			const auto storageMappingId = contentObjectsInPackageQuery.GetInt64 (7);
 
 			packageFile->Seek (packageOffset);
 			readBuffer.resize (packageSize);
 			packageFile->Read (readBuffer);
 
+			// If we find an entry in the storage_hashes table, validate the
+			// compressed source data
+			getStorageHashQuery.BindArguments (storageMappingId);
+
+			if (getStorageHashQuery.Step ()) {
+				SHA256Digest digest;
+				getStorageHashQuery.GetBlob (0, digest);
+
+				if (ComputeSHA256 (readBuffer) != digest) {
+					throw RuntimeException ("Corrupted chunk",
+						KYLA_FILE_LINE);
+				}
+			}
+			getStorageHashQuery.Reset ();
+
+			// This is an optimization to skip the memcpy through
+			// the "Uncompressed" compressor
 			if (compression == nullptr) {
 				getCallback (hash, readBuffer, sourceOffset, totalSize);
 				continue;
@@ -252,6 +276,8 @@ void WebRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& request
 
 			compressionOutputBuffer.resize (sourceSize);
 			compressor->Decompress (readBuffer,	compressionOutputBuffer);
+
+
 
 			getCallback (hash, compressionOutputBuffer, sourceOffset, totalSize);
 		}

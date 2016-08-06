@@ -27,6 +27,7 @@ CREATE TABLE source_packages (
 
 -- Maps one content object to one or more source packages
 CREATE TABLE storage_mapping (
+	Id INTEGER PRIMARY KEY NOT NULL,
 	ContentObjectId INTEGER,
 	SourcePackageId INTEGER,
 	-- Offset inside the source package
@@ -41,6 +42,12 @@ CREATE TABLE storage_mapping (
 	Compression VARCHAR,
 	FOREIGN KEY(ContentObjectId) REFERENCES content_objects(Id),
 	FOREIGN KEY(SourcePackageId) REFERENCES source_packages(Id));
+
+-- If populated, this table stores the hashes of each storage mapping chunk
+CREATE TABLE storage_hashes (
+	StorageMappingId INTEGER PRIMARY KEY NOT NULL,
+	Hash BLOB NOT NULL
+);
 
 -- Take advantage of SQLite's dynamic types here so we don't have to store
 -- whether it is an int, a blob or a string
