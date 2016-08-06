@@ -405,6 +405,7 @@ struct PackedRepositoryBuilder final : public RepositoryBuilder
 		db.Execute ("PRAGMA journal_mode=DELETE;");
 		// Necessary to get good index statistics
 		db.Execute ("ANALYZE");
+		db.Execute ("VACUUM");
 
 		db.Close ();
 	}
