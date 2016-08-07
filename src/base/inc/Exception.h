@@ -29,11 +29,16 @@ namespace kyla {
 class RuntimeException : public std::runtime_error
 {
 public:
-	RuntimeException (const char* msg, const char* file, const int line);
 	RuntimeException (const std::string& msg, const char* file, const int line);
+	RuntimeException (const std::string& source, const std::string& msg, const char* file, const int line);
 
+	const char* GetSource () const
+	{
+		return source_.c_str ();
+	}
 private:
 	std::string detail_;
+	std::string source_;
 	const char* file_;
 	int line_;
 };

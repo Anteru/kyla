@@ -254,7 +254,7 @@ void WebRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& request
 				getStorageHashQuery.GetBlob (0, digest);
 
 				if (ComputeSHA256 (readBuffer) != digest) {
-					throw RuntimeException (
+					throw RuntimeException ("WebRepository",
 						str (boost::format ("Source data for chunk '%1%' is corrupted") %
 							ToString (hash)),
 						KYLA_FILE_LINE);

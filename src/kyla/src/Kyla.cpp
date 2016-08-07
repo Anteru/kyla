@@ -19,13 +19,29 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "Kyla.h"
 
+#include "Exception.h"
+
 #include "Repository.h"
 #include "RepositoryBuilder.h"
 
 #include "Log.h"
 
 #define KYLA_C_API_BEGIN() try {
-#define KYLA_C_API_END() } catch (...) { return kylaResult_Error; }
+#define KYLA_C_API_END() } catch (const kyla::RuntimeException& e) {    	  \
+		if (installer) {													  \
+			static_cast<KylaInstallerInternal*> (installer)					  \
+				->log->Error (e.GetSource (), e.what ());					  \
+		}																	  \
+		return kylaResult_Error;										      \
+	} catch (const std::exception& e) {										  \
+		if (installer) {													  \
+			static_cast<KylaInstallerInternal*> (installer)					  \
+				->log->Error ("Unknown", e.what ());						  \
+		}																	  \
+		return kylaResult_Error;										      \
+	} catch (...) {															  \
+			return kylaResult_Error;										  \
+	}
 
 ///////////////////////////////////////////////////////////////////////////////
 struct KylaRepositoryImpl
@@ -440,6 +456,10 @@ int kylaQueryFileset (KylaInstaller* installer,
 KYLA_EXPORT int kylaBuildRepository (const char* descriptorFile,
 	const char* sourceDirectory, const char* targetDirectory)
 {
+	// Only needed for the C_API macros which assume we're int the normal
+	// installer
+	void* installer = nullptr;
+
 	KYLA_C_API_BEGIN ()
 
 	if (descriptorFile == nullptr) {
@@ -463,11 +483,14 @@ KYLA_EXPORT int kylaBuildRepository (const char* descriptorFile,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** installer)
+int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** pInstaller)
 {
+	// Again, this is for the C_API macros
+	KylaInstaller* installer = nullptr;
+
 	KYLA_C_API_BEGIN ()
 
-	if (installer == nullptr) {
+	if (pInstaller == nullptr) {
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -563,7 +586,7 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** installer)
 		KYLA_C_API_END ()
 	};
 
-	*installer = internal;
+	*pInstaller = internal;
 
 	return kylaResult_Ok;
 

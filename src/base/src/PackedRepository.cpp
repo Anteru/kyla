@@ -146,7 +146,7 @@ void PackedRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requ
 				getStorageHashQuery.GetBlob (0, digest);
 
 				if (ComputeSHA256 (contentObjectSourceData) != digest) {
-					throw RuntimeException (
+					throw RuntimeException ("PackedRepository",
 						str (boost::format ("Source data for chunk '%1%' is corrupted") %
 							ToString (hash)),
 						KYLA_FILE_LINE);
