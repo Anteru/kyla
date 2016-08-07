@@ -231,15 +231,16 @@ void DeployedRepository::ConfigureImpl (Repository& source,
 	UpdateFilesetIdsForUnchangedFiles ();
 	RemoveChangedFiles (log);
 
+	progressHelper.SetStageFinished ();
 	progressHelper.AdvanceStage ("Install");
 	GetNewContentObjects (source, log, progressHelper);
 	CopyExistingFiles (log);
 	Cleanup (log);
+	progressHelper.SetStageFinished ();
 
 	db_.Detach ("source");
 
 	db_.Execute ("PRAGMA journal_mode = DELETE");
-
 	db_.Execute ("ANALYZE");
 }
 

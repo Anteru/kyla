@@ -104,6 +104,13 @@ public:
 			stageName_.c_str (), action_.c_str ());
 	}
 
+	void SetStageFinished ()
+	{
+		current_ = currentStageTarget_ = 1;
+		progressCallback_ (GetTotalProgress (),
+			stageName_.c_str (), action_.c_str ());
+	}
+
 private:
 	float GetInStageProgress () const
 	{
