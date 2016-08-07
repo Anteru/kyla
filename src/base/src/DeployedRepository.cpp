@@ -242,6 +242,7 @@ void DeployedRepository::ConfigureImpl (Repository& source,
 
 	db_.Execute ("PRAGMA journal_mode = DELETE");
 	db_.Execute ("ANALYZE");
+	db_.Execute ("VACUUM");
 }
 
 ///////////////////////////////////////////////////////////////////////////////
