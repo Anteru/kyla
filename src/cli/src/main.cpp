@@ -373,7 +373,8 @@ int ConfigureOrInstall (const std::string& cmd,
 
 	KylaTargetRepository target;
 	KYLA_CHECKED_CALL (installer->OpenTargetRepository (installer, 
-		vm ["target"].as<std::string> ().c_str (), 0, &target));
+		vm ["target"].as<std::string> ().c_str (), 
+		cmd == "install" ? kylaRepositoryOption_Create : 0, &target));
 
 	const auto filesets = vm ["file-sets"].as<std::vector<std::string>> ();
 
