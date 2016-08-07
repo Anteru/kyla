@@ -114,6 +114,7 @@ void InstallThread::run ()
 	}
 
 	if (!targetRepository) {
+		emit InstallationFinished (false);
 		// Something went seriously wrong
 		return;
 	}
@@ -137,13 +138,13 @@ void InstallThread::run ()
 	desiredState.filesetCount = itemCount;
 	desiredState.filesetIds = idPointers.data ();
 
-	installer->Execute (installer, action,
+	auto executeResult = installer->Execute (installer, action,
 		targetRepository, 
 		parent_->GetSetupContext ()->sourceRepository, &desiredState);
 
 	installer->CloseRepository (installer, targetRepository);
 
-	InstallationFinished (true);
+	emit InstallationFinished (executeResult == kylaResult_Ok);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -229,12 +230,12 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 	connect (ui->startInstallationButton, &QPushButton::clicked,
 		[=] () -> void {
 		ui->startInstallationButton->setEnabled (false);
-		setupThread_ = new InstallThread (this);
-		connect (setupThread_, &InstallThread::ProgressChanged,
+		preparationThread_ = new InstallThread (this);
+		connect (preparationThread_, &InstallThread::ProgressChanged,
 			this, &SetupDialog::UpdateProgress);
-		connect (setupThread_, &InstallThread::InstallationFinished,
+		connect (preparationThread_, &InstallThread::InstallationFinished,
 			this, &SetupDialog::InstallationFinished);
-		setupThread_->start ();
+		preparationThread_->start ();
 	});
 }
 
@@ -265,8 +266,8 @@ void SetupDialog::InstallationFinished (const bool success)
 ///////////////////////////////////////////////////////////////////////////////
 SetupDialog::~SetupDialog()
 {
-	if (setupThread_) {
-		setupThread_->wait ();
+	if (preparationThread_) {
+		preparationThread_->wait ();
 	}
 	delete ui;
 }

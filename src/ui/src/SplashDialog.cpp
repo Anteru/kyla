@@ -44,19 +44,19 @@ SplashDialog::SplashDialog (SetupContext* context, const QString& appName,
 
 	ui->productNameLabel->setText (setupInfo ["applicationName"].toString ());
 
-	setupThread_ = new SetupThread (context,
+	preparationThread_ = new PreparationThread (context,
 		setupInfo ["repository"].toString ());
 
-	connect (setupThread_, &QThread::finished,
+	connect (preparationThread_, &QThread::finished,
 		this, &SplashDialog::OnSetupCompleted);
-	setupThread_->start ();
+	preparationThread_->start ();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 SplashDialog::~SplashDialog ()
 {
-	setupThread_->wait ();
-	delete setupThread_;
+	preparationThread_->wait ();
+	delete preparationThread_;
 	delete ui;
 }
 
