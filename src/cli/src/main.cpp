@@ -25,6 +25,20 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <iomanip>
 #include "Uuid.h"
 
+const char* kylaGetErrorString (const int r)
+{
+	switch (r) {
+	case kylaResult_Ok: return "Ok";
+	case kylaResult_Error: return "Error";
+	case kylaResult_ErrorInvalidArgument: return "Invalid argument";
+	case kylaResult_ErrorUnsupportedApiVersion: return "Unsupported Api version";
+	default:
+		return "Unknown error";
+	}
+}
+
+#define KYLA_CHECKED_CALL(c) do {auto r = c; if (r != kylaResult_Ok) { throw std::runtime_error (kylaGetErrorString (r)); }} while (0)
+
 namespace po = boost::program_options;
 
 extern int kylaBuildRepository (const char* repositoryDescription,
@@ -155,7 +169,7 @@ int Validate (const std::vector<std::string>& options,
 	};
 
 	KylaInstaller* installer = nullptr;
-	kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer);
+	KYLA_CHECKED_CALL (kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer));
 
 	assert (installer);
 
@@ -164,14 +178,15 @@ int Validate (const std::vector<std::string>& options,
 	}
 
 	KylaTargetRepository repository;
-	installer->OpenTargetRepository (installer, vm ["input"].as<std::string> ().c_str (),
-		0, &repository);
+	KYLA_CHECKED_CALL (installer->OpenTargetRepository (installer, 
+		vm ["input"].as<std::string> ().c_str (), 0, &repository));
 
 	installer->SetValidationCallback (installer, validationCallback, &context);
-	installer->Execute (installer, kylaAction_Verify, repository, nullptr, nullptr);
+	KYLA_CHECKED_CALL (installer->Execute (installer, kylaAction_Verify, 
+		repository, nullptr, nullptr));
 
 	installer->CloseRepository (installer, repository);
-	kylaDestroyInstaller (installer);
+	KYLA_CHECKED_CALL (kylaDestroyInstaller (installer));
 
 	if (vm ["summary"].as<bool> ()) {
 		std::cout << "OK " << ok << " CORRUPTED/MISSING " << errors << std::endl;
@@ -202,7 +217,7 @@ int Repair (const std::vector<std::string>& options,
 	}
 
 	KylaInstaller* installer = nullptr;
-	kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer);
+	KYLA_CHECKED_CALL (kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer));
 
 	assert (installer);
 
@@ -211,12 +226,12 @@ int Repair (const std::vector<std::string>& options,
 	}
 
 	KylaTargetRepository source;
-	installer->OpenSourceRepository (installer, vm ["source"].as<std::string> ().c_str (),
-		0, &source);
+	KYLA_CHECKED_CALL (installer->OpenSourceRepository (installer, 
+		vm ["source"].as<std::string> ().c_str (), 0, &source));
 
 	KylaTargetRepository target;
-	installer->OpenTargetRepository (installer, vm ["target"].as<std::string> ().c_str (),
-		0, &target);
+	KYLA_CHECKED_CALL (installer->OpenTargetRepository (installer, 
+		vm ["target"].as<std::string> ().c_str (), 0, &target));
 
 	const auto result = installer->Execute (installer, kylaAction_Repair, target, source,
 		nullptr);
@@ -264,17 +279,17 @@ int QueryFilesets (const std::vector<std::string>& options,
 	}
 
 	KylaTargetRepository source;
-	installer->OpenSourceRepository (installer, vm ["source"].as<std::string> ().c_str (),
-		kylaRepositoryOption_ReadOnly, &source);
+	KYLA_CHECKED_CALL (installer->OpenSourceRepository (installer, vm ["source"].as<std::string> ().c_str (),
+		kylaRepositoryOption_ReadOnly, &source));
 
 	std::size_t resultSize = 0;
-	installer->QueryRepository (installer, source,
-		kylaRepositoryProperty_AvailableFilesets, &resultSize, nullptr);
+	KYLA_CHECKED_CALL (installer->QueryRepository (installer, source,
+		kylaRepositoryProperty_AvailableFilesets, &resultSize, nullptr));
 
 	std::vector<KylaUuid> filesets;
 	filesets.resize (resultSize / sizeof (KylaUuid));
-	installer->QueryRepository (installer, source,
-		kylaRepositoryProperty_AvailableFilesets, &resultSize, filesets.data ());
+	KYLA_CHECKED_CALL (installer->QueryRepository (installer, source,
+		kylaRepositoryProperty_AvailableFilesets, &resultSize, filesets.data ()));
 	
 	const auto queryName = vm ["name"].as<bool> ();
 
@@ -288,9 +303,9 @@ int QueryFilesets (const std::vector<std::string>& options,
 			std::vector<char> name;
 			name.resize (nameSize);
 
-			installer->QueryFileset (installer, source,
-				filesetId,
-				kylaFilesetProperty_Name, &nameSize, name.data ());
+			KYLA_CHECKED_CALL (installer->QueryFileset (installer, 
+				source,	filesetId,
+				kylaFilesetProperty_Name, &nameSize, name.data ()));
 
 			std::cout << ToString (kyla::Uuid{ filesetId.bytes }) << " " << name.data ();
 		} else {
@@ -299,18 +314,18 @@ int QueryFilesets (const std::vector<std::string>& options,
 
 		size_t int64Size = sizeof (std::int64_t);
 		std::int64_t fileCount, size;
-		installer->QueryFileset (installer, source,
+		KYLA_CHECKED_CALL (installer->QueryFileset (installer, source,
 			filesetId, kylaFilesetProperty_Size,
-			&int64Size, &size);
-		installer->QueryFileset (installer, source,
+			&int64Size, &size));
+		KYLA_CHECKED_CALL (installer->QueryFileset (installer, source,
 			filesetId, kylaFilesetProperty_FileCount,
-			&int64Size, &fileCount);
+			&int64Size, &fileCount));
 
 		std::cout << " " << fileCount << " " << size << std::endl;
 	}
 
 	installer->CloseRepository (installer, source);
-	kylaDestroyInstaller (installer);
+	KYLA_CHECKED_CALL (kylaDestroyInstaller (installer));
 
 	return kylaResult_Ok;
 }
@@ -340,7 +355,7 @@ int ConfigureOrInstall (const std::string& cmd,
 	}
 
 	KylaInstaller* installer = nullptr;
-	kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer);
+	KYLA_CHECKED_CALL (kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer));
 
 	assert (installer);
 
@@ -353,12 +368,12 @@ int ConfigureOrInstall (const std::string& cmd,
 	}
 
 	KylaSourceRepository source;
-	installer->OpenSourceRepository (installer, vm ["source"].as<std::string> ().c_str (),
-		0, &source);
+	KYLA_CHECKED_CALL (installer->OpenSourceRepository (installer, 
+		vm ["source"].as<std::string> ().c_str (), 0, &source));
 
 	KylaTargetRepository target;
-	installer->OpenTargetRepository (installer, vm ["target"].as<std::string> ().c_str (),
-		0, &target);
+	KYLA_CHECKED_CALL (installer->OpenTargetRepository (installer, 
+		vm ["target"].as<std::string> ().c_str (), 0, &target));
 
 	const auto filesets = vm ["file-sets"].as<std::vector<std::string>> ();
 
@@ -388,7 +403,7 @@ int ConfigureOrInstall (const std::string& cmd,
 
 	installer->CloseRepository (installer, source);
 	installer->CloseRepository (installer, target);
-	kylaDestroyInstaller (installer);
+	KYLA_CHECKED_CALL (kylaDestroyInstaller (installer));
 
 	return result;
 }
@@ -433,18 +448,23 @@ int main (int argc, char* argv [])
 	// Remove the command name
 	options.erase (options.begin ());
 
-	if (cmd == "build") {
-		return Build (options, vm);
-	} else if (cmd == "validate") {
-		return Validate (options, vm);
-	} else if (cmd == "repair") {
-		return Repair (options, vm);
-	} else if (cmd == "query-filesets") {
-		return QueryFilesets (options, vm);
-	} else if (cmd == "install" || cmd == "configure") {
-		return ConfigureOrInstall (cmd, options, vm);
-	} else {
-		std::cerr << "No command was specified" << std::endl;
+	try {
+		if (cmd == "build") {
+			return Build (options, vm);
+		} else if (cmd == "validate") {
+			return Validate (options, vm);
+		} else if (cmd == "repair") {
+			return Repair (options, vm);
+		} else if (cmd == "query-filesets") {
+			return QueryFilesets (options, vm);
+		} else if (cmd == "install" || cmd == "configure") {
+			return ConfigureOrInstall (cmd, options, vm);
+		} else {
+			std::cerr << "No command was specified" << std::endl;
+			return 1;
+		}
+	} catch (const std::exception& e) {
+		std::cerr << e.what () << std::endl;
 		return 1;
 	}
 }
