@@ -166,18 +166,21 @@ struct KylaInstaller
 	*/
 	int (*SetLogCallback)(KylaInstaller* installer,
 		KylaLogCallback logCallback, void* callbackContext);
+
 	/**
 	Set the progress callback. The callbackContext will be passed on into the
 	progress callback function.
 	*/
 	int (*SetProgressCallback)(KylaInstaller* installer,
 		KylaProgressCallback, void* progressContext);
+
 	/**
 	Set the validation callback. The callbackContext will be passed on into the
 	validation callback function.
 	*/
 	int (*SetValidationCallback)(KylaInstaller* installer,
 		KylaValidationCallback validationCallback, void* validationContext);
+
 	/**
 	Open a source repository.
 
@@ -194,6 +197,15 @@ struct KylaInstaller
 
 	The options is a combination of kylaRepositoryOption. By default, it's
 	opened for writing (and assumed to exist already).
+
+	If the repository is used for an initial installation, the options must
+	include kylaRepositoryOption_Create.
+
+	Opening a target repository using kylaRepositoryOption_ReadOnly allows only
+	verify to be called on the repository. The main advantage of read only
+	access is that files are not exclusively locked during access - that makes
+	it possible to open the files in other applications while the verification
+	is running.
 	*/
 	int (*OpenTargetRepository)(KylaInstaller* installer, const char* path,
 		int options, KylaTargetRepository* repository);
