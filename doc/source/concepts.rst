@@ -4,7 +4,7 @@ Basic concepts
 Kyla is built around two main concepts:
 
 * A **repository**, which is the content source. kyla exclusively works on repositories. A file repository contains the contents of all files stored in it. Files are grouped in file sets. A repository can be either *packed* into a few package files, or be a *loose* repository with all file contents being stored separately in the file system.
-* A **file set** is a set of files that is processed together. Each file in a file set must be unique, and all sets in a file repository must be disjoint. For example, each feature of an application would be represented as a file set. A file set is the basic unit used by kyla.
+* A **file set** is a set of files that are processed together. Each file in a file set must be unique, and all sets in a file repository must be disjoint. For example, each feature of an application would be represented as a file set. A file set is the basic unit used by kyla.
 
 .. note::
 

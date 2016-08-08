@@ -12,9 +12,9 @@ Throughout the tutorial, we'll be using the ``kcl`` command line binary which pr
 Building
 --------
 
-The first step for any installation is to build a *repository*. A repository contains all file contents and describes how they should be deployed. Building a repository requires a repository description, which is a Xml file describing what should go into the repository.
+The first step for any installation is to build a *repository*. A repository contains all file contents and describes how they should be deployed. Building a repository requires a repository description, which is an Xml file describing what should go into the repository.
 
-In this tutorial, three repository descriptions are provided which we'll use throughout the sample. These are the three ``.xml`` files - on for each repository we're about to build. For building, just run the ``build.bat`` script. Afterwards, you should see three new folders - ``source-3.1`` and ``source-3.1.2`` which contain all of ``GFLW`` in a single repository, and ``source-3.1.2-filesets`` which contains ``GLFW`` 3.1.2 but using file sets. We'll come back to this in the *Configuring* part.
+In this tutorial, three repository descriptions are provided which we'll use throughout the sample. These are the three ``.xml`` files - one for each repository we're about to build. For building, just run the ``build.bat`` script. Afterwards, you should see three new folders - ``source-3.1`` and ``source-3.1.2`` which contain all of ``GFLW`` in a single repository, and ``source-3.1.2-filesets`` which contains ``GLFW`` 3.1.2 but using file sets. We'll come back to this in the *Configuring* part.
 
 For more information about the repository descriptions, check the :ref:`repository-description`.
 
@@ -25,7 +25,7 @@ You're ready to go - let's install. You can just call ``install.bat`` which perf
 
     kcl install source-3.1 deploy-3.1 b7705480-903e-455a-9512-483c50c4af36
 
-This calls ``kcl``, requests an ``install`` and then it provides the source and target folders. But what's that Uuid at the end? At it's core, kyla works with file sets and repositories. A single repository must contain at least one file set, and that is the basic unit used during installation. To find out which file sets a repository has, use::
+This calls ``kcl``, requests an ``install`` and then it provides the source and target folders. But what's that Uuid at the end? At its core, kyla works with file sets and repositories. A single repository must contain at least one file set, and that is the basic unit used during installation. To find out which file sets a repository has, use::
 
     kcl query-filesets source-3.1
 
@@ -56,4 +56,4 @@ That source repository contains three file sets, one for the binaries, one for t
 Uninstall
 ---------
 
-kyla stores all it's state in a database inside the target directory. A full uninstall is thus a simple directory removal.
+kyla stores all its state in a database inside the target directory. A full uninstall is thus a simple directory removal.
