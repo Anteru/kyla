@@ -132,6 +132,11 @@ struct KylaUuid
 
 enum kylaRepositoryProperty
 {
+	/**
+	The list of available filesets, provided as KylaUuids.
+
+	The result is a tightly packed array of KylaUuid instances.
+	*/
 	kylaRepositoryProperty_AvailableFilesets
 };
 
