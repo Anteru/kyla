@@ -21,8 +21,7 @@ find_package(PythonInterp)
 ADD_CUSTOM_TARGET (docs
     ${PYTHON_EXECUTABLE} -m venv env
     COMMAND env/scripts/activate.bat
-    COMMAND python -m pip install -q --upgrade pip
-    COMMAND pip install -q -U Sphinx sphinx_rtd_theme
+    COMMAND pip -q install -r requirements.txt
     COMMAND make.bat html
 
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../doc)
@@ -32,6 +31,7 @@ ADD_CUSTOM_TARGET (deploy
     ${CMAKE_CURRENT_SOURCE_DIR}/../samples/gen-sdk.py
     ${CMAKE_CURRENT_SOURCE_DIR}/..
     $<TARGET_FILE:kcl>
+    ${PROJECT_BINARY_DIR}/.cache
     WORKING_DIRECTORY ${PROJECT_BINARY_DIR})
 
 ADD_DEPENDENCIES(deploy docs kui)

@@ -4,9 +4,17 @@ import os
 
 import urllib.request
 import zipfile
+import shutil
 
-def DownloadFile (url, filename):
-    with urllib.request.urlopen (url) as dl, open (filename, 'wb') as output:
+def DownloadFile (url, targetPath, cacheDir : str):
+    filename = os.path.basename (targetPath)
+    cachePath = os.path.join (cacheDir, filename)
+    if cacheDir:
+        if os.path.exists (cachePath):
+            shutil.copyfile (cachePath, targetPath)
+            return
+
+    with urllib.request.urlopen (url) as dl, open (targetPath, 'wb') as output:
         cl = dl.getheader ('Content-Length')
 
         if cl:
@@ -21,21 +29,25 @@ def DownloadFile (url, filename):
         else:
             output.write (dl.read ())
 
-def DownloadAndExtract (url, filename, baseDirectory):
+    if cacheDir:
+        os.makedirs (cacheDir, exist_ok = True)
+        shutil.copyfile (targetPath, cachePath)
+
+def DownloadAndExtract (url, filename, baseDirectory, cacheDir : str):
     filename = os.path.join (baseDirectory, filename)
-    DownloadFile (url, filename)
+    DownloadFile (url, filename, cacheDir)
     with zipfile.ZipFile (filename, 'r') as z:
         z.extractall (baseDirectory)
     os.unlink (filename)
 
-def GenerateGLFWSamples (baseDirectory = os.getcwd ()):
+def GenerateGLFWSamples (baseDirectory = os.getcwd (), cacheDir : str = None):
     from kyla import FileRepositoryBuilder, PackageType
     DownloadAndExtract (
         'https://github.com/glfw/glfw/releases/download/3.1.2/glfw-3.1.2.zip',
-        'glfw-3.1.2.zip', baseDirectory)
+        'glfw-3.1.2.zip', baseDirectory, cacheDir)
     DownloadAndExtract (
         'https://github.com/glfw/glfw/releases/download/3.1/glfw-3.1.zip',
-        'glfw-3.1.zip', baseDirectory)
+        'glfw-3.1.zip', baseDirectory, cacheDir)
 
     rootFileSets = {}
     for version in {'glfw-3.1', 'glfw-3.1.2'}:

@@ -11,6 +11,7 @@ import subprocess
 if __name__ == '__main__':
     srcDir = sys.argv [1]
     kclBinaryPath = sys.argv [2]
+    cacheDir = sys.argv [3]
 
     print ('Preparing directories', flush=True)
     shutil.rmtree ('staging_sdk', ignore_errors=True)
@@ -24,7 +25,7 @@ if __name__ == '__main__':
     shutil.copyfile (os.path.join (srcDir, 'src/kyla/inc/Kyla.h'), 'staging_sdk/include/Kyla.h')
 
     print ('Generating samples', flush=True)
-    GenerateGLFWSamples ('staging_sdk/samples/glfw')
+    GenerateGLFWSamples ('staging_sdk/samples/glfw', cacheDir)
 
     print ('Generating SDK installer', flush=True)
     sdk = FileRepositoryBuilder ()
