@@ -35,6 +35,7 @@ SET(HEADERS
 	inc/Log.h
 	inc/LooseRepository.h
 	inc/PackedRepository.h
+	inc/PackedRepositoryBase.h
 	inc/Repository.h
 	inc/RepositoryBuilder.h
 	inc/StringRef.h
@@ -55,6 +56,7 @@ SET(SOURCES
 	src/Log.cpp
 	src/LooseRepository.cpp
 	src/PackedRepository.cpp
+	src/PackedRepositoryBase.cpp
 	src/Repository.cpp
 	src/RepositoryBuilder.cpp
 	src/StringRef.cpp

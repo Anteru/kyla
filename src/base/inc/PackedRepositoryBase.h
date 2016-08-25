@@ -17,8 +17,8 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 [LICENSE END]
 */
 
-#ifndef KYLA_CORE_INTERNAL_PACKED_REPOSITORY_H
-#define KYLA_CORE_INTERNAL_PACKED_REPOSITORY_H
+#ifndef KYLA_CORE_INTERNAL_PACKED_REPOSITORY_BASE_H
+#define KYLA_CORE_INTERNAL_PACKED_REPOSITORY_BASE_H
 
 #include "BaseRepository.h"
 #include "sql/Database.h"
@@ -45,25 +45,6 @@ private:
 		const GetContentObjectCallback& getCallback) override;
 
 	virtual std::unique_ptr<PackageFile> OpenPackage (const std::string& packageName) const = 0;
-};
-
-class PackedRepository final : public PackedRepositoryBase
-{
-public:
-	PackedRepository (const char* path);
-	~PackedRepository ();
-
-	PackedRepository (const PackedRepository& other) = delete;
-	PackedRepository& operator= (const PackedRepository& other) = delete;
-
-private:
-	std::unique_ptr<PackageFile> OpenPackage (const std::string& packageName) const override;
-
-	Sql::Database& GetDatabaseImpl () override;
-
-	Sql::Database db_;
-
-	Path path_;
 };
 } // namespace kyla
 

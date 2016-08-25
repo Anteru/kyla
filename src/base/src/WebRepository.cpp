@@ -65,10 +65,10 @@ struct WebRepository::Impl
 		File (const File&) = delete;
 		File& operator= (const File&) = delete;
 
-		File (HINTERNET internet, const char* url)
+		File (HINTERNET internet, const std::string& url)
 		{
 			handle_ = InternetOpenUrl (internet,
-				url,
+				url.c_str (),
 				NULL, /* headers */
 				0, /* header length */
 				0, /* flags */
@@ -113,7 +113,7 @@ struct WebRepository::Impl
 
 	std::unique_ptr<File> Open (const std::string& file)
 	{
-		return std::unique_ptr<File> (new File{ internet_, file.c_str () });
+		return std::unique_ptr<File> (new File{ internet_, file });
 	}
 
 	~Impl ()
@@ -166,123 +166,31 @@ Sql::Database& WebRepository::GetDatabaseImpl ()
 	return db_;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-void WebRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
-	const Repository::GetContentObjectCallback& getCallback)
-{
-	// We need to join the requested objects on our existing data, so
-	// store them in a temporary table
-	auto requestedContentObjects = db_.CreateTemporaryTable (
-		"requested_content_objects", "Hash BLOB NOT NULL UNIQUE");
-
-	auto tempObjectInsert = db_.Prepare ("INSERT INTO requested_content_objects "
-		"(Hash) VALUES (?)");
-
-	for (const auto& obj : requestedObjects) {
-		tempObjectInsert.BindArguments (obj);
-		tempObjectInsert.Step ();
-		tempObjectInsert.Reset ();
-	}
-
-	// Find all source packages we need to handle
-	auto findSourcePackagesQuery = db_.Prepare (
-		"SELECT DISTINCT "
-		"   source_packages.Filename AS Filename, "
-		"   source_packages.Id AS Id "
-		"FROM storage_mapping "
-		"    INNER JOIN content_objects ON storage_mapping.ContentObjectId = content_objects.Id "
-		"    INNER JOIN source_packages ON storage_mapping.SourcePackageId = source_packages.Id "
-		"WHERE content_objects.Hash IN (SELECT Hash FROM requested_content_objects) "
-	);
-
-	auto contentObjectsInPackageQuery = db_.Prepare ("SELECT  "
-		"    storage_mapping.PackageOffset AS PackageOffset,  "	// = 0
-		"    storage_mapping.PackageSize AS PackageSize, "		// = 1
-		"    storage_mapping.SourceOffset AS SourceOffset,  "	// = 2
-		"    content_objects.Hash AS Hash, "					// = 3
-		"    content_objects.Size as TotalSize, "				// = 4
-		"    storage_mapping.Compression AS Compression, "		// = 5
-		"	 storage_mapping.SourceSize AS SourceSize, "		// = 6
-		"    storage_mapping.Id AS StorageMappingId "			// = 7
-		"FROM storage_mapping "
-		"INNER JOIN content_objects ON storage_mapping.ContentObjectId = content_objects.Id "
-		"INNER JOIN source_packages ON storage_mapping.SourcePackageId = source_packages.Id "
-		"WHERE content_objects.Hash IN (SELECT Hash FROM requested_content_objects) "
-		"    AND source_packages.Id = ? "
-		"ORDER BY PackageOffset ");
-
-	auto getStorageHashQuery = db_.Prepare (
-		"SELECT Hash "
-		"FROM storage_hashes "
-		"WHERE StorageMappingId = ?");
-
-	std::vector<byte> compressionOutputBuffer;
-	std::vector<byte> readBuffer;
-
-	while (findSourcePackagesQuery.Step ()) {
-		const auto filename = findSourcePackagesQuery.GetText (0);
-		const auto id = findSourcePackagesQuery.GetInt64 (1);
-
-		auto packageFile = impl_->Open (url_ + filename);
-
-		contentObjectsInPackageQuery.BindArguments (id);
-
-		std::string currentCompressorId;
-		std::unique_ptr<BlockCompressor> compressor;
-
-		while (contentObjectsInPackageQuery.Step ()) {
-			const auto packageOffset = contentObjectsInPackageQuery.GetInt64 (0);
-			const auto packageSize = contentObjectsInPackageQuery.GetInt64 (1);
-			const auto sourceOffset = contentObjectsInPackageQuery.GetInt64 (2);
-			SHA256Digest hash;
-			contentObjectsInPackageQuery.GetBlob (3, hash);
-			const auto totalSize = contentObjectsInPackageQuery.GetInt64 (4);
-			const char* compression = contentObjectsInPackageQuery.GetText (5);
-			const auto sourceSize = contentObjectsInPackageQuery.GetInt64 (6);
-			const auto storageMappingId = contentObjectsInPackageQuery.GetInt64 (7);
-
-			packageFile->Seek (packageOffset);
-			readBuffer.resize (packageSize);
-			packageFile->Read (readBuffer);
-
-			// If we find an entry in the storage_hashes table, validate the
-			// compressed source data
-			getStorageHashQuery.BindArguments (storageMappingId);
-
-			if (getStorageHashQuery.Step ()) {
-				SHA256Digest digest;
-				getStorageHashQuery.GetBlob (0, digest);
-
-				if (ComputeSHA256 (readBuffer) != digest) {
-					throw RuntimeException ("WebRepository",
-						str (boost::format ("Source data for chunk '%1%' is corrupted") %
-							ToString (hash)),
-						KYLA_FILE_LINE);
-				}
-			}
-			getStorageHashQuery.Reset ();
-
-			// This is an optimization to skip the memcpy through
-			// the "Uncompressed" compressor
-			if (compression == nullptr) {
-				getCallback (hash, readBuffer, sourceOffset, totalSize);
-				continue;
-			}
-
-			if (compression != currentCompressorId) {
-				// we assume the compressors change infrequently
-				compressor = CreateBlockCompressor (
-					CompressionAlgorithmFromId (compression)
-				);
-			}
-
-			compressionOutputBuffer.resize (sourceSize);
-			compressor->Decompress (readBuffer,	compressionOutputBuffer);
-			
-			getCallback (hash, compressionOutputBuffer, sourceOffset, totalSize);
+namespace {
+	struct WebPackageFile final : public PackedRepositoryBase::PackageFile
+	{
+	public:
+		WebPackageFile (std::unique_ptr<WebRepository::Impl::File>&& file)
+			: file_ (std::move (file))
+		{
 		}
 
-		contentObjectsInPackageQuery.Reset ();
-	}
+		bool Read (const int64 offset, const MutableArrayRef<>& buffer) override
+		{
+			file_->Seek (offset);
+			return file_->Read (buffer) == buffer.GetSize ();
+		}
+
+	private:
+		std::unique_ptr<WebRepository::Impl::File> file_;
+	};
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::unique_ptr<PackedRepositoryBase::PackageFile> WebRepository::OpenPackage (const std::string& packageName) const
+{
+	return std::unique_ptr<PackageFile> { new WebPackageFile{
+		impl_->Open (url_ + packageName)
+	}};
 }
 } // namespace kyla
