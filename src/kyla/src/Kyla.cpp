@@ -88,15 +88,21 @@ int kylaOpenSourceRepository (
 		return kylaResult_ErrorInvalidArgument;
 	}
 
+	auto internal = static_cast<KylaInstallerInternal*> (installer);
+
 	if (path == nullptr) {
+		internal->log->Error ("kylaOpenSourceRepository", "path was null");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
 	if (repository == nullptr) {
+		internal->log->Error ("kylaOpenSourceRepository", "repository was null");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
 	if ((options & kylaRepositoryOption_Create) == kylaRepositoryOption_Create) {
+		internal->log->Error ("kylaOpenSourceRepository", "Cannot create source repository with "
+			"kylaRepositoryOption_Create");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -123,11 +129,15 @@ int kylaOpenTargetRepository (
 		return kylaResult_ErrorInvalidArgument;
 	}
 
+	auto internal = static_cast<KylaInstallerInternal*> (installer);
+
 	if (path == nullptr) {
+		internal->log->Error ("kylaOpenTargetRepository", "path was null");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
 	if (repository == nullptr) {
+		internal->log->Error ("kylaOpenTargetRepository", "repository was null");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -158,11 +168,15 @@ int kylaCloseRepository (KylaInstaller* installer,
 		return kylaResult_ErrorInvalidArgument;
 	}
 
+	auto internal = static_cast<KylaInstallerInternal*> (installer);
+
 	if (repository == nullptr) {
+		internal->log->Error ("kylaCloseRepository", "repository was null");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
 	if (!repository->p) {
+		internal->log->Error ("kylaCloseRepository", "repository is already closed");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -192,10 +206,13 @@ int kylaExecute (
 	auto internal = static_cast<KylaInstallerInternal*> (installer);
 
 	if (targetRepository == nullptr) {
+		internal->log->Error ("kylaExecute", "target repository was null");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
 	if (targetRepository->repositoryType != KylaRepositoryImpl::RepositoryType::Target) {
+		internal->log->Error ("kylaExecute", "target repository has is not a valid target. "
+			"A target repository must be opened using OpenTargetRepository.");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -205,6 +222,8 @@ int kylaExecute (
 		}
 
 		if (sourceRepository->repositoryType != KylaRepositoryImpl::RepositoryType::Source) {
+			internal->log->Error ("kylaExecute", "source repository has is not a valid source. "
+				"A source repository must be opened using OpenSourceRepository.");
 			return kylaResult_ErrorInvalidArgument;
 		}
 	}
@@ -215,19 +234,27 @@ int kylaExecute (
 		switch (action) {
 		case kylaAction_Configure:
 		case kylaAction_Install:
+			internal->log->Error ("kylaExecute", 
+				"desired state must not be null for kylaAction_Configure and kylaAction_Install");
 			return kylaResult_ErrorInvalidArgument;
 		}
 	} else {
 		if (desiredState->filesetCount <= 0) {
+			internal->log->Error ("kylaExecute",
+				"desired state file set count must be greater than or equal to 1");
 			return kylaResult_ErrorInvalidArgument;
 		}
 
 		if (desiredState->filesetIds == nullptr) {
+			internal->log->Error ("kylaExecute",
+				"desired state must contain at least one file set id");
 			return kylaResult_ErrorInvalidArgument;
 		}
 
 		for (int i = 0; i < desiredState->filesetCount; ++i) {
 			if (desiredState->filesetIds [i] == nullptr) {
+				internal->log->Error ("kylaExecute",
+					"desired state file set id must not be null");
 				return kylaResult_ErrorInvalidArgument;
 			}
 		}
@@ -247,6 +274,8 @@ int kylaExecute (
 
 	case kylaAction_Configure:
 		if ((targetRepository->options & kylaRepositoryOption_ReadOnly) == kylaRepositoryOption_ReadOnly) {
+			internal->log->Error ("kylaExecute",
+				"target repository cannot be opened in read-only mode for kylaAction_Configure");
 			return kylaResult_Error;
 		}
 		targetRepository->p->Configure (
@@ -256,6 +285,8 @@ int kylaExecute (
 
 	case kylaAction_Repair:
 		if ((targetRepository->options & kylaRepositoryOption_ReadOnly) == kylaRepositoryOption_ReadOnly) {
+			internal->log->Error ("kylaExecute",
+				"target repository cannot be opened in read-only mode for kylaAction_Repair");
 			return kylaResult_Error;
 		}
 
@@ -287,6 +318,8 @@ int kylaExecute (
 		break;
 
 	default:
+		internal->log->Error ("kylaExecute",
+			"invalid action");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -311,12 +344,13 @@ int kylaQueryRepository (KylaInstaller* installer,
 	auto i = static_cast<KylaInstallerInternal*> (installer);
 
 	if (repository == nullptr) {
-		i->log->Error ("kylaQueryFilesets", "repository was null, but must not be null");
+		i->log->Error ("kylaQueryRepository", "repository was null");
 
 		return kylaResult_ErrorInvalidArgument;
 	}
 
 	if (repository->repositoryType != KylaRepositoryImpl::RepositoryType::Source) {
+		i->log->Error ("kylaQueryRepository", "repository must be a source repository");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -330,6 +364,7 @@ int kylaQueryRepository (KylaInstaller* installer,
 			*pResultSize = resultSize;
 		} else if (pResultSize && pResult) {
 			if (*pResultSize < resultSize) {
+				i->log->Error ("kylaQueryRepository", "result size is too small");
 				return kylaResult_ErrorInvalidArgument;
 			} else {
 				*pResultSize = resultSize;
@@ -337,6 +372,7 @@ int kylaQueryRepository (KylaInstaller* installer,
 
 			::memcpy (pResult, result.data (), resultSize);
 		} else {
+			i->log->Error ("kylaQueryRepository", "at least one of {result size, result pointer} must be set");
 			return kylaResult_ErrorInvalidArgument;
 		}
 
@@ -344,6 +380,7 @@ int kylaQueryRepository (KylaInstaller* installer,
 	}
 
 	default:
+		i->log->Error ("kylaQueryRepository", "invalid property id");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -369,10 +406,12 @@ int kylaQueryFileset (KylaInstaller* installer,
 	auto i = static_cast<KylaInstallerInternal*> (installer);
 
 	if (repository == nullptr) {
+		i->log->Error ("kylaQueryFileset", "repository was null");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
 	if (repository->repositoryType != KylaRepositoryImpl::RepositoryType::Source) {
+		i->log->Error ("kylaQueryFileset", "repository must be a source repository");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -386,6 +425,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 			*pResultSize = resultSize;
 		} else if (pResultSize && pResult) {
 			if (*pResultSize < resultSize) {
+				i->log->Error ("kylaQueryFileset", "result size is too small");
 				return kylaResult_ErrorInvalidArgument;
 			} else {
 				*pResultSize = resultSize;
@@ -394,6 +434,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 			*static_cast<std::int64_t*> (pResult) =
 				repository->p->GetFilesetFileCount (uuid);
 		} else {
+			i->log->Error ("kylaQueryFileset", "at least one of {result size, result pointer} must be set");
 			return kylaResult_ErrorInvalidArgument;
 		}
 
@@ -406,6 +447,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 			*pResultSize = resultSize;
 		} else if (pResultSize && pResult) {
 			if (*pResultSize < resultSize) {
+				i->log->Error ("kylaQueryFileset", "result size is too small");
 				return kylaResult_ErrorInvalidArgument;
 			} else {
 				*pResultSize = resultSize;
@@ -414,6 +456,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 			*static_cast<std::int64_t*> (pResult) =
 				repository->p->GetFilesetSize (uuid);
 		} else {
+			i->log->Error ("kylaQueryFileset", "at least one of {result size, result pointer} must be set");
 			return kylaResult_ErrorInvalidArgument;
 		}
 
@@ -428,6 +471,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 			*pResultSize = resultSize;
 		} else if (pResultSize && pResult) {
 			if (*pResultSize < resultSize) {
+				i->log->Error ("kylaQueryFileset", "result size is too small");
 				return kylaResult_ErrorInvalidArgument;
 			} else {
 				*pResultSize = resultSize;
@@ -436,6 +480,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 			::memset (pResult, 0, name.size () + 1);
 			::memcpy (pResult, name.data (), name.size ());
 		} else {
+			i->log->Error ("kylaQueryFileset", "at least one of {result size, result pointer} must be set");
 			return kylaResult_ErrorInvalidArgument;
 		}
 
@@ -443,6 +488,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 	}
 
 	default:
+		i->log->Error ("kylaQueryFileset", "invalid property id");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -552,9 +598,7 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** pInstaller)
 		}
 
 		auto internal = static_cast<KylaInstallerInternal*> (installer);
-
-		std::vector<float> weights;
-
+		
 		internal->progress.reset (new kyla::Progress ([=](
 			const float f, const char* s, const char* a) -> void {
 			KylaProgress progress;

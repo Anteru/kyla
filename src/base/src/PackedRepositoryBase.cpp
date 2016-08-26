@@ -36,6 +36,19 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <set>
 
 namespace kyla {
+/**
+@class PackedRepositoryBase
+@brief Base class for packed repositories
+
+This class provides the basic implementation for a packed repository, that is,
+a repository which stores the data in one or more source packages indexed using
+the storage_mapping and source_packages tables.
+
+The storage access itself is abstracted into the PackageFile class. This class
+is used instead of the generic File class as a package file only supports
+reading and may not be mapped.
+*/
+
 ///////////////////////////////////////////////////////////////////////////////
 PackedRepositoryBase::~PackedRepositoryBase ()
 {
@@ -72,6 +85,8 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 		"WHERE content_objects.Hash IN (SELECT Hash FROM requested_content_objects) "
 	);
 
+	// Finds the content objects we need in a particular source package, and
+	// sorts them by the in-package offset
 	auto contentObjectsInPackageQuery = db.Prepare ("SELECT  "
 		"    storage_mapping.PackageOffset AS PackageOffset,  "	// = 0
 		"    storage_mapping.PackageSize AS PackageSize, "		// = 1
@@ -88,6 +103,8 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 		"    AND source_packages.Id = ? "
 		"ORDER BY PackageOffset ");
 
+	// Data stored in a package may be optionally protected by a hash - those
+	// hases live in storage_hashes
 	auto getStorageHashQuery = db.Prepare (
 		"SELECT Hash "
 		"FROM storage_hashes "
@@ -101,8 +118,6 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 		const auto id = findSourcePackagesQuery.GetInt64 (1);
 
 		auto packageFile = OpenPackage (filename);
-
-		///@TODO(minor) Validate it's a valid file
 
 		contentObjectsInPackageQuery.BindArguments (id);
 
@@ -141,8 +156,7 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 			getStorageHashQuery.Reset ();
 
 			if (compression == nullptr) {
-				getCallback (hash,
-					readBuffer, sourceOffset, totalSize);
+				getCallback (hash, readBuffer, sourceOffset, totalSize);
 				continue;
 			}
 
@@ -154,10 +168,10 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 			}
 
 			compressionOutputBuffer.resize (sourceSize);
-			compressor->Decompress (readBuffer,
-				compressionOutputBuffer);
+			compressor->Decompress (readBuffer,	compressionOutputBuffer);
 
-			getCallback (hash, compressionOutputBuffer, sourceOffset, totalSize);
+			getCallback (hash, compressionOutputBuffer, sourceOffset, 
+				totalSize);
 		}
 
 		contentObjectsInPackageQuery.Reset ();
@@ -168,7 +182,8 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 void PackedRepositoryBase::ValidateImpl (const Repository::ValidationCallback& validationCallback)
 {
 	auto& db = GetDatabase ();
-	// Find all source packages we need to handle
+
+	// Queries as above
 	auto findSourcePackagesQuery = db.Prepare (
 		"SELECT DISTINCT "
 		"   source_packages.Filename AS Filename, "
@@ -197,9 +212,7 @@ void PackedRepositoryBase::ValidateImpl (const Repository::ValidationCallback& v
 
 	while (findSourcePackagesQuery.Step ()) {
 		auto packageFile = OpenPackage (findSourcePackagesQuery.GetText (0));
-
-		///@TODO(minor) Validate it's a valid file
-
+		
 		contentObjectsInPackageQuery.BindArguments (
 			findSourcePackagesQuery.GetInt64 (0));
 

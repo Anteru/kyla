@@ -22,18 +22,11 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include "sql/Database.h"
 #include "Exception.h"
 #include "FileIO.h"
-#include "Hash.h"
 #include "Log.h"
 
 #include "Compression.h"
 
 #include <boost/format.hpp>
-
-#include "install-db-structure.h"
-#include "temp-db-structure.h"
-
-#include <unordered_map>
-#include <set>
 
 namespace kyla {
 ///////////////////////////////////////////////////////////////////////////////

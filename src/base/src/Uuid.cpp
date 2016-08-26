@@ -34,6 +34,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 namespace kyla {
 namespace {
+///////////////////////////////////////////////////////////////////////////////
 template <typename T>
 byte* ByteCopy (const T& t, byte* output)
 {
@@ -48,6 +49,7 @@ byte* ByteCopy (const T& t, byte* output)
 	return output;
 }
 
+///////////////////////////////////////////////////////////////////////////////
 bool CharToByte (const char c, byte& output)
 {
 	assert (

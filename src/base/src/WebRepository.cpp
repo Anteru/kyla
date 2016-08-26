@@ -21,19 +21,9 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "sql/Database.h"
 #include "Exception.h"
-#include "FileIO.h"
-#include "Hash.h"
 #include "Log.h"
 
-#include "Compression.h"
-
 #include <boost/format.hpp>
-
-#include "install-db-structure.h"
-#include "temp-db-structure.h"
-
-#include <unordered_map>
-#include <set>
 
 #if KYLA_PLATFORM_WINDOWS
 #pragma comment(lib, "wininet.lib")
@@ -103,6 +93,7 @@ struct WebRepository::Impl
 
 		void Seek (int64 offset)
 		{
+			///@TODO(minor) Optimize this to not seek unless needed
 			LONG upperBits = offset >> 32;
 			InternetSetFilePointer (handle_, offset & 0xFFFFFFFF,
 				&upperBits, FILE_BEGIN, NULL);
@@ -129,6 +120,12 @@ struct WebRepository::Impl
 WebRepository::WebRepository (const std::string& path)
 	: impl_ (new Impl)
 {
+	// path must end with '/'
+	if (path.back () != '/') {
+		throw RuntimeException (str (
+			boost::format ("Web repository url must end with '/' (got: '%1%')") % path),
+			KYLA_FILE_LINE);
+	}
 	const auto dbWebFile = impl_->Open (std::string (path) + "repository.db");
 	url_ = path;
 	dbPath_ = GetTemporaryFilename ();
@@ -140,13 +137,13 @@ WebRepository::WebRepository (const std::string& path)
 		buffer.resize (1 << 20); // 1 MiB
 
 		for (;;) {
-			const auto read = dbWebFile->Read (buffer);
+			const auto bytesRead = dbWebFile->Read (buffer);
 		
-			if (read == 0) {
+			if (bytesRead == 0) {
 				break;
 			}
 		
-			dbLocalFile->Write (ArrayRef<byte> {buffer}.Slice (0, read));
+			dbLocalFile->Write (ArrayRef<byte> {buffer}.Slice (0, bytesRead));
 		}
 	}
 

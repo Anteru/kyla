@@ -89,7 +89,8 @@ typedef struct KylaRepositoryImpl* KylaRepository;
 enum kylaRepositoryOption
 {
 	/**
-	Create the repository. If it's present already, it will be overriden.
+	Create the repository. If it's present already, it will be overwritten by
+	subsequent operation.
 
 	Cannot be set for a source repository.
 	*/
