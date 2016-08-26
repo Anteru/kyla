@@ -29,8 +29,8 @@ class SetupContext : public QObject
 	Q_OBJECT
 
 public:
+	SetupContext ();
 	~SetupContext ();
-	void Setup (const char* sourceRepositoryPath);
 
 	KylaInstaller* installer = nullptr;
 	KylaSourceRepository sourceRepository = nullptr;

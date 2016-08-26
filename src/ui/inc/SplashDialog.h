@@ -28,12 +28,12 @@ namespace Ui {
 	class SplashDialog;
 }
 
-class PreparationThread : public QThread
+class OpenSourceRepositoryThread : public QThread
 {
 	Q_OBJECT
 
 public:
-	PreparationThread (SetupContext* context, const QString& sourceRepositoryPath)
+	OpenSourceRepositoryThread (SetupContext* context, const QString& sourceRepositoryPath)
 		: context_ (context)
 		, sourceRepositoryPath_ (sourceRepositoryPath)
 	{
@@ -42,18 +42,17 @@ public:
 	void run ()
 	{
 		auto sourceRepositoryPath = sourceRepositoryPath_.toUtf8 ();
-		context_->Setup (sourceRepositoryPath.data ());
 		auto result = context_->installer->OpenSourceRepository (
 			context_->installer,
 			sourceRepositoryPath.data (),
 			kylaRepositoryOption_ReadOnly,
 			&context_->sourceRepository);
 
-		emit PreparationFinished (result == kylaResult_Ok);
+		emit RepositoryOpened (result == kylaResult_Ok);
 	}
 
 signals:
-	void PreparationFinished (const bool success);
+	void RepositoryOpened (const bool success);
 
 private:
 	SetupContext* context_;
@@ -69,12 +68,12 @@ public:
 	~SplashDialog ();
 
 public slots:
-	void OnSetupCompleted ();
+	void OnRepositoryOpened (const bool success);
 
 private:
 	Ui::SplashDialog *ui;
 	SetupContext* context_;
-	PreparationThread* preparationThread_;
+	OpenSourceRepositoryThread* openSourceRepositoryThread_;
 };
 
 #endif // STARTDIALOG_H

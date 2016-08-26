@@ -230,12 +230,12 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 	connect (ui->startInstallationButton, &QPushButton::clicked,
 		[=] () -> void {
 		ui->startInstallationButton->setEnabled (false);
-		preparationThread_ = new InstallThread (this);
-		connect (preparationThread_, &InstallThread::ProgressChanged,
+		installThread_ = new InstallThread (this);
+		connect (installThread_, &InstallThread::ProgressChanged,
 			this, &SetupDialog::UpdateProgress);
-		connect (preparationThread_, &InstallThread::InstallationFinished,
+		connect (installThread_, &InstallThread::InstallationFinished,
 			this, &SetupDialog::InstallationFinished);
-		preparationThread_->start ();
+		installThread_->start ();
 	});
 }
 
@@ -266,8 +266,8 @@ void SetupDialog::InstallationFinished (const bool success)
 ///////////////////////////////////////////////////////////////////////////////
 SetupDialog::~SetupDialog()
 {
-	if (preparationThread_) {
-		preparationThread_->wait ();
+	if (installThread_) {
+		installThread_->wait ();
 	}
 	delete ui;
 }

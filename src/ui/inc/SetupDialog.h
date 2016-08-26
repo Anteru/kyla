@@ -68,7 +68,7 @@ public slots:
 private:
 	Ui::SetupDialog *ui;
 	SetupContext* context_;
-	InstallThread* preparationThread_ = nullptr;
+	InstallThread* installThread_ = nullptr;
 };
 
 #endif // STARTDIALOG_H

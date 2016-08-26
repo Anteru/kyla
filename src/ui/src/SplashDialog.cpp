@@ -22,6 +22,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <QJsonDocument>
 #include <QFile>
 #include <QJsonObject>
+#include <QMessageBox>
 
 #include "SetupDialog.h"
 
@@ -37,34 +38,41 @@ SplashDialog::SplashDialog (SetupContext* context, const QString& appName,
 	QFile setupInfoFile{ "info.json" };
 	setupInfoFile.open (QIODevice::ReadOnly);
 
-	QJsonDocument setupInfoDocument = QJsonDocument::fromJson (
+	const auto setupInfoDocument = QJsonDocument::fromJson (
 		setupInfoFile.readAll ());
 
 	auto setupInfo = setupInfoDocument.object ();
 
 	ui->productNameLabel->setText (setupInfo ["applicationName"].toString ());
 
-	preparationThread_ = new PreparationThread (context,
+	openSourceRepositoryThread_ = new OpenSourceRepositoryThread (context,
 		setupInfo ["repository"].toString ());
 
-	connect (preparationThread_, &QThread::finished,
-		this, &SplashDialog::OnSetupCompleted);
-	preparationThread_->start ();
+	connect (openSourceRepositoryThread_, &OpenSourceRepositoryThread::RepositoryOpened,
+		this, &SplashDialog::OnRepositoryOpened);
+	openSourceRepositoryThread_->start ();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 SplashDialog::~SplashDialog ()
 {
-	preparationThread_->wait ();
-	delete preparationThread_;
+	openSourceRepositoryThread_->wait ();
+	delete openSourceRepositoryThread_;
 	delete ui;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void SplashDialog::OnSetupCompleted ()
+void SplashDialog::OnRepositoryOpened (const bool success)
 {
-	hide ();
+	if (!success) {
+		QMessageBox::critical (this, "Error while opening source repository",
+			"The source repository could not be opened.",
+			QMessageBox::Close);
+		close ();
+	} else {
+		hide ();
 
-	SetupDialog setupDialog (context_, this);
-	setupDialog.exec ();
+		SetupDialog setupDialog (context_, this);
+		setupDialog.exec ();
+	}
 }
