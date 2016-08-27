@@ -16,6 +16,7 @@ import glob
 from multiprocessing import Pool
 from functools import partial
 import time
+import sys
 
 class KylaRunner:
     def __init__(self, kclBinaryPath, verbose):
@@ -207,7 +208,10 @@ def check_negative(invalue):
 def ExecuteTest (testFilename, kyla, verbose):
     testName = os.path.splitext (os.path.basename (testFilename))[0]
     tr = Test (KylaRunner (kyla, verbose=verbose), testFilename)
-    return (testName, tr.Execute (),)
+    try:
+        return (testName, tr.Execute (),)
+    except:
+        return (testName, False,)
 
 def FormatResult(r):
     return ('{} {}'.format (r[0], 'PASS' if r[1] else 'FAIL'))
@@ -244,3 +248,6 @@ if __name__ == '__main__':
 
     endTime = time.time ()
     print ('Elapsed time: {0:.3} sec'.format (endTime - startTime))
+
+    failures = sum([0 if r[1] else 1 for r in results])
+    sys.exit (failures)
