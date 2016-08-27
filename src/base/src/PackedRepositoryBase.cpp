@@ -20,7 +20,6 @@ details.
 #include <boost/format.hpp>
 
 #include "install-db-structure.h"
-#include "temp-db-structure.h"
 
 #include <unordered_map>
 #include <set>
