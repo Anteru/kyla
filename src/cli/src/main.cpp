@@ -2,18 +2,8 @@
 [LICENSE BEGIN]
 kyla Copyright (C) 2016 Matthäus G. Chajdas
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>.
+This file is distributed under the BSD 2-clause license. See LICENSE for
+details.
 [LICENSE END]
 */
 
@@ -25,6 +15,7 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #include <iomanip>
 #include "Uuid.h"
 
+///////////////////////////////////////////////////////////////////////////////
 const char* kylaGetErrorString (const int r)
 {
 	switch (r) {
@@ -44,6 +35,7 @@ namespace po = boost::program_options;
 extern int kylaBuildRepository (const char* repositoryDescription,
 	const char* sourceDirectory, const char* targetDirectory);
 
+///////////////////////////////////////////////////////////////////////////////
 void StdoutLog (const char* source, const kylaLogSeverity severity,
 	const char* message, void*)
 {
@@ -57,6 +49,7 @@ void StdoutLog (const char* source, const kylaLogSeverity severity,
 	std::cout << source << ":" << message << "\n";
 }
 
+///////////////////////////////////////////////////////////////////////////////
 void StdoutProgress (const KylaProgress* progress, void* context)
 {
 	static const char* padding = 

@@ -1,3 +1,12 @@
+/**
+[LICENSE BEGIN]
+kyla Copyright (C) 2016 Matthäus G. Chajdas
+
+This file is distributed under the BSD 2-clause license. See LICENSE for
+details.
+[LICENSE END]
+*/
+
 #include "BaseRepository.h"
 
 #include "sql/Database.h"
