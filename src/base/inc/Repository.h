@@ -132,7 +132,11 @@ enum class ValidationResult
 
 struct Repository
 {
+	Repository () = default;
 	virtual ~Repository () = default;
+
+	Repository (const Repository&) = delete;
+	Repository& operator= (const Repository&) = delete;
 
 	using ValidationCallback = std::function<void (const SHA256Digest& contentObject,
 		const char* path,

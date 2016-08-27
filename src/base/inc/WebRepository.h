@@ -10,7 +10,7 @@ details.
 #ifndef KYLA_CORE_INTERNAL_WEB_REPOSITORY_H
 #define KYLA_CORE_INTERNAL_WEB_REPOSITORY_H
 
-#include "PackedRepository.h"
+#include "PackedRepositoryBase.h"
 #include "sql/Database.h"
 
 namespace kyla {

@@ -20,9 +20,6 @@ public:
 	LooseRepository (const char* path);
 	~LooseRepository ();
 
-	LooseRepository (LooseRepository&& other);
-	LooseRepository& operator= (LooseRepository&& other);
-
 private:
 	void ValidateImpl (const ValidationCallback& validationCallback) override;
 

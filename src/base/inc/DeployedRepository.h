@@ -20,9 +20,6 @@ public:
 	DeployedRepository (const char* path, Sql::OpenMode openMode);
 	~DeployedRepository ();
 
-	DeployedRepository (DeployedRepository&& other);
-	DeployedRepository& operator= (DeployedRepository&& other);
-
 	static std::unique_ptr<DeployedRepository> CreateFrom (Repository& source,
 		const ArrayRef<Uuid>& filesets,
 		const Path& targetDirectory,
