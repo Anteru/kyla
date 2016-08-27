@@ -1,7 +1,7 @@
 <?xml version="1.0" ?>
 <FileRepository>
 	<Package>
-		<Type>Loose</Type>
+		<Type>Packed</Type>
 	</Package>
 	<FileSets>
 		<FileSet Id="cc3f60a7-7b24-4a54-8dfa-6f811efd4af0" Name="F0">
