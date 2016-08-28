@@ -15,6 +15,8 @@ details.
 #include <encode.h>
 #include <decode.h>
 
+#include <cassert>
+
 #include "Exception.h"
 
 namespace kyla {
@@ -156,19 +158,7 @@ int64 BrotliBlockCompressor::GetCompressionBoundImpl (const int64 input_size) co
 			KYLA_FILE_LINE);
 	}
 
-	///@TODO(minor) Replace with BrotliEncoderMaxCompressedSize once available
-	/*
-	This is copy-pasted from Brotli 0.5 which isn't available as a stable
-	release yet.
-
-	*/
-	size_t num_large_blocks = input_size >> 24;
-	size_t tail = input_size - (num_large_blocks << 24);
-	size_t tail_overhead = (tail > (1 << 20)) ? 4 : 3;
-	size_t overhead = 2 + (4 * num_large_blocks) + tail_overhead + 1;
-	size_t result = input_size + overhead;
-	if (input_size == 0) return 1;
-	return (result < static_cast<size_t> (input_size)) ? 0 : result;
+	return BrotliEncoderMaxCompressedSize (input_size);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -176,11 +166,11 @@ int64 BrotliBlockCompressor::CompressImpl (const ArrayRef<>& input,
 	const MutableArrayRef<>& output) const
 {
 	size_t encodedSize = output.GetSize ();
-	auto brotliParams = brotli::BrotliParams ();
-	brotliParams.quality = 5;
 
-	brotli::BrotliCompressBuffer (brotliParams,
-		input.GetSize (), static_cast<const uint8_t*> (input.GetData ()),
+	// Brotli default quality is 11, we don't want that as it's really slow
+
+	BrotliEncoderCompress (5 /* = quality */, BROTLI_DEFAULT_WINDOW,
+		BROTLI_DEFAULT_MODE, input.GetSize (), static_cast<const uint8_t*> (input.GetData ()),
 		&encodedSize, reinterpret_cast<uint8_t*> (output.GetData ()));
 	///@TODO(minor) check for overflow
 	return encodedSize;
@@ -191,7 +181,7 @@ void BrotliBlockCompressor::DecompressImpl (const ArrayRef<>& input,
 	const MutableArrayRef<>& output) const
 {
 	size_t decodedSize = output.GetSize ();
-	BrotliDecompressBuffer (input.GetSize (),
+	BrotliDecoderDecompress (input.GetSize (),
 		static_cast<const uint8_t*> (input.GetData ()),
 		&decodedSize, static_cast<uint8_t*> (output.GetData ()));
 	assert (decodedSize == output.GetSize ());

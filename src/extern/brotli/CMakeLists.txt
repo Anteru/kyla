@@ -1,80 +1,37 @@
 PROJECT(brotli)
 
-# version 0.4.0
+# version 0.5.2
 
 SET(BROTLI_ENC
-    enc/backward_references.cc
-    enc/backward_references.h
-    enc/bit_cost.h
-    enc/block_splitter.cc
-    enc/block_splitter.h
-    enc/brotli_bit_stream.cc
-    enc/brotli_bit_stream.h
-    enc/cluster.h
-    enc/command.h
-    enc/compressor.h
-    enc/compress_fragment.cc
-    enc/compress_fragment.h
-    enc/compress_fragment_two_pass.cc
-    enc/compress_fragment_two_pass.h
-    enc/context.h
-    enc/dictionary.cc
-    enc/dictionary.h
-    enc/dictionary_hash.h
-    enc/encode.cc
-    enc/encode.h
-    enc/encode_parallel.cc
-    enc/encode_parallel.h
-    enc/entropy_encode.cc
-    enc/entropy_encode.h
-    enc/entropy_encode_static.h
-    enc/fast_log.h
-    enc/find_match_length.h
-    enc/hash.h
-    enc/histogram.cc
-    enc/histogram.h
-    enc/literal_cost.cc
-    enc/literal_cost.h
-    enc/metablock.cc
-    enc/metablock.h
-    enc/port.h
-    enc/prefix.h
-    enc/ringbuffer.h
-    enc/static_dict.cc
-    enc/static_dict.h
-    enc/static_dict_lut.h
-    enc/streams.cc
-    enc/streams.h
-    enc/transform.h
-    enc/types.h
-    enc/utf8_util.cc
-    enc/utf8_util.h
-    enc/write_bits.h
-    )
+  enc/backward_references.c
+  enc/bit_cost.c
+  enc/block_splitter.c
+  enc/brotli_bit_stream.c
+  enc/cluster.c
+  enc/compress_fragment.c
+  enc/compress_fragment_two_pass.c
+  enc/encode.c
+  enc/entropy_encode.c
+  enc/histogram.c
+  enc/literal_cost.c
+  enc/memory.c
+  enc/metablock.c
+  enc/static_dict.c
+  enc/utf8_util.c
+)
 
 SET(BROTLI_DEC
     dec/bit_reader.c
-    dec/bit_reader.h
-    dec/context.h
-    dec/decode.c
-    dec/decode.h
-    # dec/dictionary.c
-    dec/dictionary.h
-    dec/huffman.c
-    dec/huffman.h
-    dec/port.h
-    dec/prefix.h
-    dec/state.c
-    dec/state.h
-    dec/transform.h
-    dec/types.h
-    )
+	dec/decode.c
+	dec/huffman.c
+	dec/state.c
+)
 
 IF(MSVC)
 	ADD_DEFINITIONS(/wd4334 /wd4146)
 ENDIF()
 
-ADD_LIBRARY(brotli STATIC ${BROTLI_ENC} ${BROTLI_DEC})
+ADD_LIBRARY(brotli STATIC ${BROTLI_ENC} ${BROTLI_DEC} common/dictionary.c)
 TARGET_INCLUDE_DIRECTORIES(brotli
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/enc
