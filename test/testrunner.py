@@ -233,21 +233,27 @@ if __name__ == '__main__':
     startTime = time.time ()
 
     tests = glob.glob ('tests/' + args.regex + '.json')
-    results = []
+    failures = 0
 
     func = partial (ExecuteTest, kyla=args.binary, verbose=args.verbose)
 
     if args.parallel == 1:
         for i, test in enumerate (tests, 1):
-            print ('{}/{}'.format (i, len (tests)), FormatResult (func (test)))
+            testResult = func (test)
+            print ('{}/{}'.format (i, len (tests)), FormatResult (testResult))
+
+            if not testResult [1]:
+                failures += 1
     else:
         processCount = args.parallel if args.parallel != 0 else None
         with Pool(processCount) as p:
             for i, r in enumerate(p.imap (func, tests), 1):
                 print ('{}/{}'.format (i, len (tests)), FormatResult (r))
 
+                if not r [1]:
+                    failures += 1
+
     endTime = time.time ()
     print ('Elapsed time: {0:.3} sec'.format (endTime - startTime))
 
-    failures = sum([0 if r[1] else 1 for r in results])
     sys.exit (failures)
