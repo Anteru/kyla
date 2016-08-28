@@ -15,12 +15,14 @@ details.
 #include <encode.h>
 #include <decode.h>
 
+#include "Exception.h"
+
 namespace kyla {
 ///////////////////////////////////////////////////////////////////////////////
 struct NullBlockCompressor final : public BlockCompressor
 {
-	int GetCompressionBoundImpl (const int inputSize) const override;
-	int CompressImpl (const ArrayRef<>& input,
+	int64 GetCompressionBoundImpl (const int64 inputSize) const override;
+	int64 CompressImpl (const ArrayRef<>& input,
 		const MutableArrayRef<>& output) const override;
 	void DecompressImpl (const ArrayRef<>& input,
 		const MutableArrayRef<>& output) const override;
@@ -29,8 +31,8 @@ struct NullBlockCompressor final : public BlockCompressor
 ///////////////////////////////////////////////////////////////////////////////
 struct ZipBlockCompressor final : public BlockCompressor
 {
-	int GetCompressionBoundImpl (const int inputSize) const override;
-	int CompressImpl (const ArrayRef<>& input,
+	int64 GetCompressionBoundImpl (const int64 inputSize) const override;
+	int64 CompressImpl (const ArrayRef<>& input,
 		const MutableArrayRef<>& output) const override;
 	void DecompressImpl (const ArrayRef<>& input,
 		const MutableArrayRef<>& output) const override;
@@ -39,8 +41,8 @@ struct ZipBlockCompressor final : public BlockCompressor
 ///////////////////////////////////////////////////////////////////////////////
 struct BrotliBlockCompressor final : public BlockCompressor
 {
-	int GetCompressionBoundImpl (const int inputSize) const override;
-	int CompressImpl (const ArrayRef<>& input,
+	int64 GetCompressionBoundImpl (const int64 inputSize) const override;
+	int64 CompressImpl (const ArrayRef<>& input,
 		const MutableArrayRef<>& output) const override;
 	void DecompressImpl (const ArrayRef<>& input,
 		const MutableArrayRef<>& output) const override;
@@ -57,13 +59,13 @@ BlockCompressor::~BlockCompressor ()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int BlockCompressor::GetCompressionBound (const int inputSize) const
+int64 BlockCompressor::GetCompressionBound (const int64 inputSize) const
 {
 	return GetCompressionBoundImpl (inputSize);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int BlockCompressor::Compress (const ArrayRef<>& input,
+int64 BlockCompressor::Compress (const ArrayRef<>& input,
 	const MutableArrayRef<>& output)
 {
 	return CompressImpl (input, output);
@@ -77,16 +79,25 @@ void BlockCompressor::Decompress (const ArrayRef<>& input,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int ZipBlockCompressor::GetCompressionBoundImpl (const int inputSize) const
+int64 ZipBlockCompressor::GetCompressionBoundImpl (const int64 inputSize) const
 {
-	return ::compressBound (inputSize);
+	if (inputSize > std::numeric_limits<uLong>::max ()) {
+		throw RuntimeException ("Invalid buffer size",
+			KYLA_FILE_LINE);
+	}
+
+	return ::compressBound (static_cast<uLong> (inputSize));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int ZipBlockCompressor::CompressImpl (const ArrayRef<>& input,
+int64 ZipBlockCompressor::CompressImpl (const ArrayRef<>& input,
 	const MutableArrayRef<>& output) const
 {
-	///@TODO(minor) Check for overflow
+	if (input.GetSize () > std::numeric_limits<uLong>::max ()) {
+		throw RuntimeException ("Invalid buffer size",
+			KYLA_FILE_LINE);
+	}
+
 	::uLongf compressedSize = static_cast<uLongf> (output.GetSize ());
 	::compress (
 		static_cast<::Bytef*> (output.GetData()),
@@ -100,7 +111,11 @@ int ZipBlockCompressor::CompressImpl (const ArrayRef<>& input,
 void ZipBlockCompressor::DecompressImpl (const ArrayRef<>& input,
 	const MutableArrayRef<>& output) const
 {
-	///@TODO(minor) Check for overflow
+	if (output.GetSize () > std::numeric_limits<uLong>::max ()) {
+		throw RuntimeException ("Invalid buffer size",
+			KYLA_FILE_LINE);
+	}
+
 	::uLongf decompressedSize = static_cast<uLongf> (output.GetSize ());
 	::uncompress (
 		static_cast<::Bytef*> (output.GetData ()),
@@ -110,13 +125,13 @@ void ZipBlockCompressor::DecompressImpl (const ArrayRef<>& input,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int NullBlockCompressor::GetCompressionBoundImpl (const int inputSize) const
+int64 NullBlockCompressor::GetCompressionBoundImpl (const int64 inputSize) const
 {
 	return inputSize;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int NullBlockCompressor::CompressImpl (const ArrayRef<>& input,
+int64 NullBlockCompressor::CompressImpl (const ArrayRef<>& input,
 	const MutableArrayRef<>& output) const
 {
 	::memcpy (output.GetData (), input.GetData (), input.GetSize ());
@@ -132,25 +147,32 @@ void NullBlockCompressor::DecompressImpl (const ArrayRef<>& input,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int BrotliBlockCompressor::GetCompressionBoundImpl (const int input_size) const
+int64 BrotliBlockCompressor::GetCompressionBoundImpl (const int64 input_size) const
 {
+	// Only relevant on 32-bit systems
+	if ((sizeof (input_size) > sizeof (size_t))
+		&& (input_size > static_cast<int64> (std::numeric_limits<size_t>::max ()))) {
+		throw RuntimeException ("Invalid buffer size",
+			KYLA_FILE_LINE);
+	}
+
+	///@TODO(minor) Replace with BrotliEncoderMaxCompressedSize once available
 	/*
 	This is copy-pasted from Brotli 0.5 which isn't available as a stable
 	release yet.
 
 	*/
-	///@TODO(minor) Replace with BrotliEncoderMaxCompressedSize once available
 	size_t num_large_blocks = input_size >> 24;
 	size_t tail = input_size - (num_large_blocks << 24);
 	size_t tail_overhead = (tail > (1 << 20)) ? 4 : 3;
 	size_t overhead = 2 + (4 * num_large_blocks) + tail_overhead + 1;
 	size_t result = input_size + overhead;
 	if (input_size == 0) return 1;
-	return (result < input_size) ? 0 : result;
+	return (result < static_cast<size_t> (input_size)) ? 0 : result;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int BrotliBlockCompressor::CompressImpl (const ArrayRef<>& input,
+int64 BrotliBlockCompressor::CompressImpl (const ArrayRef<>& input,
 	const MutableArrayRef<>& output) const
 {
 	size_t encodedSize = output.GetSize ();
@@ -161,7 +183,7 @@ int BrotliBlockCompressor::CompressImpl (const ArrayRef<>& input,
 		input.GetSize (), static_cast<const uint8_t*> (input.GetData ()),
 		&encodedSize, reinterpret_cast<uint8_t*> (output.GetData ()));
 	///@TODO(minor) check for overflow
-	return static_cast<int> (encodedSize);
+	return encodedSize;
 }
 
 ///////////////////////////////////////////////////////////////////////////////

@@ -37,13 +37,13 @@ public:
 	BlockCompressor (const BlockCompressor&) = delete;
 	BlockCompressor& operator= (const BlockCompressor&) = delete;
 
-	int GetCompressionBound (const int inputSize) const;
-	int Compress (const ArrayRef<>& input, const MutableArrayRef<>& output);
+	int64 GetCompressionBound (const int64 inputSize) const;
+	int64 Compress (const ArrayRef<>& input, const MutableArrayRef<>& output);
 	void Decompress (const ArrayRef<>& input, const MutableArrayRef<>& output);
 
 private:
-	virtual int GetCompressionBoundImpl (const int inputSize) const = 0;
-	virtual int CompressImpl (const ArrayRef<>& input,
+	virtual int64 GetCompressionBoundImpl (const int64 inputSize) const = 0;
+	virtual int64 CompressImpl (const ArrayRef<>& input,
 		const MutableArrayRef<>& output) const = 0;
 	virtual void DecompressImpl (const ArrayRef<>& input,
 		const MutableArrayRef<>& output) const = 0;
