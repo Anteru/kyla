@@ -36,7 +36,7 @@ Reference
 
   * ``FileSet`` describes the files stored within a file set. The file sets must be disjoint - that means every file path must be unique inside the repository, and must be only assigned to one file set. Each file set id must be unique within one file repository.
 
-    A file set must contain an ``Id`` attribute which must be a valid Uuid. The id is used during the installation to uniquely identify a file set.
+    A file set must contain an ``Id`` attribute which must be a valid `Uuid <https://en.wikipedia.org/wiki/Universally_unique_identifier>`_. The id is used during the installation to uniquely identify a file set.
 
     A file set must contain one or more ``File`` elements. A ``File`` element must have the ``Source`` attribute set and it must point to an existing file. Optionally, the ``Target`` attribute can be specified to store a file at a different location. This can be used to have a single source file deployed to two different folders, for instance. If no ``Target`` is present, the default is to use the ``Source`` path.
 
