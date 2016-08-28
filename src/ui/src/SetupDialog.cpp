@@ -217,6 +217,8 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 		item->setCheckState (Qt::Checked);
 	}
 
+	ui->featureSelection->sortItems ();
+
 	connect (ui->startInstallationButton, &QPushButton::clicked,
 		[=] () -> void {
 		ui->startInstallationButton->setEnabled (false);
