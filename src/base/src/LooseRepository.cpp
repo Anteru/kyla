@@ -73,7 +73,8 @@ void LooseRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& reque
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void LooseRepository::ValidateImpl (const Repository::ValidationCallback& validationCallback)
+void LooseRepository::ValidateImpl (const Repository::ValidationCallback& validationCallback,
+	ExecutionContext& context)
 {
 	// Get a list of (file, hash, size)
 	// We sort by size first so we get small objects out of the way first
@@ -85,6 +86,17 @@ void LooseRepository::ValidateImpl (const Repository::ValidationCallback& valida
 		"ORDER BY Size";
 	
 	auto query = db_.Prepare (querySql);
+
+	const int64 objectCount = [=]() -> int64 {
+		static const char* queryObjectCountSql =
+			"SELECT COUNT(*) FROM content_objects";
+		auto countQuery = db_.Prepare (queryObjectCountSql);
+		countQuery.Step ();
+		return countQuery.GetInt64 (0);
+	} ();
+
+	ProgressHelper progress (context.progress);
+	progress.SetStageTarget (objectCount);
 
 	while (query.Step ()) {
 		SHA256Digest hash;
@@ -99,6 +111,7 @@ void LooseRepository::ValidateImpl (const Repository::ValidationCallback& valida
 				filePath.string ().c_str (),
 				ValidationResult::Missing);
 
+			++progress;
 			continue;
 		}
 
@@ -113,6 +126,7 @@ void LooseRepository::ValidateImpl (const Repository::ValidationCallback& valida
 				filePath.string ().c_str (),
 				ValidationResult::Corrupted);
 
+			++progress;
 			continue;
 		}
 
@@ -123,17 +137,21 @@ void LooseRepository::ValidateImpl (const Repository::ValidationCallback& valida
 				filePath.string ().c_str (),
 				ValidationResult::Corrupted);
 
+			++progress;
 			continue;
 		}
 
 		validationCallback (hash,
 			filePath.string ().c_str (),
 			ValidationResult::Ok);
+
+		++progress;
 	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void LooseRepository::RepairImpl (Repository& source)
+void LooseRepository::RepairImpl (Repository& source,
+	ExecutionContext& context)
 {
 	// We use the validation logic here to find missing content objects
 	// and fetch them from the source repository
@@ -143,12 +161,13 @@ void LooseRepository::RepairImpl (Repository& source)
 
 	std::vector<SHA256Digest> requiredContentObjects;
 
+	///@TODO(minor) Handle progress reporting - should call an internal validate
 	Validate ([&](const SHA256Digest& hash, const char*, const ValidationResult result) -> void {
 		if (result != ValidationResult::Ok) {
 			// Missing or corrupted
 			requiredContentObjects.push_back (hash);
 		}
-	});
+	}, context);
 
 	source.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
 		const ArrayRef<>& contents,

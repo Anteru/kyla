@@ -23,17 +23,19 @@ public:
 	static std::unique_ptr<DeployedRepository> CreateFrom (Repository& source,
 		const ArrayRef<Uuid>& filesets,
 		const Path& targetDirectory,
-		Log& log, Progress& progress);
+		ExecutionContext& context);
 
 private:
-	void ValidateImpl (const ValidationCallback& validationCallback) override;
+	void ValidateImpl (const ValidationCallback& validationCallback,
+		ExecutionContext& context) override;
 
 	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) override;
-	void RepairImpl (Repository& source) override;
+	void RepairImpl (Repository& source,
+		ExecutionContext& context) override;
 	void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& filesets,
-		Log& log, Progress& progress) override;
+		ExecutionContext& context) override;
 
 	Sql::Database& GetDatabaseImpl () override;
 

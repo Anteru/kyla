@@ -21,6 +21,10 @@ class SetupDialog;
 
 class SetupDialog;
 
+/**
+The install thread executes the actual installation. It's on a separate thread
+to not block the UI.
+*/
 class InstallThread : public QThread
 {
 	Q_OBJECT 

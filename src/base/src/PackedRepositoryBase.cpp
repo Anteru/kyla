@@ -168,7 +168,8 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void PackedRepositoryBase::ValidateImpl (const Repository::ValidationCallback& validationCallback)
+void PackedRepositoryBase::ValidateImpl (const Repository::ValidationCallback& validationCallback,
+	ExecutionContext& context)
 {
 	auto& db = GetDatabase ();
 

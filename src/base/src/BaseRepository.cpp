@@ -81,13 +81,15 @@ std::string BaseRepository::GetFilesetNameImpl (const Uuid& id)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void BaseRepository::RepairImpl (Repository& /*source*/)
+void BaseRepository::RepairImpl (Repository& /*source*/,
+	ExecutionContext& /*context*/)
 {
 	throw RuntimeException ("NOT IMPLEMENTED", KYLA_FILE_LINE);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void BaseRepository::ValidateImpl (const ValidationCallback& /*validationCallback*/)
+void BaseRepository::ValidateImpl (const ValidationCallback& /*validationCallback*/,
+	ExecutionContext& /*context*/)
 {
 	throw RuntimeException ("NOT IMPLEMENTED", KYLA_FILE_LINE);
 }
@@ -95,7 +97,7 @@ void BaseRepository::ValidateImpl (const ValidationCallback& /*validationCallbac
 ///////////////////////////////////////////////////////////////////////////////
 void BaseRepository::ConfigureImpl (Repository& /*other*/,
 	const ArrayRef<Uuid>& /*filesets*/,
-	Log& /*log*/, Progress& /*progress*/)
+	ExecutionContext& /*context*/)
 {
 	throw RuntimeException ("NOT IMPLEMENTED", KYLA_FILE_LINE);
 }

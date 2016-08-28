@@ -44,19 +44,32 @@ Sql::Database& DeployedRepository::GetDatabaseImpl ()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void DeployedRepository::ValidateImpl (const Repository::ValidationCallback& validationCallback)
+void DeployedRepository::ValidateImpl (const Repository::ValidationCallback& validationCallback,
+	ExecutionContext& context)
 {
 	// Get a list of (file, hash, size)
 	// We sort by size first so we get small objects out of the way first
 	// (slower progress, but more things getting processed) and speed up
 	// towards the end (larger files, higher throughput)
-	static const char* querySql =
+	static const char* queryFilesContentSql =
 		"SELECT files.path, content_objects.Hash, content_objects.Size "
 		"FROM files "
 		"LEFT JOIN content_objects ON content_objects.Id = files.ContentObjectId "
 		"ORDER BY size";
 	
-	auto query = db_.Prepare (querySql);
+	auto query = db_.Prepare (queryFilesContentSql);
+
+	const int64 objectCount = [=]() -> int64
+	{
+		static const char* queryObjectCountSql =
+			"SELECT COUNT(*) FROM content_objects";
+		auto countQuery = db_.Prepare (queryObjectCountSql);
+		countQuery.Step ();
+		return countQuery.GetInt64 (0);
+	} ();
+
+	ProgressHelper progress (context.progress);
+	progress.SetStageTarget (objectCount);
 
 	while (query.Step ()) {
 		const Path path = query.GetText (0);
@@ -69,6 +82,7 @@ void DeployedRepository::ValidateImpl (const Repository::ValidationCallback& val
 			validationCallback (hash, filePath.string ().c_str (),
 				ValidationResult::Missing);
 
+			++progress;
 			continue;
 		}
 
@@ -82,6 +96,7 @@ void DeployedRepository::ValidateImpl (const Repository::ValidationCallback& val
 			validationCallback (hash, filePath.string ().c_str (),
 				ValidationResult::Corrupted);
 
+			++progress;
 			continue;
 		}
 
@@ -91,16 +106,20 @@ void DeployedRepository::ValidateImpl (const Repository::ValidationCallback& val
 			validationCallback (hash, filePath.string ().c_str (),
 				ValidationResult::Corrupted);
 
+			++progress;
 			continue;
 		}
 
 		validationCallback (hash, filePath.string ().c_str (),
 			ValidationResult::Ok);
+
+		++progress;
 	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void DeployedRepository::RepairImpl (Repository& source)
+void DeployedRepository::RepairImpl (Repository& source,
+	ExecutionContext& context)
 {
 	// We use the validation logic here to find missing content objects
 	// and fetch them from the source repository
@@ -114,6 +133,7 @@ void DeployedRepository::RepairImpl (Repository& source)
 	// Extract keys
 	std::vector<SHA256Digest> requiredContentObjects;
 
+	///@TODO(minor) Handle progress reporting - should call an internal validate
 	Validate ([&](const SHA256Digest& hash, const char* path, const ValidationResult result) -> void {
 		if (result != ValidationResult::Ok) {
 			// Missing or corrupted
@@ -125,7 +145,7 @@ void DeployedRepository::RepairImpl (Repository& source)
 
 			requiredEntries.emplace (std::make_pair (hash, Path{ path }));
 		}
-	});
+	}, context);
 
 	source.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
 		const ArrayRef<>& contents,
@@ -182,7 +202,7 @@ void DeployedRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& re
 ///////////////////////////////////////////////////////////////////////////////
 void DeployedRepository::ConfigureImpl (Repository& source,
 	const ArrayRef<Uuid>& filesets,
-	Log& log, Progress& progress)
+	ExecutionContext& context)
 {
 	// We do this in WAL mode for performance
 	db_.Execute ("PRAGMA journal_mode = WAL");
@@ -205,7 +225,7 @@ void DeployedRepository::ConfigureImpl (Repository& source,
 	// files we're about to configure
 	db_.AttachTemporaryCopy ("source", source.GetDatabase ());
 
-	ProgressHelper progressHelper (progress);
+	ProgressHelper progressHelper (context.progress);
 	progressHelper.Start (2);
 
 	progressHelper.AdvanceStage ("Setup");
@@ -215,16 +235,16 @@ void DeployedRepository::ConfigureImpl (Repository& source,
 	auto pendingFileSetTable = db_.CreateTemporaryTable ("pending_file_sets",
 		"Uuid BLOB NOT NULL UNIQUE");
 
-	PreparePendingFilesets (log, filesets, progressHelper);
+	PreparePendingFilesets (context.log, filesets, progressHelper);
 	UpdateFilesets ();
 	UpdateFilesetIdsForUnchangedFiles ();
-	RemoveChangedFiles (log);
+	RemoveChangedFiles (context.log);
 
 	progressHelper.SetStageFinished ();
 	progressHelper.AdvanceStage ("Install");
-	GetNewContentObjects (source, log, progressHelper);
-	CopyExistingFiles (log);
-	Cleanup (log);
+	GetNewContentObjects (source, context.log, progressHelper);
+	CopyExistingFiles (context.log);
+	Cleanup (context.log);
 	progressHelper.SetStageFinished ();
 
 	db_.Detach ("source");
@@ -618,7 +638,7 @@ void DeployedRepository::Cleanup (Log& log)
 std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (Repository& source,
 	const ArrayRef<Uuid>& filesets,
 	const Path& targetDirectory,
-	Log& log, Progress& progress)
+	Repository::ExecutionContext& context)
 {
 	boost::filesystem::create_directories (targetDirectory);
 
@@ -631,7 +651,7 @@ std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (Repository& 
 	std::unique_ptr<DeployedRepository> result (new DeployedRepository{ 
 		targetDirectory.string ().c_str (), Sql::OpenMode::ReadWrite });
 
-	result->Configure (source, filesets, log, progress);
+	result->Configure (source, filesets, context);
 
 	return std::move (result);
 }

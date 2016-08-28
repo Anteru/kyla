@@ -16,22 +16,23 @@ details.
 
 namespace kyla {
 ///////////////////////////////////////////////////////////////////////////////
-void Repository::Validate (const ValidationCallback& validationCallback)
+void Repository::Validate (const ValidationCallback& validationCallback,
+	ExecutionContext& context)
 {
-	ValidateImpl (validationCallback);
+	ValidateImpl (validationCallback, context);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void Repository::Repair (Repository& source)
+void Repository::Repair (Repository& source, ExecutionContext& context)
 {
-	RepairImpl (source);
+	RepairImpl (source, context);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 void Repository::Configure (Repository& source, const ArrayRef<Uuid>& filesets,
-	Log& log, Progress& progress)
+	ExecutionContext& context)
 {
-	ConfigureImpl (source, filesets, log, progress);
+	ConfigureImpl (source, filesets, context);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -95,12 +96,12 @@ std::unique_ptr<Repository> OpenRepository (const char* path,
 std::unique_ptr<Repository> DeployRepository (Repository& source,
 	const char* destinationPath,
 	const ArrayRef<Uuid>& filesets,
-	Log& log, Progress& progress)
+	Repository::ExecutionContext& context)
 {
 	Path targetPath{ destinationPath };
 	boost::filesystem::create_directories (destinationPath);
 
 	return std::unique_ptr<Repository> (DeployedRepository::CreateFrom (source, filesets, targetPath, 
-		log, progress).release ());
+		context).release ());
 }
 }

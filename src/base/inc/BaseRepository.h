@@ -24,11 +24,12 @@ private:
 	virtual int64_t GetFilesetFileCountImpl (const Uuid& filesetId) override;
 	virtual int64_t GetFilesetSizeImpl (const Uuid& filesetId) override;
 
-	void RepairImpl (Repository& source) override;
-	void ValidateImpl (const ValidationCallback& validationCallback) override;
+	void RepairImpl (Repository& source, ExecutionContext& context) override;
+	void ValidateImpl (const ValidationCallback& validationCallback,
+		ExecutionContext& context) override;
 	void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& filesets,
-		Log& log, Progress& progress) override;
+		ExecutionContext& context) override;
 };
 }
 

@@ -138,11 +138,18 @@ struct Repository
 	Repository (const Repository&) = delete;
 	Repository& operator= (const Repository&) = delete;
 
+	struct ExecutionContext
+	{
+		Log& log;
+		Progress& progress;
+	};
+
 	using ValidationCallback = std::function<void (const SHA256Digest& contentObject,
 		const char* path,
 		const ValidationResult validationResult)>;
 
-	void Validate (const ValidationCallback& validationCallback);
+	void Validate (const ValidationCallback& validationCallback,
+		ExecutionContext& context);
 
 	using GetContentObjectCallback = std::function<void (const SHA256Digest& objectDigest,
 		const ArrayRef<>& contents,
@@ -152,11 +159,12 @@ struct Repository
 	void GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback);
 
-	void Repair (Repository& source);
+	void Repair (Repository& source,
+		ExecutionContext& context);
 
 	void Configure (Repository& other,
 		const ArrayRef<Uuid>& filesets,
-		Log& log, Progress& progress);
+		ExecutionContext& context);
 
 	std::vector<Uuid> GetFilesets ();
 	std::string GetFilesetName (const Uuid& filesetId);
@@ -166,17 +174,19 @@ struct Repository
 	Sql::Database& GetDatabase ();
 
 private:
-	virtual void ValidateImpl (const ValidationCallback& validationCallback) = 0;
+	virtual void ValidateImpl (const ValidationCallback& validationCallback,
+		ExecutionContext& context) = 0;
 	virtual void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) = 0;
-	virtual void RepairImpl (Repository& source) = 0;
+	virtual void RepairImpl (Repository& source,
+		ExecutionContext& context) = 0;
 	virtual std::vector<Uuid> GetFilesetsImpl () = 0;
 	virtual std::string GetFilesetNameImpl (const Uuid& filesetId) = 0;
 	virtual int64_t GetFilesetFileCountImpl (const Uuid& filesetId) = 0;
 	virtual int64_t GetFilesetSizeImpl (const Uuid& filesetId) = 0;
 	virtual void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& filesets,
-		Log& log, Progress& progress) = 0;
+		ExecutionContext& context) = 0;
 	virtual Sql::Database& GetDatabaseImpl () = 0;
 };
 
@@ -186,7 +196,7 @@ std::unique_ptr<Repository> OpenRepository (const char* path,
 std::unique_ptr<Repository> DeployRepository (Repository& source,
 	const char* targetPath,
 	const ArrayRef<Uuid>& selectedFilesets,
-	Log& log, Progress& progressHelper);
+	Repository::ExecutionContext& context);
 }
 
 #endif

@@ -255,11 +255,14 @@ int kylaExecute (
 		}
 	}
 
+	kyla::Repository::ExecutionContext executionContext {
+		*internal->log, *internal->progress };
+
 	switch (action) {
 	case kylaAction_Install:
 		targetRepository->p = kyla::DeployRepository (*sourceRepository->p,
 			targetRepository->path.string ().c_str (), filesetIds, 
-			*internal->log, *internal->progress);
+			executionContext);
 		break;
 
 	case kylaAction_Configure:
@@ -269,7 +272,7 @@ int kylaExecute (
 			return kylaResult_Error;
 		}
 		targetRepository->p->Configure (
-			*sourceRepository->p, filesetIds, *internal->log, *internal->progress);
+			*sourceRepository->p, filesetIds, executionContext);
 
 		break;
 
@@ -281,7 +284,7 @@ int kylaExecute (
 		}
 
 		///@TODO(minor) Pass through the fileset ids
-		targetRepository->p->Repair (*sourceRepository->p);
+		targetRepository->p->Repair (*sourceRepository->p, executionContext);
 
 		break;
 
@@ -303,7 +306,7 @@ int kylaExecute (
 					&info,
 					internal->validationCallbackContext);
 			}
-		});
+		}, executionContext);
 
 		break;
 

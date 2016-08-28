@@ -18,6 +18,11 @@ namespace Ui {
 	class SplashDialog;
 }
 
+/**
+Separate thread which opens the source repository - as this can go over the
+network, it may take a while and we don't want to block the main thread/UI
+while it is being opened.
+*/
 class OpenSourceRepositoryThread : public QThread
 {
 	Q_OBJECT
