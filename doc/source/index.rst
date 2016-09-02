@@ -9,6 +9,8 @@ Contents:
     concepts
     repository-definition
     repository-types
+    comparison
+    licenses
 
 Introduction
 ------------
@@ -25,7 +27,7 @@ kyla is a file content management system. It handles file contents, similar to a
 
 .. note::
 
-    kyla is not a full-fledged installer taking care of registry keys, registering services, or similar. It is designed to deploy and manage applications in a single folder. If you need additional pre/post install hooks, you can easily build them on top of kyla.
+    kyla is not a full-fledged installer taking care of registry keys, registering services, or similar. It is designed to deploy and manage applications in a single folder. If you need additional pre/post install hooks, you can easily build them on top of kyla. For a comparison with existing tools, check out the :doc:`comparison`.
 
 Overview
 --------
