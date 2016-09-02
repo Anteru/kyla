@@ -8,3 +8,16 @@ kyla supports several *repository types* with different capabilities. The built-
 * ``Packed``: A packed repository consists of the database and one or more package files. Content objects are spread over package files. A packed repository supports only validation.
 
 A ``Packed`` repository can be also be used for web installation. Putting all files onto a server which supports `HTTP range requests <https://tools.ietf.org/html/rfc7233>`_ makes the packed repository readable over the web.
+
+Supported operations
+--------------------
+
++----------+---------------------+--------+--------+-----------+
+| Type     | Installation source | Verify | Repair | Configure |
++==========+=====================+========+========+===========+
+| Loose    | Yes                 | Yes    | Yes    | No        |
++----------+---------------------+--------+--------+-----------+
+| Deployed | Yes                 | Yes    | Yes    | Yes       |
++----------+---------------------+--------+--------+-----------+
+| Packed   | Yes                 | Yes    | No     | No        |
++----------+---------------------+--------+--------+-----------+
