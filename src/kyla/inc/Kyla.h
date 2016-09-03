@@ -10,6 +10,7 @@ details.
 #ifndef KYLA_PUBLIC_API_H
 #define KYLA_PUBLIC_API_H
 
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef KYLA_BUILD_LIBRARY

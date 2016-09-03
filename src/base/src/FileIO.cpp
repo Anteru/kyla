@@ -441,6 +441,10 @@ Path GetTemporaryFilename ()
 	}
 
 	return Path{ tempFileBuffer };
+#elif KYLA_PLATFORM_LINUX
+	 char tempPathBuffer[L_tmpnam] = {0};
+	 tmpnam(tempPathBuffer);
+	 return Path{ tempPathBuffer };
 #else
 #error Unsupported platform
 #endif

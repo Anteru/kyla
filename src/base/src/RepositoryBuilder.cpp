@@ -144,7 +144,7 @@ void AssignFileSetsToPackages (const pugi::xml_document& doc,
 		}
 
 		auto& package = sourcePackages.find (sourcePackageId)->second;
-		
+
 		for (const auto& fileNode : fileSetNode.node ().children ("File")) {
 			File file;
 			file.source = fileNode.attribute ("Source").as_string ();
@@ -358,7 +358,7 @@ struct PackedRepositoryBuilder final : public RepositoryBuilder
 			// Some compressors expect integer-sized chunks, so we clamp to
 			// 2^31-1 here - this is a safety measure, as 2 GiB sized chunks
 			// should never be used
-			chunkSize_ = std::min (chunkSize_, (1ll << 31) - 1);
+			chunkSize_ = std::min (chunkSize_, static_cast<int64> ((1ll << 31) - 1));
 
 			assert (chunkSize_ >= 1);
 		}
@@ -376,7 +376,7 @@ struct PackedRepositoryBuilder final : public RepositoryBuilder
 		db.Execute (install_db_structure);
 		db.Execute ("PRAGMA journal_mode=WAL;");
 		db.Execute ("PRAGMA synchronous=NORMAL;");
-		
+
 		auto uniqueObjects = PopulateUniqueContentObjects (db, packages);
 
 		for (const auto& sourcePackage : packages) {
@@ -385,8 +385,8 @@ struct PackedRepositoryBuilder final : public RepositoryBuilder
 			}
 
 			const auto fileToFileSetId = PopulateFileSets (db,
-				sourcePackage.second.fileSets); 
-			
+				sourcePackage.second.fileSets);
+
 			WritePackage (db, sourcePackage.second,
 				fileToFileSetId, uniqueObjects,
 				ctx.targetDirectory);
@@ -419,7 +419,7 @@ private:
 				if (uniqueObjects.find (contentObject.hash) != uniqueObjects.end ()) {
 					continue;
 				}
-				
+
 				contentObjectInsertQuery.BindArguments (
 					contentObject.hash,
 					contentObject.size);
@@ -521,7 +521,7 @@ private:
 		packageInsertQuery.Reset ();
 
 		const auto packageId = db.GetLastRowId ();
-		
+
 		auto compressor = CreateBlockCompressor (sourcePackage.compressionAlgorithm);
 		auto compressorId = IdFromCompressionAlgorithm (sourcePackage.compressionAlgorithm);
 
@@ -543,7 +543,7 @@ private:
 			}
 
 			///@TODO(minor) Support per-file compression algorithms
-			
+
 			auto inputFile = OpenFile (kv.sourceFile, FileOpenMode::Read);
 			const auto inputFileSize = inputFile->GetSize ();
 
@@ -551,7 +551,7 @@ private:
 				// If it's a null-byte file, we still store a storage mapping
 				const auto startOffset = package->Tell ();
 
-				storageMappingInsertQuery.BindArguments (contentObjectId, 
+				storageMappingInsertQuery.BindArguments (contentObjectId,
 					packageId,
 					startOffset, 0 /* = size */,
 					0 /* = output offset */,
@@ -578,7 +578,7 @@ private:
 					assert ((endOffset - startOffset) == compressedSize);
 
 					storageMappingInsertQuery.BindArguments (contentObjectId, packageId,
-						startOffset, endOffset - startOffset, 
+						startOffset, endOffset - startOffset,
 						readOffset,
 						bytesRead,
 						compressorId);

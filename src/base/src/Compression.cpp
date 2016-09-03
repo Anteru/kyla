@@ -15,6 +15,8 @@ details.
 #include <encode.h>
 #include <decode.h>
 
+#include <limits>
+
 #include <cassert>
 
 #include "Exception.h"

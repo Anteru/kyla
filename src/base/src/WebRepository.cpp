@@ -59,7 +59,7 @@ struct WebRepository::Impl
 		{
 			InternetCloseHandle (handle_);
 		}
-		
+
 		int64 Read (const MutableArrayRef<>& buffer)
 		{
 			int64 readTotal = 0;
@@ -67,7 +67,7 @@ struct WebRepository::Impl
 
 			while (readTotal < buffer.GetSize ()) {
 				DWORD toRead = static_cast<DWORD> (
-					std::min<int64> (buffer.GetSize () - readTotal, 
+					std::min<int64> (buffer.GetSize () - readTotal,
 					std::numeric_limits<DWORD>::max ()));
 				InternetReadFile (handle_,
 					buffer.GetData (), toRead, &read);
@@ -103,6 +103,25 @@ struct WebRepository::Impl
 	}
 
 	HINTERNET internet_;
+#elif KYLA_PLATFORM_LINUX
+	struct File
+	{
+		int64 Read (const MutableArrayRef<>& buffer)
+		{
+			throw RuntimeException ("NOT IMPLEMENTED", KYLA_FILE_LINE);
+		}
+
+		void Seek (int64 offset)
+		{
+			throw RuntimeException ("NOT IMPLEMENTED", KYLA_FILE_LINE);
+		}
+	};
+
+	std::unique_ptr<File> Open (const std::string& file)
+	{
+		throw RuntimeException ("NOT IMPLEMENTED", KYLA_FILE_LINE);
+	}
+#else
 #endif
 };
 
@@ -128,11 +147,11 @@ WebRepository::WebRepository (const std::string& path)
 
 		for (;;) {
 			const auto bytesRead = dbWebFile->Read (buffer);
-		
+
 			if (bytesRead == 0) {
 				break;
 			}
-		
+
 			dbLocalFile->Write (ArrayRef<byte> {buffer}.Slice (0, bytesRead));
 		}
 	}
