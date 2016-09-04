@@ -8,8 +8,8 @@ import shutil
 
 def DownloadFile (url, targetPath, cacheDir : str):
     filename = os.path.basename (targetPath)
-    cachePath = os.path.join (cacheDir, filename)
     if cacheDir:
+        cachePath = os.path.join (cacheDir, filename)
         if os.path.exists (cachePath):
             shutil.copyfile (cachePath, targetPath)
             return
