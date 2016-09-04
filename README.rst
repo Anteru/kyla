@@ -6,7 +6,7 @@ kyla is an installation framework. Check out `the documentation <http://kyla.rea
 License
 -------
 
-kyla is provided under the BSD license. See ``doc/source/liceses.rst`` for license information.
+kyla is provided under the BSD license. See ``doc/source/licenses.rst`` for license information.
 
 Building kyla
 -------------
