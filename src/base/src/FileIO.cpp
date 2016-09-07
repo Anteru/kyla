@@ -58,8 +58,9 @@ FileStat Stat (const char* path)
 #if KYLA_PLATFORM_LINUX
 struct LinuxFile final : public File
 {
-	LinuxFile (int fd)
+	LinuxFile (int fd, bool readOnly)
 		: fd_ (fd)
+		, readOnly_ (readOnly)
 	{
 	}
 
@@ -93,8 +94,13 @@ struct LinuxFile final : public File
 
 	void* MapImpl (const std::int64_t offset, const std::int64_t size) override
 	{
+		int protection = PROT_READ;
+		if (! readOnly_) {
+			protection |= PROT_WRITE;
+		}
+
 		auto r = mmap (nullptr, size,
-			PROT_WRITE | PROT_READ, MAP_SHARED, fd_, offset);
+			protection, MAP_SHARED, fd_, offset);
 
 		mappings_ [r] = size;
 
@@ -127,6 +133,7 @@ struct LinuxFile final : public File
 
 private:
 	int fd_ = -1;
+	bool readOnly_ = false;
 	std::unordered_map<const void*, std::int64_t> mappings_;
 };
 
@@ -134,7 +141,7 @@ private:
 std::unique_ptr<File> CreateFile (const char* path)
 {
 	auto fd = open (path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
-	return std::unique_ptr<File> (new LinuxFile (fd));
+	return std::unique_ptr<File> (new LinuxFile (fd, false /* read write */));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -162,7 +169,7 @@ std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode)
 	}
 
 	auto fd = open (path, mode, S_IRUSR | S_IWUSR);
-	return std::unique_ptr<File> (new LinuxFile (fd));
+	return std::unique_ptr<File> (new LinuxFile (fd, openMode == FileOpenMode::Read));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
