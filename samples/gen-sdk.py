@@ -46,7 +46,8 @@ if __name__ == '__main__':
     ]
 
     for binary in binaryFiles:
-     shutil.copyfile (os.path.join (os.path.dirname (kclBinaryPath), binary), 'staging_sdk/bin/' + binary)
+        shutil.copyfile (os.path.join (os.path.dirname (kclBinaryPath), binary), 'staging_sdk/bin/' + binary)
+    shutil.copyfile (os.path.join (srcDir, 'src/ui/info.json'), 'staging_sdk/bin/info.json')
 
     binaries.AddFilesFromDirectory ('staging_sdk/bin', prefix='bin')
     include_files = sdk.AddFileSet ('include_files')
