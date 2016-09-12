@@ -451,7 +451,7 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 				"INSERT INTO content_objects (Hash, Size) "
 				"VALUES (?, ?);");
 
-			insertContentObjectQuery.BindArguments (hash, contents.GetSize ());
+			insertContentObjectQuery.BindArguments (hash, totalSize);
 			insertContentObjectQuery.Step ();
 			insertContentObjectQuery.Reset ();
 
