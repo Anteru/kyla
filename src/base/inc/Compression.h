@@ -22,7 +22,8 @@ enum class CompressionAlgorithm : std::uint8_t
 {
 	Uncompressed,
 	Zip,
-	Brotli
+	Brotli,
+    Zstd
 };
 
 const char* IdFromCompressionAlgorithm (CompressionAlgorithm algorithm);

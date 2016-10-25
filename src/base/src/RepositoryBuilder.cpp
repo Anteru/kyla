@@ -76,9 +76,16 @@ struct ContentObject
 
 struct SourcePackage
 {
+    SourcePackage (const std::string& name) 
+    : name (name)
+    {
+    }
+
+    SourcePackage () = default;
+
 	std::string name;
 
-	CompressionAlgorithm compressionAlgorithm;
+	CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Zstd;
 
 	std::vector<FileSet> fileSets;
 	std::vector<ContentObject> contentObjects;
@@ -107,8 +114,6 @@ std::unordered_map<std::string, SourcePackage> GetSourcePackages (const pugi::xm
 		if (sourcePackageNode.node ().attribute ("Compression")) {
 			sourcePackage.compressionAlgorithm = CompressionAlgorithmFromId (
 				sourcePackageNode.node ().attribute ("Compression").as_string ());
-		} else {
-			sourcePackage.compressionAlgorithm = CompressionAlgorithm::Brotli;
 		}
 
 		result [sourcePackageNode.node ().attribute ("Id").as_string ()]
@@ -116,9 +121,8 @@ std::unordered_map<std::string, SourcePackage> GetSourcePackages (const pugi::xm
 	}
 
 	if (sourcePackageIds.find ("main") == sourcePackageIds.end ()) {
-		// Add the default (== main) package, which is compressed using Brotli
-		// by default
-		result ["main"] = SourcePackage{"main", CompressionAlgorithm::Brotli};
+		// Add the default (== main) package
+		result ["main"] = SourcePackage{"main"};
 	}
 
 	return result;
