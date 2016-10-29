@@ -10,6 +10,7 @@ details.
 #include <boost/program_options.hpp>
 
 #include "Kyla.h"
+#include "KylaBuild.h"
 
 #include <iostream>
 #include <iomanip>
@@ -31,9 +32,6 @@ const char* kylaGetErrorString (const int r)
 #define KYLA_CHECKED_CALL(c) do {auto r = c; if (r != kylaResult_Ok) { throw std::runtime_error (kylaGetErrorString (r)); }} while (0)
 
 namespace po = boost::program_options;
-
-extern int kylaBuildRepository (const char* repositoryDescription,
-	const char* sourceDirectory, const char* targetDirectory);
 
 ///////////////////////////////////////////////////////////////////////////////
 void StdoutLog (const char* source, const kylaLogSeverity severity,
@@ -71,6 +69,7 @@ int Build (const std::vector<std::string>& options,
 {
 	po::options_description build_desc ("build options");
 	build_desc.add_options ()
+		("statistics", po::value<bool> ()->default_value (false))
 		("source-directory", po::value<std::string> ()->default_value ("."),
 			"Source directory")
 			("input", po::value<std::string> ())
@@ -89,10 +88,26 @@ int Build (const std::vector<std::string>& options,
 		return 1;
 	}
 
-	const auto result = kylaBuildRepository (
-		vm ["input"].as<std::string> ().c_str (),
-		vm ["source-directory"].as<std::string> ().c_str (),
-		vm ["output-directory"].as<std::string> ().c_str ());
+	KylaBuildStatistics statistics = {};
+
+	KylaBuildSettings buildSettings;
+	buildSettings.descriptorFile = vm ["input"].as<std::string> ().c_str ();
+	buildSettings.sourceDirectory = vm ["source-directory"].as<std::string> ().c_str ();
+	buildSettings.targetDirectory = vm ["output-directory"].as<std::string> ().c_str ();
+
+	if (vm ["statistics"].as<bool> ()) {
+		buildSettings.buildStatistics = &statistics;
+	}
+
+	const auto result = kylaBuildRepository (&buildSettings);
+
+	if (vm ["statistics"].as<bool> ()) {
+		std::cout << "Uncompressed:      " << statistics.uncompressedContentSize << std::endl;
+		std::cout << "Compressed:        " << statistics.compressedContentSize << std::endl;
+		std::cout << "Compression ratio: " << statistics.compressionRatio << std::endl;
+		std::cout << "Compression time:  " << statistics.compressionTimeSeconds << " (sec)" << std::endl;
+		std::cout << "Hash time:         " << statistics.hashTimeSeconds << " (sec)" << std::endl;
+	}
 
 	return result;
 }

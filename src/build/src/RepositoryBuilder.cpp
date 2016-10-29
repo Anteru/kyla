@@ -7,6 +7,8 @@ details.
 [LICENSE END]
 */
 
+#include "KylaBuild.h"
+
 #include "Hash.h"
 
 #include <boost/filesystem.hpp>
@@ -38,9 +40,19 @@ details.
 #include "Compression.h"
 
 #include <boost/format.hpp>
+#include <chrono>
 
 namespace {
 using namespace kyla;
+
+struct BuildStatistics
+{
+	int64 bytesStoredUncompressed = 0;
+	int64 bytesStoredCompressed = 0;
+
+	std::chrono::high_resolution_clock::duration compressionTime =
+		std::chrono::high_resolution_clock::duration::zero ();
+};
 
 struct BuildContext
 {
@@ -76,16 +88,16 @@ struct ContentObject
 
 struct SourcePackage
 {
-    SourcePackage (const std::string& name) 
-    : name (name)
-    {
-    }
+	SourcePackage (const std::string& name)
+	: name (name)
+	{
+	}
 
-    SourcePackage () = default;
+	SourcePackage () = default;
 
 	std::string name;
 
-	CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Zstd;
+	CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Brotli;
 
 	std::vector<FileSet> fileSets;
 	std::vector<ContentObject> contentObjects;
@@ -227,7 +239,8 @@ struct RepositoryBuilder
 	virtual void Configure (const pugi::xml_document& repositoryDefinition) = 0;
 
 	virtual void Build (const BuildContext& ctx,
-		const std::unordered_map<std::string, SourcePackage>& packages) = 0;
+		const std::unordered_map<std::string, SourcePackage>& packages,
+		BuildStatistics* statistics = nullptr) = 0;
 };
 
 /**
@@ -240,7 +253,8 @@ struct LooseRepositoryBuilder final : public RepositoryBuilder
 	}
 
 	void Build (const BuildContext& ctx,
-		const std::unordered_map<std::string, SourcePackage>& packages) override
+		const std::unordered_map<std::string, SourcePackage>& packages,
+		BuildStatistics*) override
 	{
 		boost::filesystem::create_directories (ctx.targetDirectory / ".ky");
 		boost::filesystem::create_directories (ctx.targetDirectory / ".ky" / "objects");
@@ -369,8 +383,11 @@ struct PackedRepositoryBuilder final : public RepositoryBuilder
 	}
 
 	void Build (const BuildContext& ctx,
-		const std::unordered_map<std::string, SourcePackage>& packages) override
+		const std::unordered_map<std::string, SourcePackage>& packages,
+		BuildStatistics* statistics) override
 	{
+		buildStatistics_ = BuildStatistics ();
+
 		auto dbFile = ctx.targetDirectory / "repository.db";
 		boost::filesystem::remove (dbFile);
 
@@ -402,6 +419,10 @@ struct PackedRepositoryBuilder final : public RepositoryBuilder
 		db.Execute ("VACUUM");
 
 		db.Close ();
+
+		if (statistics) {
+			*statistics = buildStatistics_;
+		}
 	}
 
 private:
@@ -570,11 +591,20 @@ private:
 				int64 bytesRead = -1;
 				int64 readOffset = 0;
 				while ((bytesRead = inputFile->Read (compressionInputBuffer)) > 0) {
+					buildStatistics_.bytesStoredUncompressed += bytesRead;
+
 					compressionOutputBuffer.resize (
 						compressor->GetCompressionBound (bytesRead));
+
+					auto compressionStartTime = std::chrono::high_resolution_clock::now ();
+
 					const auto compressedSize = compressor->Compress (
 						ArrayRef<byte> (compressionInputBuffer).Slice (0, bytesRead),
 						compressionOutputBuffer);
+
+					buildStatistics_.compressionTime +=
+						(std::chrono::high_resolution_clock::now () - compressionStartTime);
+					buildStatistics_.bytesStoredCompressed += compressedSize;
 
 					const auto startOffset = package->Tell ();
 					package->Write (ArrayRef<byte> (compressionOutputBuffer).Slice (0, compressedSize));
@@ -609,19 +639,20 @@ private:
 	}
 
 	int64 chunkSize_ = 4 << 20; // 4 MiB chunks is the default
+
+	BuildStatistics buildStatistics_;
 };
 }
 
 namespace kyla {
 ///////////////////////////////////////////////////////////////////////////////
-void BuildRepository (const char* descriptorFile,
-	const char* sourceDirectory, const char* targetDirectory)
+void BuildRepository (const KylaBuildSettings* settings)
 {
-	const auto inputFile = descriptorFile;
+	const auto inputFile = settings->descriptorFile;
 
 	BuildContext ctx;
-	ctx.sourceDirectory = sourceDirectory;
-	ctx.targetDirectory = targetDirectory;
+	ctx.sourceDirectory = settings->sourceDirectory;
+	ctx.targetDirectory = settings->targetDirectory;
 
 	boost::filesystem::create_directories (ctx.targetDirectory);
 
@@ -634,9 +665,12 @@ void BuildRepository (const char* descriptorFile,
 	auto sourcePackages = GetSourcePackages (doc, ctx);
 	AssignFileSetsToPackages (doc, ctx, sourcePackages);
 
+	const auto hashStartTime = std::chrono::high_resolution_clock::now ();
 	for (auto& sourcePackage : sourcePackages) {
 		HashFiles (sourcePackage.second.fileSets, ctx);
 	}
+	const auto hashTime = std::chrono::high_resolution_clock::now () -
+		hashStartTime;
 
 	for (auto& sourcePackage : sourcePackages) {
 		sourcePackage.second.contentObjects = FindContentObjects (
@@ -662,6 +696,52 @@ void BuildRepository (const char* descriptorFile,
 	}
 
 	builder->Configure (doc);
-	builder->Build (ctx, sourcePackages);
+
+	BuildStatistics statistics;
+	builder->Build (ctx, sourcePackages, &statistics);
+
+	if (settings->buildStatistics) {
+		settings->buildStatistics->compressedContentSize = statistics.bytesStoredCompressed;
+		settings->buildStatistics->uncompressedContentSize = statistics.bytesStoredUncompressed;
+		settings->buildStatistics->compressionRatio =
+			static_cast<float> (statistics.bytesStoredUncompressed) /
+			static_cast<float> (statistics.bytesStoredCompressed);
+		settings->buildStatistics->compressionTimeSeconds =
+			static_cast<double> (statistics.compressionTime.count ())
+			/ 1000000000.0;
+		settings->buildStatistics->hashTimeSeconds =
+			static_cast<double> (hashTime.count ())
+			/ 1000000000.0;
+	}
 }
+}
+
+///////////////////////////////////////////////////////////////////////////////
+KYLA_EXPORT int kylaBuildRepository (
+	const KylaBuildSettings* settings)
+{
+	try {
+		if (settings == nullptr) {
+			return kylaResult_ErrorInvalidArgument;
+		}
+
+		if (settings->descriptorFile == nullptr) {
+			return kylaResult_ErrorInvalidArgument;
+		}
+
+		if (settings->sourceDirectory == nullptr) {
+			return kylaResult_ErrorInvalidArgument;
+		}
+
+		if (settings->targetDirectory == nullptr) {
+			return kylaResult_ErrorInvalidArgument;
+		}
+
+		BuildRepository (settings);
+
+		return kylaResult_Ok;
+
+	} catch (const std::exception&) {
+		return kylaResult_Error;
+	}
 }

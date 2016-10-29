@@ -12,7 +12,6 @@ details.
 #include "Exception.h"
 
 #include "Repository.h"
-#include "RepositoryBuilder.h"
 
 #include "Log.h"
 
@@ -59,7 +58,7 @@ struct KylaInstallerInternal : public KylaInstaller
 	KylaInstallerInternal ()
 		: log (new kyla::Log ([](kyla::LogLevel, const char*, const char*) -> void {
 	}))
-		, progress (new kyla::Progress ([](const float totalProgress, 
+		, progress (new kyla::Progress ([](const float totalProgress,
 			const char* stageName, const char* action) -> void {
 	}))
 	{
@@ -224,7 +223,7 @@ int kylaExecute (
 		switch (action) {
 		case kylaAction_Configure:
 		case kylaAction_Install:
-			internal->log->Error ("kylaExecute", 
+			internal->log->Error ("kylaExecute",
 				"desired state must not be null for kylaAction_Configure and kylaAction_Install");
 			return kylaResult_ErrorInvalidArgument;
 		}
@@ -261,7 +260,7 @@ int kylaExecute (
 	switch (action) {
 	case kylaAction_Install:
 		targetRepository->p = kyla::DeployRepository (*sourceRepository->p,
-			targetRepository->path.string ().c_str (), filesetIds, 
+			targetRepository->path.string ().c_str (), filesetIds,
 			executionContext);
 		break;
 
@@ -290,7 +289,7 @@ int kylaExecute (
 
 	case kylaAction_Verify:
 		targetRepository->p = kyla::OpenRepository (
-			targetRepository->path.string ().c_str (), 
+			targetRepository->path.string ().c_str (),
 			(targetRepository->options & kylaRepositoryOption_ReadOnly) == kylaRepositoryOption_ReadOnly);
 
 		///@TODO(minor) Pass through the source file set and fileset ids
@@ -409,7 +408,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 	}
 
 	const kyla::Uuid uuid{ id.bytes };
-	
+
 	switch (propertyId) {
 	case kylaFilesetProperty_FileCount:
 	{
@@ -469,7 +468,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 			} else {
 				*pResultSize = resultSize;
 			}
-			
+
 			::memset (pResult, 0, name.size () + 1);
 			::memcpy (pResult, name.data (), name.size ());
 		} else {
@@ -489,36 +488,6 @@ int kylaQueryFileset (KylaInstaller* installer,
 
 	KYLA_C_API_END ()
 }
-}
-
-///////////////////////////////////////////////////////////////////////////////
-KYLA_EXPORT int kylaBuildRepository (const char* descriptorFile,
-	const char* sourceDirectory, const char* targetDirectory)
-{
-	// Only needed for the C_API macros which assume we're int the normal
-	// installer
-	void* installer = nullptr;
-
-	KYLA_C_API_BEGIN ()
-
-	if (descriptorFile == nullptr) {
-		return kylaResult_ErrorInvalidArgument;
-	}
-
-	if (sourceDirectory == nullptr) {
-		return kylaResult_ErrorInvalidArgument;
-	}
-
-	if (targetDirectory == nullptr) {
-		return kylaResult_ErrorInvalidArgument;
-	}
-
-	kyla::BuildRepository (descriptorFile,
-		sourceDirectory, targetDirectory);
-
-	return kylaResult_Ok;
-
-	KYLA_C_API_END()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -591,7 +560,7 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** pInstaller)
 		}
 
 		auto internal = static_cast<KylaInstallerInternal*> (installer);
-		
+
 		internal->progress.reset (new kyla::Progress ([=](
 			const float f, const char* s, const char* a) -> void {
 			KylaProgress progress;

@@ -1,4 +1,4 @@
-PROJECT(libkyla)
+PROJECT(kylabase)
 
 ADD_CUSTOM_COMMAND(
 	OUTPUT
@@ -27,7 +27,6 @@ SET(HEADERS
 	inc/PackedRepository.h
 	inc/PackedRepositoryBase.h
 	inc/Repository.h
-	inc/RepositoryBuilder.h
 	inc/StringRef.h
 	inc/Types.h
 	inc/Uuid.h
@@ -48,30 +47,37 @@ SET(SOURCES
 	src/PackedRepository.cpp
 	src/PackedRepositoryBase.cpp
 	src/Repository.cpp
-	src/RepositoryBuilder.cpp
 	src/StringRef.cpp
 	src/Uuid.cpp
 	src/WebRepository.cpp
 )
 
-IF(WIN32)
-	ADD_DEFINITIONS(-DKYLA_PLATFORM_WINDOWS=1)
-ELSE()
-	ADD_DEFINITIONS(-DKYLA_PLATFORM_LINUX=1)
-ENDIF()
-
 FIND_PACKAGE(OpenSSL)
 FIND_PACKAGE(Boost 1.59.0 REQUIRED QUIET COMPONENTS filesystem system)
 
-ADD_LIBRARY(kylabase STATIC ${SOURCES} ${HEADERS})
+ADD_LIBRARY(kylabase STATIC
+	${SOURCES} ${HEADERS})
 TARGET_LINK_LIBRARIES(kylabase
 	${OPENSSL_LIBRARIES} ${Boost_LIBRARIES}
 	brotli zlib sqlite pugixml zstd)
 TARGET_INCLUDE_DIRECTORIES(kylabase
-	PUBLIC inc ${Boost_INCLUDE_DIRS}
-	PRIVATE ${OPENSSL_INCLUDE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+	PUBLIC
+		inc
+		${Boost_INCLUDE_DIRS}
+		${CMAKE_CURRENT_BINARY_DIR}
+	PRIVATE
+		${OPENSSL_INCLUDE_DIR}
+		${CMAKE_CURRENT_BINARY_DIR})
 TARGET_COMPILE_DEFINITIONS(kylabase
 	PUBLIC -DBOOST_NO_AUTO_PTR)
+
+IF(WIN32)
+	TARGET_COMPILE_DEFINITIONS(kylabase
+		PUBLIC -DKYLA_PLATFORM_WINDOWS=1)
+ELSE()
+	TARGET_COMPILE_DEFINITIONS(kylabase
+		PUBLIC -DKYLA_PLATFORM_LINUX=1)
+ENDIF()
 
 SET_PROPERTY(TARGET kylabase PROPERTY CXX_STANDARD 11)
 SET_PROPERTY(TARGET kylabase PROPERTY CXX_STANDARD_REQUIRED ON)

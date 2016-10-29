@@ -56,11 +56,11 @@ struct BrotliBlockCompressor final : public BlockCompressor
 ///////////////////////////////////////////////////////////////////////////////
 struct ZstdBlockCompressor final : public BlockCompressor
 {
-    int64 GetCompressionBoundImpl (const int64 inputSize) const override;
-    int64 CompressImpl (const ArrayRef<>& input,
-        const MutableArrayRef<>& output) const override;
-    void DecompressImpl (const ArrayRef<>& input,
-        const MutableArrayRef<>& output) const override;
+	int64 GetCompressionBoundImpl (const int64 inputSize) const override;
+	int64 CompressImpl (const ArrayRef<>& input,
+		const MutableArrayRef<>& output) const override;
+	void DecompressImpl (const ArrayRef<>& input,
+		const MutableArrayRef<>& output) const override;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -203,24 +203,24 @@ void BrotliBlockCompressor::DecompressImpl (const ArrayRef<>& input,
 ///////////////////////////////////////////////////////////////////////////////
 int64 ZstdBlockCompressor::GetCompressionBoundImpl (const int64 input_size) const
 {
-    return ZSTD_compressBound (static_cast<size_t> (input_size));
+	return ZSTD_compressBound (static_cast<size_t> (input_size));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 int64 ZstdBlockCompressor::CompressImpl (const ArrayRef<>& input,
-    const MutableArrayRef<>& output) const
+	const MutableArrayRef<>& output) const
 {
-    return ZSTD_compress (output.GetData (), output.GetSize (), input.GetData (),
-        input.GetSize (), 11);
+	return ZSTD_compress (output.GetData (), output.GetSize (), input.GetData (),
+		input.GetSize (), 11);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 void ZstdBlockCompressor::DecompressImpl (const ArrayRef<>& input,
-    const MutableArrayRef<>& output) const
+	const MutableArrayRef<>& output) const
 {
-    const auto decompressedSize = ZSTD_decompress (output.GetData (), 
-        output.GetSize (), input.GetData (), input.GetSize ());
-    assert (decompressedSize == output.GetSize ());
+	const auto decompressedSize = ZSTD_decompress (output.GetData (), 
+		output.GetSize (), input.GetData (), input.GetSize ());
+	assert (decompressedSize == output.GetSize ());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -236,8 +236,8 @@ std::unique_ptr<BlockCompressor> CreateBlockCompressor (CompressionAlgorithm com
 	case CompressionAlgorithm::Brotli:
 		return std::unique_ptr<BlockCompressor> (new BrotliBlockCompressor);
 
-    case CompressionAlgorithm::Zstd:
-        return std::unique_ptr<BlockCompressor> (new ZstdBlockCompressor);
+	case CompressionAlgorithm::Zstd:
+		return std::unique_ptr<BlockCompressor> (new ZstdBlockCompressor);
 	}
 
 	return std::unique_ptr<BlockCompressor> ();
@@ -253,8 +253,8 @@ const char* IdFromCompressionAlgorithm (CompressionAlgorithm algorithm)
 		return "ZIP";
 	case CompressionAlgorithm::Brotli:
 		return "Brotli";
-    case CompressionAlgorithm::Zstd:
-        return "Zstd";
+	case CompressionAlgorithm::Zstd:
+		return "Zstd";
 	default:
 		return nullptr;
 	}
@@ -269,9 +269,9 @@ CompressionAlgorithm CompressionAlgorithmFromId (const char* id)
 		return CompressionAlgorithm::Zip;
 	} else if (strcmp (id, "Brotli") == 0) {
 		return CompressionAlgorithm::Brotli;
-    } else if (strcmp (id, "Zstd") == 0) {
-        return CompressionAlgorithm::Zstd;
-    }
+	} else if (strcmp (id, "Zstd") == 0) {
+		return CompressionAlgorithm::Zstd;
+	}
 
 	return CompressionAlgorithm::Uncompressed;
 }
