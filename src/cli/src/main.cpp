@@ -73,12 +73,12 @@ int Build (const std::vector<std::string>& options,
 		("source-directory", po::value<std::string> ()->default_value ("."),
 			"Source directory")
 			("input", po::value<std::string> ())
-		("output-directory", po::value<std::string> ());
+		("target-directory", po::value<std::string> ());
 
 	po::positional_options_description posBuild;
 	posBuild
 		.add ("input", 1)
-		.add ("output-directory", 1);
+		.add ("target-directory", 1);
 
 	try {
 		po::store (po::command_line_parser (options).options (build_desc)
@@ -93,7 +93,7 @@ int Build (const std::vector<std::string>& options,
 	KylaBuildSettings buildSettings;
 	buildSettings.descriptorFile = vm ["input"].as<std::string> ().c_str ();
 	buildSettings.sourceDirectory = vm ["source-directory"].as<std::string> ().c_str ();
-	buildSettings.targetDirectory = vm ["output-directory"].as<std::string> ().c_str ();
+	buildSettings.targetDirectory = vm ["target-directory"].as<std::string> ().c_str ();
 
 	if (vm ["statistics"].as<bool> ()) {
 		buildSettings.buildStatistics = &statistics;
