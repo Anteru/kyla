@@ -90,7 +90,7 @@ int Build (const std::vector<std::string>& options,
 
 	KylaBuildStatistics statistics = {};
 
-	KylaBuildSettings buildSettings;
+	KylaBuildSettings buildSettings = {};
 	buildSettings.descriptorFile = vm ["input"].as<std::string> ().c_str ();
 	buildSettings.sourceDirectory = vm ["source-directory"].as<std::string> ().c_str ();
 	buildSettings.targetDirectory = vm ["target-directory"].as<std::string> ().c_str ();
