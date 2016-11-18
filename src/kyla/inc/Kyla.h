@@ -249,8 +249,8 @@ struct KylaInstaller
 		const KylaDesiredState* desiredState);
 };
 
-#define KYLA_MAKE_API_VERSION(major,minor,patch) (major << 22 | minor << 12 | patch);
-#define KYLA_API_VERSION_1_0 (1<<22)
+#define KYLA_MAKE_API_VERSION(major,minor,patch) (major << 22 | minor << 12 | patch)
+#define KYLA_API_VERSION_1_0 KYLA_MAKE_API_VERSION(1,0,0)
 
 /**
 Create a new installer. Installer must be non-null, and kylaApiVersion must be
