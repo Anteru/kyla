@@ -18,13 +18,13 @@ details.
 #define KYLA_C_API_BEGIN() try {
 #define KYLA_C_API_END() } catch (const kyla::RuntimeException& e) {    	  \
 		if (installer) {													  \
-			static_cast<KylaInstallerInternal*> (installer)					  \
+			GetInternalInstaller (installer)								  \
 				->log->Error (e.GetSource (), e.what ());					  \
 		}																	  \
 		return kylaResult_Error;										      \
 	} catch (const std::exception& e) {										  \
 		if (installer) {													  \
-			static_cast<KylaInstallerInternal*> (installer)					  \
+			GetInternalInstaller (installer)								  \
 				->log->Error ("Unknown", e.what ());						  \
 		}																	  \
 		return kylaResult_Error;										      \
@@ -47,8 +47,46 @@ struct KylaRepositoryImpl
 };
 
 namespace {
+struct KylaInstaller_1_0
+{
+	int (*SetLogCallback)(KylaInstaller* installer,
+		KylaLogCallback logCallback, void* callbackContext);
+
+	int (*SetProgressCallback)(KylaInstaller* installer,
+		KylaProgressCallback, void* progressContext);
+
+	int (*SetValidationCallback)(KylaInstaller* installer,
+		KylaValidationCallback validationCallback, void* validationContext);
+
+	int (*OpenSourceRepository)(KylaInstaller* installer, const char* path,
+		int options, KylaSourceRepository* repository);
+
+	int (*OpenTargetRepository)(KylaInstaller* installer, const char* path,
+		int options, KylaTargetRepository* repository);
+
+	int (*CloseRepository)(KylaInstaller* installer,
+		KylaRepository impl);
+
+	int (*QueryRepository)(KylaInstaller* installer,
+		KylaSourceRepository repository,
+		int propertyId,
+		size_t* resultSize,
+		void* result);
+
+	int (*QueryFileset)(KylaInstaller* installer,
+		KylaSourceRepository repository,
+		struct KylaUuid id,
+		int propertyId,
+		size_t* resultSize,
+		void* result);
+
+	int (*Execute)(KylaInstaller* installer, kylaAction action,
+		KylaTargetRepository target, KylaSourceRepository source,
+		const KylaDesiredState* desiredState);
+};
+
 ///////////////////////////////////////////////////////////////////////////////
-struct KylaInstallerInternal : public KylaInstaller
+struct KylaInstallerInternal
 {
 	KylaValidationCallback validationCallback = nullptr;
 	void* validationCallbackContext = nullptr;
@@ -65,8 +103,13 @@ struct KylaInstallerInternal : public KylaInstaller
 	}
 };
 
+KylaInstallerInternal* GetInternalInstaller (KylaInstaller* installer)
+{
+	return *reinterpret_cast<KylaInstallerInternal**> (reinterpret_cast<intptr_t>(installer) - sizeof (KylaInstallerInternal*));
+}
+
 ///////////////////////////////////////////////////////////////////////////////
-int kylaOpenSourceRepository (
+int kylaOpenSourceRepository_1_0 (
 	KylaInstaller* installer,
 	const char* path, int options,
 	KylaSourceRepository* repository)
@@ -77,7 +120,7 @@ int kylaOpenSourceRepository (
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	auto internal = static_cast<KylaInstallerInternal*> (installer);
+	auto internal = GetInternalInstaller (installer);
 
 	if (path == nullptr) {
 		internal->log->Error ("kylaOpenSourceRepository", "path was null");
@@ -107,7 +150,7 @@ int kylaOpenSourceRepository (
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaOpenTargetRepository (
+int kylaOpenTargetRepository_1_0 (
 	KylaInstaller* installer,
 	const char* path, int options,
 	KylaTargetRepository* repository)
@@ -118,7 +161,7 @@ int kylaOpenTargetRepository (
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	auto internal = static_cast<KylaInstallerInternal*> (installer);
+	auto internal = GetInternalInstaller (installer);
 
 	if (path == nullptr) {
 		internal->log->Error ("kylaOpenTargetRepository", "path was null");
@@ -148,7 +191,7 @@ int kylaOpenTargetRepository (
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaCloseRepository (KylaInstaller* installer,
+int kylaCloseRepository_1_0 (KylaInstaller* installer,
 	KylaRepository repository)
 {
 	KYLA_C_API_BEGIN ()
@@ -157,7 +200,7 @@ int kylaCloseRepository (KylaInstaller* installer,
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	auto internal = static_cast<KylaInstallerInternal*> (installer);
+	auto internal = GetInternalInstaller (installer);
 
 	if (repository == nullptr) {
 		internal->log->Error ("kylaCloseRepository", "repository was null");
@@ -179,7 +222,7 @@ int kylaCloseRepository (KylaInstaller* installer,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaExecute (
+int kylaExecute_1_0 (
 	KylaInstaller* installer,
 	kylaAction action,
 	KylaTargetRepository targetRepository,
@@ -192,7 +235,7 @@ int kylaExecute (
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	auto internal = static_cast<KylaInstallerInternal*> (installer);
+	auto internal = GetInternalInstaller (installer);
 
 	if (targetRepository == nullptr) {
 		internal->log->Error ("kylaExecute", "target repository was null");
@@ -321,7 +364,7 @@ int kylaExecute (
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaQueryRepository (KylaInstaller* installer,
+int kylaQueryRepository_1_0 (KylaInstaller* installer,
 	KylaSourceRepository repository,
 	int propertyId,
 	size_t* pResultSize,
@@ -333,16 +376,16 @@ int kylaQueryRepository (KylaInstaller* installer,
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	auto i = static_cast<KylaInstallerInternal*> (installer);
+	auto internal = GetInternalInstaller (installer);
 
 	if (repository == nullptr) {
-		i->log->Error ("kylaQueryRepository", "repository was null");
+		internal->log->Error ("kylaQueryRepository", "repository was null");
 
 		return kylaResult_ErrorInvalidArgument;
 	}
 
 	if (repository->repositoryType != KylaRepositoryImpl::RepositoryType::Source) {
-		i->log->Error ("kylaQueryRepository", "repository must be a source repository");
+		internal->log->Error ("kylaQueryRepository", "repository must be a source repository");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -356,7 +399,7 @@ int kylaQueryRepository (KylaInstaller* installer,
 			*pResultSize = resultSize;
 		} else if (pResultSize && pResult) {
 			if (*pResultSize < resultSize) {
-				i->log->Error ("kylaQueryRepository", "result size is too small");
+				internal->log->Error ("kylaQueryRepository", "result size is too small");
 				return kylaResult_ErrorInvalidArgument;
 			} else {
 				*pResultSize = resultSize;
@@ -364,7 +407,7 @@ int kylaQueryRepository (KylaInstaller* installer,
 
 			::memcpy (pResult, result.data (), resultSize);
 		} else {
-			i->log->Error ("kylaQueryRepository", "at least one of {result size, result pointer} must be set");
+			internal->log->Error ("kylaQueryRepository", "at least one of {result size, result pointer} must be set");
 			return kylaResult_ErrorInvalidArgument;
 		}
 
@@ -372,7 +415,7 @@ int kylaQueryRepository (KylaInstaller* installer,
 	}
 
 	default:
-		i->log->Error ("kylaQueryRepository", "invalid property id");
+		internal->log->Error ("kylaQueryRepository", "invalid property id");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -382,7 +425,7 @@ int kylaQueryRepository (KylaInstaller* installer,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaQueryFileset (KylaInstaller* installer,
+int kylaQueryFileset_1_0 (KylaInstaller* installer,
 	KylaSourceRepository repository,
 	struct KylaUuid id,
 	int propertyId,
@@ -395,15 +438,15 @@ int kylaQueryFileset (KylaInstaller* installer,
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	auto i = static_cast<KylaInstallerInternal*> (installer);
+	auto internal = GetInternalInstaller (installer);
 
 	if (repository == nullptr) {
-		i->log->Error ("kylaQueryFileset", "repository was null");
+		internal->log->Error ("kylaQueryFileset", "repository was null");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
 	if (repository->repositoryType != KylaRepositoryImpl::RepositoryType::Source) {
-		i->log->Error ("kylaQueryFileset", "repository must be a source repository");
+		internal->log->Error ("kylaQueryFileset", "repository must be a source repository");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -417,7 +460,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 			*pResultSize = resultSize;
 		} else if (pResultSize && pResult) {
 			if (*pResultSize < resultSize) {
-				i->log->Error ("kylaQueryFileset", "result size is too small");
+				internal->log->Error ("kylaQueryFileset", "result size is too small");
 				return kylaResult_ErrorInvalidArgument;
 			} else {
 				*pResultSize = resultSize;
@@ -426,7 +469,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 			*static_cast<std::int64_t*> (pResult) =
 				repository->p->GetFilesetFileCount (uuid);
 		} else {
-			i->log->Error ("kylaQueryFileset", "at least one of {result size, result pointer} must be set");
+			internal->log->Error ("kylaQueryFileset", "at least one of {result size, result pointer} must be set");
 			return kylaResult_ErrorInvalidArgument;
 		}
 
@@ -439,7 +482,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 			*pResultSize = resultSize;
 		} else if (pResultSize && pResult) {
 			if (*pResultSize < resultSize) {
-				i->log->Error ("kylaQueryFileset", "result size is too small");
+				internal->log->Error ("kylaQueryFileset", "result size is too small");
 				return kylaResult_ErrorInvalidArgument;
 			} else {
 				*pResultSize = resultSize;
@@ -448,7 +491,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 			*static_cast<std::int64_t*> (pResult) =
 				repository->p->GetFilesetSize (uuid);
 		} else {
-			i->log->Error ("kylaQueryFileset", "at least one of {result size, result pointer} must be set");
+			internal->log->Error ("kylaQueryFileset", "at least one of {result size, result pointer} must be set");
 			return kylaResult_ErrorInvalidArgument;
 		}
 
@@ -463,7 +506,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 			*pResultSize = resultSize;
 		} else if (pResultSize && pResult) {
 			if (*pResultSize < resultSize) {
-				i->log->Error ("kylaQueryFileset", "result size is too small");
+				internal->log->Error ("kylaQueryFileset", "result size is too small");
 				return kylaResult_ErrorInvalidArgument;
 			} else {
 				*pResultSize = resultSize;
@@ -472,7 +515,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 			::memset (pResult, 0, name.size () + 1);
 			::memcpy (pResult, name.data (), name.size ());
 		} else {
-			i->log->Error ("kylaQueryFileset", "at least one of {result size, result pointer} must be set");
+			internal->log->Error ("kylaQueryFileset", "at least one of {result size, result pointer} must be set");
 			return kylaResult_ErrorInvalidArgument;
 		}
 
@@ -480,7 +523,7 @@ int kylaQueryFileset (KylaInstaller* installer,
 	}
 
 	default:
-		i->log->Error ("kylaQueryFileset", "invalid property id");
+		internal->log->Error ("kylaQueryFileset", "invalid property id");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -488,6 +531,93 @@ int kylaQueryFileset (KylaInstaller* installer,
 
 	KYLA_C_API_END ()
 }
+
+///////////////////////////////////////////////////////////////////////////////
+int kylaSetLogCallback_1_0 (KylaInstaller* installer, KylaLogCallback logCallback, 
+	void* callbackContext)
+{
+	KYLA_C_API_BEGIN ()
+
+	if (installer == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	auto internal = GetInternalInstaller (installer);
+
+	internal->log->SetCallback (
+		[=](kyla::LogLevel level, const char* source, const char* message) -> void {
+		kylaLogSeverity severity;
+		switch (level) {
+		case kyla::LogLevel::Debug:
+			severity = kylaLogSeverity_Debug; break;
+
+		case kyla::LogLevel::Warning:
+			severity = kylaLogSeverity_Warning; break;
+
+		case kyla::LogLevel::Info:
+			severity = kylaLogSeverity_Warning; break;
+
+		case kyla::LogLevel::Error:
+			severity = kylaLogSeverity_Error; break;
+
+		default:
+			severity = kylaLogSeverity_Debug; break;
+		}
+
+		logCallback (source, severity, message, callbackContext);
+	});
+
+	return kylaResult_Ok;
+
+	KYLA_C_API_END ()
+}
+
+///////////////////////////////////////////////////////////////////////////////
+int kylaSetProgressCallback_1_0 (KylaInstaller* installer, 
+	KylaProgressCallback progressCallback, void* callbackContext)
+{
+	KYLA_C_API_BEGIN ()
+
+	if (installer == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	auto internal = GetInternalInstaller (installer);
+
+	internal->progress.reset (new kyla::Progress ([=](
+		const float f, const char* s, const char* a) -> void {
+		KylaProgress progress;
+		progress.detailMessage = a;
+		progress.action = s;
+		progress.totalProgress = f;
+
+		progressCallback (&progress, callbackContext);
+	}));
+
+	return kylaResult_Ok;
+
+	KYLA_C_API_END ()
+}
+
+///////////////////////////////////////////////////////////////////////////////
+int kylaSetValidationCallback_1_0 (KylaInstaller* installer, 
+	KylaValidationCallback validationCallback, void* callbackContext)
+{
+	KYLA_C_API_BEGIN ()
+
+	if (installer == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	auto internal = GetInternalInstaller (installer);
+
+	internal->validationCallback = validationCallback;
+	internal->validationCallbackContext = callbackContext;
+
+	return kylaResult_Ok;
+
+	KYLA_C_API_END ()
+};
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -505,94 +635,35 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** pInstaller)
 	if (kylaApiVersion != KYLA_API_VERSION_1_0) {
 		return kylaResult_ErrorUnsupportedApiVersion;
 	}
+	
+	switch (kylaApiVersion) {
+	case KYLA_API_VERSION_1_0:
+	{
+		static_assert (alignof (void*) >= alignof (KylaInstaller_1_0),
+			"Function table must not require larger alignment than a pointer.");
+		auto bundle = malloc (sizeof (KylaInstallerInternal*) + sizeof (KylaInstaller_1_0));
 
-	KylaInstallerInternal* internal = new KylaInstallerInternal;
+		auto p = static_cast<unsigned char*> (bundle);
+		KylaInstaller_1_0* installer = static_cast<KylaInstaller_1_0*> (static_cast<void*> (p + sizeof (void*)));
+		KylaInstallerInternal** internal = static_cast<KylaInstallerInternal**> (bundle);
 
-	internal->CloseRepository = kylaCloseRepository;
-	internal->Execute = kylaExecute;
-	internal->OpenSourceRepository = kylaOpenSourceRepository;
-	internal->OpenTargetRepository = kylaOpenTargetRepository;
-	internal->QueryRepository = kylaQueryRepository;
-	internal->QueryFileset = kylaQueryFileset;
-	internal->SetLogCallback =
-	[](KylaInstaller* installer, KylaLogCallback logCallback, void* callbackContext) -> int {
-		KYLA_C_API_BEGIN ()
+		*internal = new KylaInstallerInternal;
 
-		if (installer == nullptr) {
-			return kylaResult_ErrorInvalidArgument;
-		}
+		installer->CloseRepository = kylaCloseRepository_1_0;
+		installer->Execute = kylaExecute_1_0;
+		installer->OpenSourceRepository = kylaOpenSourceRepository_1_0;
+		installer->OpenTargetRepository = kylaOpenTargetRepository_1_0;
+		installer->QueryRepository = kylaQueryRepository_1_0;
+		installer->QueryFileset = kylaQueryFileset_1_0;
+		installer->SetLogCallback = kylaSetLogCallback_1_0;
+		installer->SetProgressCallback = kylaSetProgressCallback_1_0;
+		installer->SetValidationCallback = kylaSetValidationCallback_1_0;
+		
+		*reinterpret_cast<void**>(pInstaller) = installer;
 
-		auto internal = static_cast<KylaInstallerInternal*> (installer);
-
-		internal->log->SetCallback (
-			[=](kyla::LogLevel level, const char* source, const char* message) -> void {
-			kylaLogSeverity severity;
-			switch (level) {
-			case kyla::LogLevel::Debug:
-				severity = kylaLogSeverity_Debug; break;
-
-			case kyla::LogLevel::Warning:
-				severity = kylaLogSeverity_Warning; break;
-
-			case kyla::LogLevel::Info:
-				severity = kylaLogSeverity_Warning; break;
-
-			case kyla::LogLevel::Error:
-				severity = kylaLogSeverity_Error; break;
-
-			default:
-				severity = kylaLogSeverity_Debug; break;
-			}
-
-			logCallback (source, severity, message, callbackContext);
-		});
-
-		return kylaResult_Ok;
-
-		KYLA_C_API_END ()
-	};
-	internal->SetProgressCallback =
-		[](KylaInstaller* installer, KylaProgressCallback progressCallback, void* callbackContext) -> int {
-		KYLA_C_API_BEGIN ()
-
-		if (installer == nullptr) {
-			return kylaResult_ErrorInvalidArgument;
-		}
-
-		auto internal = static_cast<KylaInstallerInternal*> (installer);
-
-		internal->progress.reset (new kyla::Progress ([=](
-			const float f, const char* s, const char* a) -> void {
-			KylaProgress progress;
-			progress.detailMessage = a;
-			progress.action = s;
-			progress.totalProgress = f;
-
-			progressCallback (&progress, callbackContext);
-		}));
-
-		return kylaResult_Ok;
-
-		KYLA_C_API_END()
-	};
-	internal->SetValidationCallback =
-		[](KylaInstaller* installer, KylaValidationCallback validationCallback, void* callbackContext) -> int {
-		KYLA_C_API_BEGIN ()
-
-		if (installer == nullptr) {
-			return kylaResult_ErrorInvalidArgument;
-		}
-
-		auto internal = static_cast<KylaInstallerInternal*> (installer);
-		internal->validationCallback = validationCallback;
-		internal->validationCallbackContext = callbackContext;
-
-		return kylaResult_Ok;
-
-		KYLA_C_API_END ()
-	};
-
-	*pInstaller = internal;
+		break;
+	}
+	}
 
 	return kylaResult_Ok;
 
@@ -608,7 +679,12 @@ int kylaDestroyInstaller (KylaInstaller* installer)
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	delete static_cast<KylaInstallerInternal*> (installer);
+	auto internal = GetInternalInstaller (installer);
+	delete internal;
+	free (
+		static_cast<unsigned char*> (static_cast<void*> (installer))
+			- sizeof (KylaInstallerInternal*)
+	);
 
 	return kylaResult_Ok;
 
