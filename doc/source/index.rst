@@ -10,6 +10,7 @@ Contents:
     repository-definition
     repository-types
     comparison
+    changelog
     licenses
 
 Introduction
