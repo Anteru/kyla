@@ -380,6 +380,14 @@ struct PackedRepositoryBuilder final : public RepositoryBuilder
 
 			assert (chunkSize_ >= 1);
 		}
+
+		auto encryptionNode = repositoryDefinition.select_node ("//Package/Encryption");
+
+		if (encryptionNode) {
+			const auto key = encryptionNode.node ().select_node ("Key").node ().text ();
+
+			// decode key
+		}
 	}
 
 	void Build (const BuildContext& ctx,
@@ -397,6 +405,21 @@ struct PackedRepositoryBuilder final : public RepositoryBuilder
 		db.Execute (install_db_structure);
 		db.Execute ("PRAGMA journal_mode=WAL;");
 		db.Execute ("PRAGMA synchronous=NORMAL;");
+
+		{
+			auto featuresInsertQuery = db.Prepare (
+				"INSERT INTO features (Name) VALUES (?);");
+
+			static const char* features [] = {
+				"compression"
+			};
+
+			for (const auto& feature : features) {
+				featuresInsertQuery.BindArguments (feature);
+				featuresInsertQuery.Step ();
+				featuresInsertQuery.Reset ();
+			}
+		}
 
 		auto uniqueObjects = PopulateUniqueContentObjects (db, packages);
 
@@ -524,12 +547,18 @@ private:
 			"INSERT INTO source_packages (Name, Filename, Uuid) VALUES (?, ?, ?)");
 		auto storageMappingInsertQuery = db.Prepare (
 			"INSERT INTO storage_mapping "
-			"(ContentObjectId, SourcePackageId, PackageOffset, PackageSize, SourceOffset, SourceSize, Compression) "
-			"VALUES (?, ?, ?, ?, ?, ?, ?)");
+			"(ContentObjectId, SourcePackageId, PackageOffset, PackageSize, SourceOffset, SourceSize) "
+			"VALUES (?, ?, ?, ?, ?, ?)");
+
 		auto storageHashesInsertQuery = db.Prepare (
 			"INSERT INTO storage_hashes "
 			"(StorageMappingId, Hash) "
 			"VALUES (?, ?)"
+		);
+		auto storageCompressionInsertQuery = db.Prepare (
+			"INSERT INTO storage_compression "
+			"(StorageMappingId, Algorithm, InputSize, OutputSize) "
+			"VALUES (?, ?, ?, ?)"
 		);
 
 		///@TODO(minor) Support splitting packages for media limits
@@ -580,8 +609,7 @@ private:
 					packageId,
 					startOffset, 0 /* = size */,
 					0 /* = output offset */,
-					0 /* = uncompressed size */,
-					IdFromCompressionAlgorithm (CompressionAlgorithm::Uncompressed));
+					0 /* = uncompressed size */);
 				storageMappingInsertQuery.Step ();
 				storageMappingInsertQuery.Reset ();
 			} else {
@@ -614,14 +642,13 @@ private:
 					storageMappingInsertQuery.BindArguments (contentObjectId, packageId,
 						startOffset, endOffset - startOffset,
 						readOffset,
-						bytesRead,
-						compressorId);
+						bytesRead);
 					storageMappingInsertQuery.Step ();
 					storageMappingInsertQuery.Reset ();
 
 					auto storageMappingId = db.GetLastRowId ();
 
-					// We also store the hashes, for safety
+					// Store the hash
 					const auto compressedChunkHash = ComputeSHA256 (
 						ArrayRef<byte> (compressionOutputBuffer).Slice (0, compressedSize));
 					storageHashesInsertQuery.BindArguments (
@@ -629,6 +656,18 @@ private:
 					);
 					storageHashesInsertQuery.Step ();
 					storageHashesInsertQuery.Reset ();
+
+					// Store the compression data if not uncompressed
+					if (sourcePackage.compressionAlgorithm != CompressionAlgorithm::Uncompressed) {
+						storageCompressionInsertQuery.BindArguments (
+							storageMappingId,
+							compressorId,
+							bytesRead,
+							compressedSize
+						);
+						storageCompressionInsertQuery.Step ();
+						storageCompressionInsertQuery.Reset ();
+					}
 
 					readOffset += bytesRead;
 				}
@@ -641,6 +680,7 @@ private:
 	int64 chunkSize_ = 4 << 20; // 4 MiB chunks is the default
 
 	BuildStatistics buildStatistics_;
+	std::vector<uint8_t> encryptionKey_;
 };
 }
 

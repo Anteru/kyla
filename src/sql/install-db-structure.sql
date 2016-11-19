@@ -36,17 +36,38 @@ CREATE TABLE storage_mapping (
 	PackageSize INTEGER NOT NULL,
 	-- Offset in the output file, in case one content object is split
 	SourceOffset INTEGER NOT NULL,
-	-- Source size, in case a chunk is split or compressed
+	-- Source size - a chunk may be smaller than the whole content object
 	SourceSize INTEGER NOT NULL,
-	-- None if uncompressed
-	Compression VARCHAR,
 	FOREIGN KEY(ContentObjectId) REFERENCES content_objects(Id),
 	FOREIGN KEY(SourcePackageId) REFERENCES source_packages(Id));
 
 -- If populated, this table stores the hashes of each storage mapping chunk
 CREATE TABLE storage_hashes (
 	StorageMappingId INTEGER PRIMARY KEY NOT NULL,
-	Hash BLOB NOT NULL
+	Hash BLOB NOT NULL,
+	FOREIGN KEY(StorageMappingId) REFERENCES storage_mapping(Id)
+);
+
+-- If populated, this table stores the encryption data for chunks
+CREATE TABLE storage_encryption (
+	StorageMappingId INTEGER PRIMARY KEY NOT NULL,
+	Algorithm VARCHAR NOT NULL,
+	-- IV, Salt, etc.
+	Data BLOB NOT NULL UNIQUE,
+	-- Encryption may add padding, so store input/output sizes
+	InputSize INTEGER NOT NULL,
+	OutputSize INTEGER NOT NULL,
+	FOREIGN KEY(StorageMappingId) REFERENCES storage_mapping(Id)
+);
+
+-- If populated, this table stores the encryption data for chunks
+CREATE TABLE storage_compression (
+	StorageMappingId INTEGER PRIMARY KEY NOT NULL,
+	Algorithm VARCHAR NOT NULL,
+	-- Compression will always change the size
+	InputSize INTEGER NOT NULL,
+	OutputSize INTEGER NOT NULL,
+	FOREIGN KEY(StorageMappingId) REFERENCES storage_mapping(Id)
 );
 
 -- Take advantage of SQLite's dynamic types here so we don't have to store
@@ -54,6 +75,11 @@ CREATE TABLE storage_hashes (
 CREATE TABLE properties (
 	Name VARCHAR PRIMARY KEY,
 	Value NOT NULL
+);
+
+-- Required feature support for this package
+CREATE TABLE features (
+	NAME VARCHAR PRIMARY KEY
 );
 
 CREATE INDEX files_file_set_id_idx ON files (FileSetId ASC);
