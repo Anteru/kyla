@@ -63,8 +63,6 @@ struct BuildContext
 {
 	Path sourceDirectory;
 	Path targetDirectory;
-
-	std::string encryptionKey;
 };
 
 struct File
@@ -391,9 +389,7 @@ struct PackedRepositoryBuilder final : public RepositoryBuilder
 		auto encryptionNode = repositoryDefinition.select_node ("//Package/Encryption");
 
 		if (encryptionNode) {
-			const auto key = encryptionNode.node ().select_node ("Key").node ().text ();
-
-			// decode key
+			encryptionKey_ = encryptionNode.node ().select_node ("Key").node ().text ().as_string ();
 		}
 	}
 
@@ -417,9 +413,13 @@ struct PackedRepositoryBuilder final : public RepositoryBuilder
 			auto featuresInsertQuery = db.Prepare (
 				"INSERT INTO features (Name) VALUES (?);");
 
-			static const char* features [] = {
+			std::vector<const char*> features = {
 				"compression"
 			};
+
+			if (! encryptionKey_.empty ()) {
+				features.push_back ("encryption");
+			}
 
 			for (const auto& feature : features) {
 				featuresInsertQuery.BindArguments (feature);
@@ -440,7 +440,7 @@ struct PackedRepositoryBuilder final : public RepositoryBuilder
 
 			WritePackage (db, sourcePackage.second,
 				fileToFileSetId, uniqueObjects,
-				ctx.targetDirectory, ctx.encryptionKey);
+				ctx.targetDirectory, encryptionKey_);
 		}
 
 		db.Execute ("PRAGMA journal_mode=DELETE;");
@@ -593,7 +593,7 @@ private:
 		::memcpy (encryptionData.data (), salt, sizeof (salt));
 		::memcpy (encryptionData.data () + sizeof (salt), iv, sizeof (iv));
 
-		EVP_EncryptInit (encryptionContext, EVP_aes_256_cbc (),
+		EVP_EncryptInit_ex (encryptionContext, EVP_aes_256_cbc (), nullptr,
 			key, iv);
 
 		// We need to have storage for 2 AES blocks at the end
@@ -604,7 +604,7 @@ private:
 		EVP_EncryptUpdate (encryptionContext, output.data (),
 			&outputLength, input.data (), static_cast<int> (input.size ()));
 		bytesEncrypted += outputLength;
-		EVP_EncryptFinal (encryptionContext, output.data () + bytesEncrypted,
+		EVP_EncryptFinal_ex (encryptionContext, output.data () + bytesEncrypted,
 			&outputLength);
 		bytesEncrypted += outputLength;
 		output.resize (bytesEncrypted);
@@ -723,6 +723,8 @@ private:
 					buildStatistics_.bytesStoredCompressed += 
 						compressionResult.outputBytes;
 
+					const auto compressedChunkHash = ComputeSHA256 (writeBuffer);
+
 					TransformationResult encryptionResult;
 					std::array<byte, 24> encryptionData;
 					if (!encryptionKey.empty ()) {
@@ -739,7 +741,6 @@ private:
 					const auto startOffset = package->Tell ();
 					package->Write (writeBuffer);
 					const auto endOffset = package->Tell ();
-					assert ((endOffset - startOffset) == compressedSize);
 
 					storageMappingInsertQuery.BindArguments (contentObjectId, packageId,
 						startOffset, endOffset - startOffset,
@@ -751,7 +752,6 @@ private:
 					auto storageMappingId = db.GetLastRowId ();
 
 					// Store the hash
-					const auto compressedChunkHash = ComputeSHA256 (writeBuffer);
 					storageHashesInsertQuery.BindArguments (
 						storageMappingId, compressedChunkHash
 					);
@@ -798,6 +798,7 @@ private:
 	int64 chunkSize_ = 4 << 20; // 4 MiB chunks is the default
 
 	BuildStatistics buildStatistics_;
+	std::string encryptionKey_;
 };
 }
 

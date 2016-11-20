@@ -11,6 +11,7 @@ details.
 #define KYLA_CORE_INTERNAL_BASE_REPOSITORY_H
 
 #include "Repository.h"
+#include <string>
 
 namespace kyla {
 class BaseRepository : public Repository
@@ -23,6 +24,9 @@ private:
 	virtual std::string GetFilesetNameImpl (const Uuid& filesetId) override;
 	virtual int64_t GetFilesetFileCountImpl (const Uuid& filesetId) override;
 	virtual int64_t GetFilesetSizeImpl (const Uuid& filesetId) override;
+	virtual bool IsEncryptedImpl () override;
+	virtual void SetDecryptionKeyImpl (const std::string& key) override;
+	virtual std::string GetDecryptionKeyImpl () const override;
 
 	void RepairImpl (Repository& source, ExecutionContext& context) override;
 	void ValidateImpl (const ValidationCallback& validationCallback,
@@ -30,6 +34,9 @@ private:
 	void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& filesets,
 		ExecutionContext& context) override;
+
+protected:
+	std::string key_;
 };
 }
 

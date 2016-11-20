@@ -41,17 +41,22 @@ class KylaRunner:
             print ('Result:', result.returncode)
         return result.returncode == 0
 
-    def Install(self, source, target, filesets=[]):
-        return self._ExecuteAction ('install', source, target, filesets)
+    def Install(self, source, target, filesets=[], key=None):
+        return self._ExecuteAction ('install', source, target, filesets, key)
 
-    def Configure(self, source, target, filesets=[]):
-        return self._ExecuteAction ('configure', source, target, filesets)
+    def Configure(self, source, target, filesets=[], key=None):
+        return self._ExecuteAction ('configure', source, target, filesets, key)
 
-    def Validate(self, source, target, filesets=[]):
-        return self._ExecuteAction ('validate', source, target, filesets)
+    def Validate(self, source, target, filesets=[], key=None):
+        return self._ExecuteAction ('validate', source, target, filesets, key)
 
-    def _ExecuteAction(self, action, source, target, filesets):
-        args = [self._kcl, action, source, target] + filesets
+    def _ExecuteAction(self, action, source, target, filesets, key):
+        args = [self._kcl, action]
+
+        if key:
+            args += ['--key', key]
+
+        args +=  [source, target] + filesets
 
         # validate doesn't handle source and filesets yet, so we need to strip
         # those
@@ -95,7 +100,7 @@ class ExecuteInstall:
         target = os.path.join (env.testDirectory, args ['target'])
         filesets = args ['filesets']
 
-        return env.kyla.Install (source, target, filesets)
+        return env.kyla.Install (source, target, filesets, args.get ('key', None))
 
 class ExecuteConfigure:
     def Execute(self, env : TestEnvironment, args):
@@ -103,7 +108,7 @@ class ExecuteConfigure:
         target = os.path.join (env.testDirectory, args ['target'])
         filesets = args ['filesets']
 
-        return env.kyla.Configure (source, target, filesets)
+        return env.kyla.Configure (source, target, filesets, args.get ('key', None))
 
 class ExecuteValidate:
     def Execute(self, env : TestEnvironment, args):
@@ -111,7 +116,7 @@ class ExecuteValidate:
         target = os.path.join (env.testDirectory, args ['target'])
         filesets = args ['filesets']
 
-        result = env.kyla.Validate (source, target, filesets)
+        result = env.kyla.Validate (source, target, filesets, args.get ('key', None))
         if args.get ('result', 'pass') == 'pass':
             return result
         else:

@@ -173,6 +173,10 @@ struct Repository
 
 	Sql::Database& GetDatabase ();
 
+	bool IsEncrypted ();
+	void SetDecryptionKey (const std::string& key);
+	std::string GetDecryptionKey () const;
+
 private:
 	virtual void ValidateImpl (const ValidationCallback& validationCallback,
 		ExecutionContext& context) = 0;
@@ -187,6 +191,9 @@ private:
 	virtual void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& filesets,
 		ExecutionContext& context) = 0;
+	virtual bool IsEncryptedImpl () = 0;
+	virtual void SetDecryptionKeyImpl (const std::string& key) = 0;
+	virtual std::string GetDecryptionKeyImpl () const = 0;
 	virtual Sql::Database& GetDatabaseImpl () = 0;
 };
 

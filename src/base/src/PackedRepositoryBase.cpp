@@ -24,7 +24,56 @@ details.
 #include <unordered_map>
 #include <set>
 
+#include <openssl/evp.h>
+
 namespace kyla {
+struct PackedRepositoryBase::Decryptor
+{
+	Decryptor (const std::string& key)
+	: key_ (key)
+	{
+		decryptionContext_ = EVP_CIPHER_CTX_new ();
+		decryptionCypher_ = EVP_aes_256_cbc ();
+	}
+
+	~Decryptor ()
+	{
+		EVP_CIPHER_CTX_free (decryptionContext_);
+	}
+
+	void Decrypt (std::vector<byte>& input, std::vector<byte>& output,
+		std::array<byte, 8>& salt,
+		std::array<byte, 16>& iv)
+	{
+		byte key [64] = { 0 };
+		PKCS5_PBKDF2_HMAC_SHA1 (key_.data (),
+			static_cast<int> (key_.size ()),
+			salt.data (), static_cast<int> (salt.size ()), 
+			4096, 64, key);
+
+		// Extra memory for the decryption padding handling
+		output.resize (output.size () + 32);
+
+		EVP_DecryptInit_ex (decryptionContext_, decryptionCypher_,
+			nullptr, key, iv.data ());
+
+		int bytesWritten = 0;
+		int outputLength = static_cast<int> (output.size ());
+		EVP_DecryptUpdate (decryptionContext_, output.data (),
+			&outputLength,
+			input.data (), static_cast<int> (input.size ()));
+		bytesWritten += outputLength;
+		EVP_DecryptFinal_ex (decryptionContext_,
+			output.data () + bytesWritten, &outputLength);
+		bytesWritten += outputLength;
+		output.resize (bytesWritten);
+	}
+
+	EVP_CIPHER_CTX*	decryptionContext_;
+	const EVP_CIPHER* decryptionCypher_;
+	std::string key_;
+};
+
 /**
 @class PackedRepositoryBase
 @brief Base class for packed repositories
@@ -39,8 +88,20 @@ reading and may not be mapped.
 */
 
 ///////////////////////////////////////////////////////////////////////////////
+PackedRepositoryBase::PackedRepositoryBase ()
+{
+}
+
+///////////////////////////////////////////////////////////////////////////////
 PackedRepositoryBase::~PackedRepositoryBase ()
 {
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void PackedRepositoryBase::SetDecryptionKeyImpl (const std::string& key)
+{
+	decryptor_.reset (new Decryptor{ key });
+	key_ = key;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -96,13 +157,19 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 		"FROM storage_compression "
 		"WHERE StorageMappingId = ?"
 	);
+	
+	auto getEncryptionQuery = db.Prepare ("SELECT "
+		"	Algorithm, Data, InputSize, OutputSize "
+		"FROM storage_encryption "
+		"WHERE StorageMappingId = ?"
+	);
 
 	auto getStorageHashQuery = db.Prepare (
 		"SELECT Hash "
 		"FROM storage_hashes "
 		"WHERE StorageMappingId = ?");
 
-	std::vector<byte> compressionOutputBuffer;
+	std::vector<byte> writeBuffer;
 	std::vector<byte> readBuffer;
 
 	while (findSourcePackagesQuery.Step ()) {
@@ -128,6 +195,24 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 			
 			readBuffer.resize (packageSize);
 			packageFile->Read (packageOffset, readBuffer);
+
+			// If encrypted, we need to decrypt first
+			getEncryptionQuery.BindArguments (storageMappingId);
+			if (getEncryptionQuery.Step ()) {
+				//@TODO(minor) Check algorithm
+				const auto data = getEncryptionQuery.GetBlob (1);
+				std::array<byte, 8> salt;
+				std::array<byte, 16> iv;
+				::memcpy (salt.data (), data, 8);
+				::memcpy (iv.data (), static_cast<const byte*> (data) + 8, 16);
+
+				writeBuffer.resize (getEncryptionQuery.GetInt64 (2));
+
+				decryptor_->Decrypt (readBuffer, writeBuffer,
+					salt, iv);
+				std::swap (readBuffer, writeBuffer);
+			}
+			getEncryptionQuery.Reset ();
 
 			// If we find an entry in the storage_hashes table, validate the
 			// compressed source data
@@ -158,10 +243,10 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 					);
 				}
 
-				compressionOutputBuffer.resize (uncompressedSize);
-				compressor->Decompress (readBuffer, compressionOutputBuffer);
+				writeBuffer.resize (uncompressedSize);
+				compressor->Decompress (readBuffer, writeBuffer);
 
-				getCallback (hash, compressionOutputBuffer, sourceOffset,
+				getCallback (hash, writeBuffer, sourceOffset,
 					totalSize);
 			} else {
 				getCallback (hash, readBuffer, sourceOffset, totalSize);

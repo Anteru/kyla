@@ -31,6 +31,9 @@ Reference
 
   * ``Type`` to specify the package type. The type must be either ``Packed`` and ``Loose``.
   * ``ChunkSize`` if the package type is ``Packed``. This determines the chunk size at which objects are stored (specified in bytes). The default size is 4 MiB.
+  * ``Encryption`` if the package is to be encrypted. The ``Encryption`` must contain one element:
+
+    * ``Key`` - the key to be used to encrypt the data.
 
 * ``FileSets`` describes all file sets stored in this package.
 

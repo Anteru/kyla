@@ -129,7 +129,26 @@ enum kylaRepositoryProperty
 
 	The result is a tightly packed array of KylaUuid instances.
 	*/
-	kylaRepositoryProperty_AvailableFilesets
+	kylaRepositoryProperty_AvailableFilesets,
+
+	/**
+	Whether the repository is encrypted or not.
+
+	The result is an int which is 0 if not encrypted and 1 if
+	the repository is encrypted. For encrypted repositories, set
+	the key using kylaRepositoryProperty_DecryptionKey
+
+	@since 1.1
+	*/
+	kylaRepositoryProperty_IsEncrypted,
+
+	/**
+	The decryption key for this repository. By default, this will
+	be NULL, and can be set using SetRepositoryProperty.
+
+	@since 1.1
+	*/
+	kylaRepositoryProperty_DecryptionKey
 };
 
 enum kylaFilesetProperty
@@ -209,30 +228,38 @@ struct KylaInstaller
 		KylaRepository impl);
 
 	/**
-	Query a repository property.
+	Get a repository property.
 
 	The propertyId must be one of enumeration values from
 	kylaRepositoryProperty. If resultSize is provided, the size of the result
 	is written into it. If result is provided, the result is written into it.
 	If result is not null, resultSize must be set to the size of the buffer
 	result points to.
+
+	Before 1.1, this was called QueryRepository
+
+	@since 1.1
 	*/
-	int (*QueryRepository)(KylaInstaller* installer,
+	int (*GetRepositoryProperty)(KylaInstaller* installer,
 		KylaSourceRepository repository,
 		int propertyId,
 		size_t* resultSize,
 		void* result);
 
 	/**
-	Query a file set property.
+	Get a file set property.
 
 	The propertyId must be one of enumeration values from
 	kylaFilesetProperty. If resultSize is provided, the size of the result
 	is written into it. If result is provided, the result is written into it.
 	If result is not null, resultSize must be set to the size of the buffer
 	result points to.
+
+	Before 1.1, this function was called QueryFileset
+
+	@since 1.1
 	*/
-	int (*QueryFileset)(KylaInstaller* installer,
+	int (*GetFilesetProperty)(KylaInstaller* installer,
 		KylaSourceRepository repository,
 		struct KylaUuid id,
 		int propertyId,
@@ -247,10 +274,23 @@ struct KylaInstaller
 	int (*Execute)(KylaInstaller* installer, kylaAction action,
 		KylaTargetRepository target, KylaSourceRepository source,
 		const KylaDesiredState* desiredState);
+
+	/**
+	Set a repository option. Properties must be set before calling Execute
+	to be effective.
+
+	@since 1.1
+	*/
+	int (*SetRepositoryProperty)(KylaInstaller* installer,
+		KylaSourceRepository repository,
+		int propertyId,
+		size_t propertySize,
+		const void* propertyValue);
 };
 
 #define KYLA_MAKE_API_VERSION(major,minor,patch) (major << 22 | minor << 12 | patch)
 #define KYLA_API_VERSION_1_0 KYLA_MAKE_API_VERSION(1,0,0)
+#define KYLA_API_VERSION_1_1 KYLA_MAKE_API_VERSION(1,1,0)
 
 /**
 Create a new installer. Installer must be non-null, and kylaApiVersion must be

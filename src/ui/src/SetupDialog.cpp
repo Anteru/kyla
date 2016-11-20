@@ -185,29 +185,29 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 	});
 
 	std::size_t resultSize = 0;
-	installer->QueryRepository (installer, sourceRepository,
+	installer->GetRepositoryProperty (installer, sourceRepository,
 		kylaRepositoryProperty_AvailableFilesets, &resultSize, nullptr);
 
 	std::vector<KylaUuid> filesets;
 	filesets.resize (resultSize / sizeof (KylaUuid));
-	installer->QueryRepository (installer, sourceRepository,
+	installer->GetRepositoryProperty (installer, sourceRepository,
 		kylaRepositoryProperty_AvailableFilesets, &resultSize, filesets.data ());
 
 	for (const auto& fs : filesets) {
 		std::size_t length = 0;
-		installer->QueryFileset (installer, sourceRepository,
+		installer->GetFilesetProperty (installer, sourceRepository,
 			fs, kylaFilesetProperty_Name,
 			&length, nullptr);
 		std::vector<char> name;
 		name.resize (length);
-		installer->QueryFileset (installer, sourceRepository,
+		installer->GetFilesetProperty (installer, sourceRepository,
 			fs, kylaFilesetProperty_Name,
 			&length, name.data ());
 
 		std::int64_t filesetSize = 0;
 		std::size_t filesetResultSize = sizeof (filesetSize);
 
-		installer->QueryFileset (installer, sourceRepository,
+		installer->GetFilesetProperty (installer, sourceRepository,
 			fs, kylaFilesetProperty_Size,
 			&filesetResultSize, &filesetSize);
 

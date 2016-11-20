@@ -292,12 +292,12 @@ int QueryFilesets (const std::vector<std::string>& options,
 		kylaRepositoryOption_ReadOnly, &source));
 
 	std::size_t resultSize = 0;
-	KYLA_CHECKED_CALL (installer->QueryRepository (installer, source,
+	KYLA_CHECKED_CALL (installer->GetRepositoryProperty (installer, source,
 		kylaRepositoryProperty_AvailableFilesets, &resultSize, nullptr));
 
 	std::vector<KylaUuid> filesets;
 	filesets.resize (resultSize / sizeof (KylaUuid));
-	KYLA_CHECKED_CALL (installer->QueryRepository (installer, source,
+	KYLA_CHECKED_CALL (installer->GetRepositoryProperty (installer, source,
 		kylaRepositoryProperty_AvailableFilesets, &resultSize, filesets.data ()));
 	
 	const auto queryName = vm ["name"].as<bool> ();
@@ -306,13 +306,13 @@ int QueryFilesets (const std::vector<std::string>& options,
 		if (queryName) {
 			size_t nameSize = 0;
 
-			installer->QueryFileset (installer, source,
+			installer->GetFilesetProperty (installer, source,
 				filesetId, 
 				kylaFilesetProperty_Name, &nameSize, nullptr);
 			std::vector<char> name;
 			name.resize (nameSize);
 
-			KYLA_CHECKED_CALL (installer->QueryFileset (installer, 
+			KYLA_CHECKED_CALL (installer->GetFilesetProperty (installer,
 				source,	filesetId,
 				kylaFilesetProperty_Name, &nameSize, name.data ()));
 
@@ -323,10 +323,10 @@ int QueryFilesets (const std::vector<std::string>& options,
 
 		size_t int64Size = sizeof (std::int64_t);
 		std::int64_t fileCount, size;
-		KYLA_CHECKED_CALL (installer->QueryFileset (installer, source,
+		KYLA_CHECKED_CALL (installer->GetFilesetProperty (installer, source,
 			filesetId, kylaFilesetProperty_Size,
 			&int64Size, &size));
-		KYLA_CHECKED_CALL (installer->QueryFileset (installer, source,
+		KYLA_CHECKED_CALL (installer->GetFilesetProperty (installer, source,
 			filesetId, kylaFilesetProperty_FileCount,
 			&int64Size, &fileCount));
 
@@ -346,6 +346,7 @@ int ConfigureOrInstall (const std::string& cmd,
 {
 	po::options_description build_desc ("install options");
 	build_desc.add_options ()
+		("key", po::value<std::string> ())
 		("source", po::value<std::string> ())
 		("target", po::value<std::string> ())
 		("file-sets", po::value<std::vector<std::string>> ()->composing ());
@@ -364,7 +365,7 @@ int ConfigureOrInstall (const std::string& cmd,
 	}
 
 	KylaInstaller* installer = nullptr;
-	KYLA_CHECKED_CALL (kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer));
+	KYLA_CHECKED_CALL (kylaCreateInstaller (KYLA_API_VERSION_1_1, &installer));
 
 	assert (installer);
 
@@ -379,6 +380,16 @@ int ConfigureOrInstall (const std::string& cmd,
 	KylaSourceRepository source;
 	KYLA_CHECKED_CALL (installer->OpenSourceRepository (installer, 
 		vm ["source"].as<std::string> ().c_str (), 0, &source));
+
+	if (vm.find ("key") != vm.end ()) {
+		const auto key = vm ["key"].as<std::string> ();
+		
+		KYLA_CHECKED_CALL (installer->SetRepositoryProperty (
+			installer, source, kylaRepositoryProperty_DecryptionKey,
+			key.size () + 1,
+			key.c_str ()
+		));
+	}
 
 	KylaTargetRepository target;
 	KYLA_CHECKED_CALL (installer->OpenTargetRepository (installer, 

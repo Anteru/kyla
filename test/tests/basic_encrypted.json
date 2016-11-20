@@ -1,0 +1,34 @@
+{
+    "info" : {
+        "description" : "Basic installation test"
+    },
+    "setup" : [
+        {
+            "generate-repository" : {
+                "source" : "data/basic_encrypted.xml",
+                "source-directory" : "data/shared",
+                "target" : "test"
+            }
+        }
+    ],
+    "execute" : [
+        {
+            "install" : {
+                "source" : "test",
+                "target" : "deploy",
+                "key" : "toomanysecrets",
+                "filesets" : [
+                    "cc3f60a7-7b24-4a54-8dfa-6f811efd4af0"
+                ]
+            }
+        }
+    ],
+    "test" : [
+        {
+            "check-hash" : {
+                "deploy/1.txt" : "7f91985fcec377b3ad31c6eba837c8af0f0ad48973795edd33089ec2ad5d9372",
+                "deploy/2.txt" : "928af6ea40cc9728d511a140a552389bec6daa9a3252f65845ec48c861eb4dc3"
+            }
+        }
+    ]
+}

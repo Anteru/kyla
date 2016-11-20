@@ -17,6 +17,7 @@ namespace kyla {
 class PackedRepositoryBase : public BaseRepository
 {
 public:
+	PackedRepositoryBase ();
 	~PackedRepositoryBase ();
 
 	struct PackageFile
@@ -36,6 +37,12 @@ private:
 		const GetContentObjectCallback& getCallback) override;
 
 	virtual std::unique_ptr<PackageFile> OpenPackage (const std::string& packageName) const = 0;
+
+protected:
+	void SetDecryptionKeyImpl (const std::string& key) override;
+
+	struct Decryptor;
+	std::unique_ptr<Decryptor> decryptor_;
 };
 } // namespace kyla
 

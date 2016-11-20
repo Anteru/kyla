@@ -34,6 +34,31 @@ std::vector<Uuid> BaseRepository::GetFilesetsImpl ()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+bool BaseRepository::IsEncryptedImpl ()
+{
+	static const char* querySql =
+		"SELECT COUNT(*) FROM features WHERE Name=?";
+
+	auto query = GetDatabase ().Prepare (querySql);
+	query.BindArguments ("encryption");
+	query.Step ();
+
+	return query.GetInt64 (0) != 0;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void BaseRepository::SetDecryptionKeyImpl (const std::string& key)
+{
+	key_ = key;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::string BaseRepository::GetDecryptionKeyImpl () const
+{
+	return key_;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 int64_t BaseRepository::GetFilesetSizeImpl (const Uuid& id)
 {
 	static const char* querySql =
