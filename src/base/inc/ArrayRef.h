@@ -12,6 +12,7 @@ details.
 
 #include <cstddef>
 #include <vector>
+#include <array>
 
 #include "ArrayAdapter.h"
 #include "Types.h"
@@ -70,6 +71,13 @@ public:
 	ArrayRef (const std::vector<T>& vec)
 		: data_ (vec.data ())
 		, count_ (vec.size ())
+	{
+	}
+
+	template <int Size>
+	constexpr ArrayRef (const std::array<T, Size>& vec)
+		: data_ (vec.data ())
+		, count_ (Size)
 	{
 	}
 
@@ -222,6 +230,13 @@ public:
 	{
 	}
 
+	template <typename T, int Size>
+	constexpr ArrayRef (const std::array<T, Size>& vec)
+		: data_ (vec.data ())
+		, size_ (Size * sizeof (T))
+	{
+	}
+
 	template <typename T, int N>
 	constexpr ArrayRef (const T (&array)[N])
 		: data_ (array)
@@ -314,6 +329,12 @@ public:
 	{
 	}
 
+	template <int Size>
+	constexpr MutableArrayRef (std::array<T, Size>& vec)
+	: ArrayRef<T> (vec)
+	{
+	}
+
 	template <int N>
 	constexpr MutableArrayRef (T (&array)[N])
 	: ArrayRef<T> (array)
@@ -394,6 +415,12 @@ public:
 	template <typename T>
 	constexpr MutableArrayRef (std::vector<T>& vec)
 	: ArrayRef<void> (vec)
+	{
+	}
+
+	template <typename T, int Size>
+	constexpr MutableArrayRef (std::array<T, Size>& vec)
+		: ArrayRef<void> (vec)
 	{
 	}
 

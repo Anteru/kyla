@@ -106,6 +106,7 @@ int Build (const std::vector<std::string>& options,
 		std::cout << "Compressed:        " << statistics.compressedContentSize << std::endl;
 		std::cout << "Compression ratio: " << statistics.compressionRatio << std::endl;
 		std::cout << "Compression time:  " << statistics.compressionTimeSeconds << " (sec)" << std::endl;
+		std::cout << "Encryption time:   " << statistics.encryptionTimeSeconds << " (sec)" << std::endl;
 		std::cout << "Hash time:         " << statistics.hashTimeSeconds << " (sec)" << std::endl;
 	}
 

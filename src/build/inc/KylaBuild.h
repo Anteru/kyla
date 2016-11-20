@@ -24,6 +24,7 @@ struct KylaBuildStatistics
 
 	double compressionTimeSeconds;
 	double hashTimeSeconds;
+	double encryptionTimeSeconds;
 };
 
 struct KylaBuildSettings
