@@ -22,7 +22,7 @@ IF(KYLA_BUILD_UI)
     ADD_SUBDIRECTORY(ui)
 ENDIF()
 
-find_package(PythonInterp)
+find_package(PythonInterp 3.5)
 
 ADD_CUSTOM_TARGET (docs
     ${PYTHON_EXECUTABLE} -m venv env

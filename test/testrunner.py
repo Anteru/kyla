@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 # [LICENSE BEGIN]
 # kyla Copyright (C) 2016 Matthäus G. Chajdas
 #
