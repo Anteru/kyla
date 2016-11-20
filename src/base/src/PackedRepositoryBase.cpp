@@ -48,7 +48,7 @@ struct PackedRepositoryBase::Decryptor
 		byte key [64] = { 0 };
 		PKCS5_PBKDF2_HMAC_SHA1 (key_.data (),
 			static_cast<int> (key_.size ()),
-			salt.data (), static_cast<int> (salt.size ()), 
+			salt.data (), static_cast<int> (salt.size ()),
 			4096, 64, key);
 
 		// Extra memory for the decryption padding handling
@@ -137,37 +137,24 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 
 	// Finds the content objects we need in a particular source package, and
 	// sorts them by the in-package offset
-	auto contentObjectsInPackageQuery = db.Prepare ("SELECT  "
-		"    storage_mapping.PackageOffset AS PackageOffset,  "	// = 0
-		"    storage_mapping.PackageSize AS PackageSize, "		// = 1
-		"    storage_mapping.SourceOffset AS SourceOffset,  "	// = 2
-		"    content_objects.Hash AS Hash, "					// = 3
-		"    content_objects.Size as TotalSize, "				// = 4
-		"	 storage_mapping.SourceSize AS SourceSize, "		// = 5
-		"    storage_mapping.Id AS StorageMappingId "			// = 6
-		"FROM storage_mapping "
-		"INNER JOIN content_objects ON storage_mapping.ContentObjectId = content_objects.Id "
-		"INNER JOIN source_packages ON storage_mapping.SourcePackageId = source_packages.Id "
-		"WHERE content_objects.Hash IN (SELECT Hash FROM requested_content_objects) "
-		"    AND source_packages.Id = ? "
-		"ORDER BY PackageOffset ");
-
-	auto getCompressionQuery = db.Prepare ("SELECT "
-		"	Algorithm, InputSize, OutputSize "
-		"FROM storage_compression "
-		"WHERE StorageMappingId = ?"
-	);
-	
-	auto getEncryptionQuery = db.Prepare ("SELECT "
-		"	Algorithm, Data, InputSize, OutputSize "
-		"FROM storage_encryption "
-		"WHERE StorageMappingId = ?"
-	);
-
-	auto getStorageHashQuery = db.Prepare (
-		"SELECT Hash "
-		"FROM storage_hashes "
-		"WHERE StorageMappingId = ?");
+	auto contentObjectsInPackageQuery = db.Prepare ("SELECT "
+		"	PackageOffset,  "			// = 0
+		"	PackageSize, "				// = 1
+		"	SourceOffset,  "			// = 2
+		"	ContentHash, "				// = 3
+		"	TotalSize, "				// = 4
+		"	SourceSize, "				// = 5
+		"	CompressionAlgorithm, "		// = 6
+		"	CompressionInputSize, "		// = 7
+		"	CompressionOutputSize, "	// = 8
+		"	EncryptionAlgorithm, "		// = 9
+		"	EncryptionData, "			// = 10
+		"	EncryptionInputSize, "		// = 11
+		"	EncryptionOutputSize, "		// = 12
+		"	StorageHash "				// = 13
+		"FROM storage_data_view "
+		"WHERE ContentHash IN (SELECT Hash FROM requested_content_objects) "
+		"    AND SourcePackageId = ? ");
 
 	std::vector<byte> writeBuffer;
 	std::vector<byte> readBuffer;
@@ -187,54 +174,48 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 			const auto packageOffset = contentObjectsInPackageQuery.GetInt64 (0);
 			const auto packageSize = contentObjectsInPackageQuery.GetInt64 (1);
 			const auto sourceOffset = contentObjectsInPackageQuery.GetInt64 (2);
-			SHA256Digest hash;
-			contentObjectsInPackageQuery.GetBlob (3, hash);
 			const auto totalSize = contentObjectsInPackageQuery.GetInt64 (4);
 			const auto sourceSize = contentObjectsInPackageQuery.GetInt64 (5);
-			const auto storageMappingId = contentObjectsInPackageQuery.GetInt64 (6);
-			
+
 			readBuffer.resize (packageSize);
 			packageFile->Read (packageOffset, readBuffer);
 
 			// If encrypted, we need to decrypt first
-			getEncryptionQuery.BindArguments (storageMappingId);
-			if (getEncryptionQuery.Step ()) {
+			if (contentObjectsInPackageQuery.GetText (10)) {
 				//@TODO(minor) Check algorithm
-				const auto data = getEncryptionQuery.GetBlob (1);
+				const auto data = contentObjectsInPackageQuery.GetBlob (10);
 				std::array<byte, 8> salt;
 				std::array<byte, 16> iv;
 				::memcpy (salt.data (), data, 8);
 				::memcpy (iv.data (), static_cast<const byte*> (data) + 8, 16);
 
-				writeBuffer.resize (getEncryptionQuery.GetInt64 (2));
+				writeBuffer.resize (contentObjectsInPackageQuery.GetInt64 (12));
 
 				decryptor_->Decrypt (readBuffer, writeBuffer,
 					salt, iv);
 				std::swap (readBuffer, writeBuffer);
 			}
-			getEncryptionQuery.Reset ();
 
-			// If we find an entry in the storage_hashes table, validate the
-			// compressed source data
-			getStorageHashQuery.BindArguments (storageMappingId);
-			if (getStorageHashQuery.Step ()) {
-				SHA256Digest digest;
-				getStorageHashQuery.GetBlob (0, digest);
+			SHA256Digest hash;
+			contentObjectsInPackageQuery.GetBlob (3, hash);
 
-				if (ComputeSHA256 (readBuffer) != digest) {
+			if (contentObjectsInPackageQuery.GetColumnType (13) != Sql::Type::Null) {
+				SHA256Digest storageDigest;
+				contentObjectsInPackageQuery.GetBlob (13, storageDigest);
+				if (ComputeSHA256 (readBuffer) != storageDigest) {
 					throw RuntimeException ("PackedRepository",
 						str (boost::format ("Source data for chunk '%1%' is corrupted") %
 							ToString (hash)),
 						KYLA_FILE_LINE);
 				}
+			} else {
+				assert (sourceSize == 0);
 			}
-			getStorageHashQuery.Reset ();
 
-			getCompressionQuery.BindArguments (storageMappingId);
-			if (getCompressionQuery.Step ()) {
-				const auto compression = getCompressionQuery.GetText (0);
-				const auto uncompressedSize = getCompressionQuery.GetInt64 (1);
-				const auto compressedSize = getCompressionQuery.GetInt64 (2);
+			if (contentObjectsInPackageQuery.GetText (6)) {
+				const auto compression = contentObjectsInPackageQuery.GetText (6);
+				const auto uncompressedSize = contentObjectsInPackageQuery.GetInt64 (7);
+				const auto compressedSize = contentObjectsInPackageQuery.GetInt64 (8);
 
 				if (compression != currentCompressorId) {
 					// we assume the compressors change infrequently
@@ -251,7 +232,6 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 			} else {
 				getCallback (hash, readBuffer, sourceOffset, totalSize);
 			}
-			getCompressionQuery.Reset ();
 		}
 
 		contentObjectsInPackageQuery.Reset ();
@@ -275,35 +255,27 @@ void PackedRepositoryBase::ValidateImpl (const Repository::ValidationCallback& v
 	);
 
 	auto contentObjectsInPackageQuery = db.Prepare (
-		"SELECT  "
-		"    storage_mapping.PackageOffset AS PackageOffset,  "
-		"    storage_mapping.PackageSize AS PackageSize, "
-		"    storage_mapping.SourceOffset AS SourceOffset,  "
-		"	 storage_mapping.SourceSize AS SourceSize, "
-		"    storage_mapping.Id AS StorageMappingId "
-		"FROM storage_mapping "
-		"INNER JOIN content_objects ON storage_mapping.ContentObjectId = content_objects.Id "
-		"INNER JOIN source_packages ON storage_mapping.SourcePackageId = source_packages.Id "
-		"WHERE source_packages.Id = ? "
-		"ORDER BY PackageOffset ");
-
-	auto getCompressionQuery = db.Prepare ("SELECT "
-		"	Algorithm, InputSize, OutputSize "
-		"FROM storage_compression "
-		"WHERE StorageMappingId = ?"
-	);
-
-	auto getStorageHashQuery = db.Prepare (
-		"SELECT Hash "
-		"FROM storage_hashes "
-		"WHERE StorageMappingId = ?");
+		"SELECT "
+		"	PackageOffset,  "				// = 0
+		"	PackageSize, "					// = 1
+		"	SourceOffset,  "				// = 2
+		"	SourceSize, "					// = 3
+		"	EncryptionAlgorithm, "			// = 4
+		"	EncryptionData, "				// = 5
+		"	EncryptionInputSize, "			// = 6
+		"	EncryptionOutputSize, "			// = 7
+		"	StorageHash, "					// = 8
+		"	ContentHash "					// = 9
+		"FROM storage_data_view "
+		"WHERE ContentHash IN (SELECT Hash FROM requested_content_objects) "
+		"    AND SourcePackageId = ? ");
 
 	std::vector<byte> compressionOutputBuffer;
-	std::vector<byte> readBuffer;
+	std::vector<byte> readBuffer, writeBuffer;
 
 	while (findSourcePackagesQuery.Step ()) {
 		auto packageFile = OpenPackage (findSourcePackagesQuery.GetText (0));
-		
+
 		contentObjectsInPackageQuery.BindArguments (
 			findSourcePackagesQuery.GetInt64 (0));
 
@@ -313,25 +285,36 @@ void PackedRepositoryBase::ValidateImpl (const Repository::ValidationCallback& v
 		while (contentObjectsInPackageQuery.Step ()) {
 			const auto packageOffset = contentObjectsInPackageQuery.GetInt64 (0);
 			const auto packageSize = contentObjectsInPackageQuery.GetInt64 (1);
-			SHA256Digest hash;
-			const auto sourceSize = contentObjectsInPackageQuery.GetInt64 (4);
-			const auto storageMappingId = contentObjectsInPackageQuery.GetInt64 (5);
+			const auto sourceSize = contentObjectsInPackageQuery.GetInt64 (3);
 
 			readBuffer.resize (packageSize);
 			packageFile->Read (packageOffset, readBuffer);
 
-			getStorageHashQuery.BindArguments (storageMappingId);
-			if (getStorageHashQuery.Step ()) {
-				SHA256Digest digest;
-				getStorageHashQuery.GetBlob (0, digest);
+			// Decrypt if needed
+			if (contentObjectsInPackageQuery.GetText (4)) {
+				const auto data = contentObjectsInPackageQuery.GetBlob (5);
+				std::array<byte, 8> salt;
+				std::array<byte, 16> iv;
+				::memcpy (salt.data (), data, 8);
+				::memcpy (iv.data (), static_cast<const byte*> (data) + 8, 16);
 
-				if (ComputeSHA256 (readBuffer) != digest) {
-					validationCallback (hash, nullptr, ValidationResult::Corrupted);
-				} else {
-					validationCallback (hash, nullptr, ValidationResult::Ok);
-				}
+				writeBuffer.resize (contentObjectsInPackageQuery.GetInt64 (7));
+
+				decryptor_->Decrypt (readBuffer, writeBuffer,
+					salt, iv);
+
+				std::swap (readBuffer, writeBuffer);
 			}
-			getStorageHashQuery.Reset ();
+
+			SHA256Digest contentDigest, storageDigest;
+			contentObjectsInPackageQuery.GetBlob (8, storageDigest);
+			contentObjectsInPackageQuery.GetBlob (9, contentDigest);
+
+			if (ComputeSHA256 (readBuffer) != storageDigest) {
+				validationCallback (contentDigest, nullptr, ValidationResult::Corrupted);
+			} else {
+				validationCallback (contentDigest, nullptr, ValidationResult::Ok);
+			}
 		}
 
 		contentObjectsInPackageQuery.Reset ();

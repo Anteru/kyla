@@ -52,9 +52,9 @@ CREATE TABLE storage_hashes (
 CREATE TABLE storage_encryption (
 	StorageMappingId INTEGER PRIMARY KEY NOT NULL,
 	Algorithm VARCHAR NOT NULL,
-	-- IV, Salt, etc.
+	-- IV, Salt, etc. - this is algorithm-dependent
 	Data BLOB NOT NULL UNIQUE,
-	-- Encryption may add padding, so store input/output sizes
+	-- Size before and after the compression
 	InputSize INTEGER NOT NULL,
 	OutputSize INTEGER NOT NULL,
 	FOREIGN KEY(StorageMappingId) REFERENCES storage_mapping(Id)
@@ -64,7 +64,7 @@ CREATE TABLE storage_encryption (
 CREATE TABLE storage_compression (
 	StorageMappingId INTEGER PRIMARY KEY NOT NULL,
 	Algorithm VARCHAR NOT NULL,
-	-- Compression will always change the size
+	-- Size before and after the compression
 	InputSize INTEGER NOT NULL,
 	OutputSize INTEGER NOT NULL,
 	FOREIGN KEY(StorageMappingId) REFERENCES storage_mapping(Id)
@@ -77,6 +77,9 @@ CREATE TABLE properties (
 	Value NOT NULL
 );
 
+INSERT INTO properties (Name, Value) 
+VALUES ('database_version', 1);
+
 -- Required feature support for this package
 CREATE TABLE features (
 	NAME VARCHAR PRIMARY KEY
@@ -87,6 +90,32 @@ CREATE INDEX storage_mapping_content_object_id_idx ON storage_mapping (ContentOb
 CREATE INDEX content_object_hash_idx ON content_objects (Hash ASC);
 CREATE INDEX files_path_idx ON files (Path ASC);
 
-CREATE VIEW content_objects_with_reference_count
-	AS SELECT Id, Hash, Size, (SELECT COUNT(*) FROM files WHERE ContentObjectId=Id) AS ReferenceCount
+CREATE VIEW content_objects_with_reference_count AS 
+	SELECT Id, Hash, Size, (SELECT COUNT(*) FROM files WHERE ContentObjectId=Id) AS ReferenceCount
 	FROM content_objects;
+
+CREATE VIEW storage_data_view AS 
+	SELECT 
+		source_packages.Id AS SourcePackageId,
+		storage_mapping.PackageOffset AS PackageOffset, 
+		storage_mapping.PackageSize AS PackageSize,
+		storage_mapping.SourceOffset AS SourceOffset, 
+		content_objects.Hash AS ContentHash,
+		content_objects.Size as TotalSize,
+		storage_mapping.SourceSize AS SourceSize,
+		storage_mapping.Id AS StorageMappingId,
+		storage_compression.Algorithm AS CompressionAlgorithm,
+		storage_compression.InputSize AS CompressionInputSize,
+		storage_compression.OutputSize AS CompressionOutputSize,
+		storage_encryption.Algorithm AS EncryptionAlgorithm,
+		storage_encryption.Data AS EncryptionData,
+		storage_encryption.InputSize AS EncryptionInputSize,
+		storage_encryption.OutputSize AS EncryptionOutputSize,
+		storage_hashes.Hash AS StorageHash
+	FROM storage_mapping
+	INNER JOIN content_objects ON storage_mapping.ContentObjectId = content_objects.Id
+	INNER JOIN source_packages ON storage_mapping.SourcePackageId = source_packages.Id
+	LEFT JOIN storage_hashes ON storage_hashes.StorageMappingId = storage_mapping.Id
+	LEFT JOIN storage_compression ON storage_compression.StorageMappingId = storage_mapping.Id
+	LEFT JOIN storage_encryption ON storage_encryption.StorageMappingId = storage_mapping.Id
+	ORDER BY PackageOffset;
