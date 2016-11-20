@@ -548,7 +548,7 @@ private:
 		std::chrono::nanoseconds duration = std::chrono::nanoseconds{ 0 };
 	};
 
-	static TransformationResult TransformCompress (std::vector<byte>& input, 
+	static TransformationResult TransformCompress (std::vector<byte>& input,
 		std::vector<byte>& output, BlockCompressor* compressor)
 	{
 		auto compressionStartTime = std::chrono::high_resolution_clock::now ();
@@ -586,7 +586,7 @@ private:
 		RAND_bytes (salt, sizeof (salt));
 		RAND_bytes (iv, sizeof (iv));
 
-		PKCS5_PBKDF2_HMAC_SHA1 (encryptionKey.data (), 
+		PKCS5_PBKDF2_HMAC_SHA1 (encryptionKey.data (),
 			static_cast<int> (encryptionKey.size ()),
 			salt, sizeof (salt), 4096, 64, key);
 
@@ -671,7 +671,7 @@ private:
 		if (!encryptionKey.empty ()) {
 			encryptionContext = EVP_CIPHER_CTX_new ();
 		}
-		
+
 		std::vector<byte> readBuffer, writeBuffer;
 
 		// We can insert content objects directly - every unique file is one
@@ -713,14 +713,14 @@ private:
 				int64 readOffset = 0;
 				while ((bytesRead = inputFile->Read (readBuffer)) > 0) {
 					readBuffer.resize (bytesRead);
-					
-					TransformationResult compressionResult;
-					compressionResult = TransformCompress (readBuffer, 
-							writeBuffer, compressor.get ()); 
 
-					buildStatistics_.bytesStoredUncompressed += 
+					TransformationResult compressionResult;
+					compressionResult = TransformCompress (readBuffer,
+							writeBuffer, compressor.get ());
+
+					buildStatistics_.bytesStoredUncompressed +=
 						compressionResult.inputBytes;
-					buildStatistics_.bytesStoredCompressed += 
+					buildStatistics_.bytesStoredCompressed +=
 						compressionResult.outputBytes;
 
 					const auto compressedChunkHash = ComputeSHA256 (writeBuffer);
@@ -734,7 +734,7 @@ private:
 							writeBuffer, encryptionKey,
 							encryptionData, encryptionContext);
 
-						buildStatistics_.encryptionTime += 
+						buildStatistics_.encryptionTime +=
 							encryptionResult.duration;
 					}
 

@@ -2,7 +2,7 @@
 [LICENSE BEGIN]
 kyla Copyright (C) 2016 Matthäus G. Chajdas
 
-This file is distributed under the BSD 2-clause license. See LICENSE for 
+This file is distributed under the BSD 2-clause license. See LICENSE for
 details.
 [LICENSE END]
 */
@@ -230,7 +230,7 @@ public:
 	{
 	}
 
-	template <typename T, int Size>
+	template <typename T, size_t Size>
 	constexpr ArrayRef (const std::array<T, Size>& vec)
 		: data_ (vec.data ())
 		, size_ (Size * sizeof (T))
@@ -418,7 +418,7 @@ public:
 	{
 	}
 
-	template <typename T, int Size>
+	template <typename T, size_t Size>
 	constexpr MutableArrayRef (std::array<T, Size>& vec)
 		: ArrayRef<void> (vec)
 	{
