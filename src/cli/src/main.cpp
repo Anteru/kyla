@@ -123,6 +123,7 @@ int Validate (const std::vector<std::string>& options,
 			"verbose output")
 		("summary,s", po::value<bool> ()->default_value (true),
 			"show summary")
+		("key", po::value<std::string> ())
 		("input", po::value<std::string> ());
 
 	po::positional_options_description posBuild;
@@ -186,11 +187,22 @@ int Validate (const std::vector<std::string>& options,
 		installer->SetLogCallback (installer, StdoutLog, nullptr);
 	}
 
+	installer->SetValidationCallback (installer, validationCallback, &context);
+
 	KylaTargetRepository repository;
 	KYLA_CHECKED_CALL (installer->OpenTargetRepository (installer, 
 		vm ["input"].as<std::string> ().c_str (), 0, &repository));
 
-	installer->SetValidationCallback (installer, validationCallback, &context);
+	if (vm.find ("key") != vm.end ()) {
+		const auto key = vm ["key"].as<std::string> ();
+	
+		KYLA_CHECKED_CALL (installer->SetRepositoryProperty (
+			installer, repository, kylaRepositoryProperty_DecryptionKey,
+			key.size () + 1,
+			key.c_str ()
+		));
+	}
+
 	KYLA_CHECKED_CALL (installer->Execute (installer, kylaAction_Verify, 
 		repository, nullptr, nullptr));
 

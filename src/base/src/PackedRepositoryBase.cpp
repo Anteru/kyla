@@ -182,6 +182,12 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 
 			// If encrypted, we need to decrypt first
 			if (contentObjectsInPackageQuery.GetText (10)) {
+				if (!decryptor_) {
+					throw RuntimeException ("PackedRepository",
+						"Repository is encrypted but no key has been set",
+						KYLA_FILE_LINE);
+				}
+
 				//@TODO(minor) Check algorithm
 				const auto data = contentObjectsInPackageQuery.GetBlob (10);
 				std::array<byte, 8> salt;
@@ -190,7 +196,7 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 				::memcpy (iv.data (), static_cast<const byte*> (data) + 8, 16);
 
 				writeBuffer.resize (contentObjectsInPackageQuery.GetInt64 (12));
-
+				
 				decryptor_->Decrypt (readBuffer, writeBuffer,
 					salt, iv);
 				std::swap (readBuffer, writeBuffer);
@@ -292,6 +298,12 @@ void PackedRepositoryBase::ValidateImpl (const Repository::ValidationCallback& v
 
 			// Decrypt if needed
 			if (contentObjectsInPackageQuery.GetText (4)) {
+				if (!decryptor_) {
+					throw RuntimeException ("PackedRepository",
+						"Repository is encrypted but no key has been set",
+						KYLA_FILE_LINE);
+				}
+
 				const auto data = contentObjectsInPackageQuery.GetBlob (5);
 				std::array<byte, 8> salt;
 				std::array<byte, 16> iv;
