@@ -27,6 +27,25 @@ details.
 #include <openssl/evp.h>
 
 namespace kyla {
+namespace {
+struct AES256IvSalt
+{
+	std::array<byte, 16> iv;
+	std::array<byte, 8> salt;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+AES256IvSalt UnpackAES256IvSalt (const void* data)
+{
+	AES256IvSalt result;
+
+	::memcpy (result.salt.data (), data, 8);
+	::memcpy (result.iv.data (), static_cast<const byte*> (data) + 8, 16);
+
+	return result;
+}
+}
+
 struct PackedRepositoryBase::Decryptor
 {
 	Decryptor (const std::string& key)
@@ -42,20 +61,19 @@ struct PackedRepositoryBase::Decryptor
 	}
 
 	void Decrypt (std::vector<byte>& input, std::vector<byte>& output,
-		std::array<byte, 8>& salt,
-		std::array<byte, 16>& iv)
+		const AES256IvSalt& ivSalt)
 	{
 		byte key [64] = { 0 };
 		PKCS5_PBKDF2_HMAC_SHA1 (key_.data (),
 			static_cast<int> (key_.size ()),
-			salt.data (), static_cast<int> (salt.size ()),
+			ivSalt.salt.data (), static_cast<int> (ivSalt.salt.size ()),
 			4096, 64, key);
 
 		// Extra memory for the decryption padding handling
 		output.resize (output.size () + 32);
 
 		EVP_DecryptInit_ex (decryptionContext_, decryptionCypher_,
-			nullptr, key, iv.data ());
+			nullptr, key, ivSalt.iv.data ());
 
 		int bytesWritten = 0;
 		int outputLength = static_cast<int> (output.size ());
@@ -189,16 +207,11 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 				}
 
 				//@TODO(minor) Check algorithm
-				const auto data = contentObjectsInPackageQuery.GetBlob (10);
-				std::array<byte, 8> salt;
-				std::array<byte, 16> iv;
-				::memcpy (salt.data (), data, 8);
-				::memcpy (iv.data (), static_cast<const byte*> (data) + 8, 16);
-
 				writeBuffer.resize (contentObjectsInPackageQuery.GetInt64 (12));
 				
 				decryptor_->Decrypt (readBuffer, writeBuffer,
-					salt, iv);
+					UnpackAES256IvSalt (
+						contentObjectsInPackageQuery.GetBlob (10)));
 				std::swap (readBuffer, writeBuffer);
 			}
 
@@ -304,16 +317,11 @@ void PackedRepositoryBase::ValidateImpl (const Repository::ValidationCallback& v
 						KYLA_FILE_LINE);
 				}
 
-				const auto data = contentObjectsInPackageQuery.GetBlob (5);
-				std::array<byte, 8> salt;
-				std::array<byte, 16> iv;
-				::memcpy (salt.data (), data, 8);
-				::memcpy (iv.data (), static_cast<const byte*> (data) + 8, 16);
-
+				//@TODO(minor) Check algorithm
 				writeBuffer.resize (contentObjectsInPackageQuery.GetInt64 (7));
 
 				decryptor_->Decrypt (readBuffer, writeBuffer,
-					salt, iv);
+					UnpackAES256IvSalt (contentObjectsInPackageQuery.GetBlob (5)));
 
 				std::swap (readBuffer, writeBuffer);
 			}
