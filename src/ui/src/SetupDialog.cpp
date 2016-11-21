@@ -164,6 +164,26 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 	auto installer = context_->installer;
 	auto sourceRepository = context_->sourceRepository;
 
+	int isEncrypted = 0;
+	size_t isEncryptedSize = sizeof (isEncrypted);
+	installer->GetRepositoryProperty (installer, sourceRepository,
+		kylaRepositoryProperty_IsEncrypted, &isEncryptedSize, &isEncrypted);
+
+	if (! isEncrypted) {
+		ui->passwordEdit->hide ();
+		ui->passwordLabel->hide ();
+		ui->passwordSplitter->hide ();
+	}
+	
+	connect (ui->passwordEdit, &QLineEdit::textChanged,
+		[=]() -> void {
+		std::string key = ui->passwordEdit->text ().toStdString ();
+
+		installer->SetRepositoryProperty (installer, sourceRepository,
+			kylaRepositoryProperty_DecryptionKey, key.size () + 1,
+			key.c_str ());
+	});
+
 	connect (ui->featureSelection, &QListWidget::itemChanged,
 		[=]() -> void {
 		std::int64_t totalSize = 0;
