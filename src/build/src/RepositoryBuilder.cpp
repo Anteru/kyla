@@ -409,25 +409,6 @@ struct PackedRepositoryBuilder final : public RepositoryBuilder
 		db.Execute ("PRAGMA journal_mode=WAL;");
 		db.Execute ("PRAGMA synchronous=NORMAL;");
 
-		{
-			auto featuresInsertQuery = db.Prepare (
-				"INSERT INTO features (Name) VALUES (?);");
-
-			std::vector<const char*> features = {
-				"compression"
-			};
-
-			if (! encryptionKey_.empty ()) {
-				features.push_back ("encryption");
-			}
-
-			for (const auto& feature : features) {
-				featuresInsertQuery.BindArguments (feature);
-				featuresInsertQuery.Step ();
-				featuresInsertQuery.Reset ();
-			}
-		}
-
 		auto uniqueObjects = PopulateUniqueContentObjects (db, packages);
 
 		for (const auto& sourcePackage : packages) {

@@ -80,11 +80,6 @@ CREATE TABLE properties (
 INSERT INTO properties (Name, Value) 
 VALUES ('database_version', 1);
 
--- Required feature support for this package
-CREATE TABLE features (
-	NAME VARCHAR PRIMARY KEY
-);
-
 CREATE INDEX files_file_set_id_idx ON files (FileSetId ASC);
 CREATE INDEX storage_mapping_content_object_id_idx ON storage_mapping (ContentObjectId ASC);
 CREATE INDEX content_object_hash_idx ON content_objects (Hash ASC);

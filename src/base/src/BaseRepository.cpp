@@ -17,7 +17,7 @@ namespace kyla {
 std::vector<Uuid> BaseRepository::GetFilesetsImpl ()
 {
 	static const char* querySql =
-		"SELECT file_sets.Uuid FROM file_sets ";
+		"SELECT file_sets.Uuid FROM file_sets;";
 
 	auto query = GetDatabase ().Prepare (querySql);
 
@@ -37,10 +37,9 @@ std::vector<Uuid> BaseRepository::GetFilesetsImpl ()
 bool BaseRepository::IsEncryptedImpl ()
 {
 	static const char* querySql =
-		"SELECT COUNT(*) FROM features WHERE Name=?";
+		"SELECT EXISTS(SELECT 1 FROM storage_compression);";
 
 	auto query = GetDatabase ().Prepare (querySql);
-	query.BindArguments ("encryption");
 	query.Step ();
 
 	return query.GetInt64 (0) != 0;
