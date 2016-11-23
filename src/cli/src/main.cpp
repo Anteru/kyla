@@ -114,6 +114,57 @@ int Build (const std::vector<std::string>& options,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+int ExtractResource (const std::vector<std::string>& options,
+	po::variables_map& vm)
+{
+	po::options_description build_desc ("extract resource options");
+	build_desc.add_options ()
+		("id", po::value<std::string> ())
+		("target", po::value<std::string> ());
+
+	po::positional_options_description posBuild;
+	posBuild
+		.add ("id", 1)
+		.add ("target", 1);
+
+	try {
+		po::store (po::command_line_parser (options).options (build_desc)
+			.positional (posBuild).run (), vm);
+	} catch (const std::exception& e) {
+		std::cerr << e.what () << std::endl;
+		return 1;
+	}
+
+	KylaInstaller* installer = nullptr;
+	KYLA_CHECKED_CALL (kylaCreateInstaller (KYLA_API_VERSION_1_1, &installer));
+
+	assert (installer);
+
+	KylaTargetRepository source;
+	KYLA_CHECKED_CALL (installer->OpenSourceRepository (installer,
+		vm["source"].as<std::string> ().c_str (), 0, &source));
+
+	auto id = kyla::Uuid::Parse (vm["id"].as<std::string> ());
+	KylaUuid kId;
+	::memcpy (kId.bytes, id.GetData (), sizeof (kId.bytes));
+
+	size_t resultSize = 0;
+	KYLA_CHECKED_CALL (installer->GetResource (installer,
+		source, kId, &resultSize, nullptr));
+
+	std::vector<uint8_t> data;
+	data.resize (resultSize);
+	KYLA_CHECKED_CALL (installer->GetResource (installer,
+		source, kId, &resultSize, data.data ()));
+
+	FILE* output = fopen (vm["target"].as<std::string> ().c_str (), "wb");
+	fwrite (data.data (), 1, resultSize, output);
+	fclose (output);
+
+	return 0;
+}
+
+///////////////////////////////////////////////////////////////////////////////
 int Validate (const std::vector<std::string>& options,
 	po::variables_map& vm)
 {

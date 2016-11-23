@@ -281,6 +281,17 @@ struct KylaInstaller
 		int propertyId,
 		size_t propertySize,
 		const void* propertyValue);
+
+	/**
+	Get an embedded resource in the source repository.
+
+	@since 1.1
+	*/
+	int (*GetResource)(KylaInstaller* installer,
+		KylaSourceRepository repository,
+		KylaUuid id,
+		size_t* resultSize,
+		void* result);
 };
 
 #define KYLA_MAKE_API_VERSION(major,minor,patch) (major << 22 | minor << 12 | patch)

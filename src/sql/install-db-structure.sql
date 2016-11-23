@@ -6,6 +6,15 @@ CREATE TABLE content_objects (
 	Hash BLOB NOT NULL UNIQUE,
 	Size INTEGER NOT NULL);
 
+-- Store embedded resources like logos, UI info, etc.
+CREATE TABLE resources (
+	Uuid BLOB NOT NULL UNIQUE,
+	Hash BLOB NOT NULL,
+	Content BLOB NOT NULL,
+	CompressionAlgorithm VARCHAR,
+	SourceSize INTEGER NOT NULL
+)
+
 -- All file sets stored in this repository
 CREATE TABLE file_sets (
 	Id INTEGER PRIMARY KEY NOT NULL,
