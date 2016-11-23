@@ -270,9 +270,7 @@ int QueryFilesets (const std::vector<std::string>& options,
 { 
 	po::options_description build_desc ("query-filesets options");
 	build_desc.add_options ()
-		("source", po::value<std::string> ())
-		("name,n", po::bool_switch ()->default_value (false),
-			"query the fileset name as well");
+		("source", po::value<std::string> ());
 
 	po::positional_options_description posBuild;
 	posBuild

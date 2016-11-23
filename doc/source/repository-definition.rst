@@ -13,10 +13,10 @@ Installer repositories are compiled by using ``kcl build``. This requires an Xml
     		<Type>Packed</Type>
     	</Package>
     	<FileSets>
-    		<FileSet Id="5d195f63-f424-431f-b7c5-8d57cd32f57b" Name="CoreApplication">
+    		<FileSet Id="5d195f63-f424-431f-b7c5-8d57cd32f57b">
     			<File Source="application.exe" />
     		</FileSet>
-    		<FileSet Id="c8bed51b-cbba-4699-953a-834930704d89" Name="Plugins">
+    		<FileSet Id="c8bed51b-cbba-4699-953a-834930704d89">
     			<File Source="plugin1.dll" />
         		<File Source="plugin2.dll" />
     		</FileSet>
@@ -55,10 +55,10 @@ There's also a couple of optional elements:
       <SourcePackage Name="binaries" Id="BinariesPackage">
       <SourcePackage Name="plugins" Id="PluginsPackage">
     </SourcePackages>
-    <FileSet SourcePackageId="BinariesPackage" Id="5d195f63-f424-431f-b7c5-8d57cd32f57b" Name="CoreApplication">
+    <FileSet SourcePackageId="BinariesPackage" Id="5d195f63-f424-431f-b7c5-8d57cd32f57b">
       <!-- as above -->
     </FileSet>
-    <FileSet SourcePackageId="PluginsPackage" Id="c8bed51b-cbba-4699-953a-834930704d89" Name="Plugins">
+    <FileSet SourcePackageId="PluginsPackage" Id="c8bed51b-cbba-4699-953a-834930704d89">
       <!-- as above -->
     </FileSet>
 
@@ -69,7 +69,7 @@ There's also a couple of optional elements:
   * ``Name`` - a valid file name which will be used for the package file
   * ``Id`` - a unique id within the repository. This is referenced from a file set using ``SourcePackageId``
 
-  Optionally, all content objects in a source package can be compressed. The compression algorithm can be set using the optional ``Compression`` attribute. Valid compression algorithms are: ``Uncompressed``, ``Zip``, ``Brotli``.
+  Optionally, all content objects in a source package can be compressed. The compression algorithm can be set using the optional ``Compression`` attribute. Valid compression algorithms are: ``Uncompressed``, ``Zip``, ``Brotli``, ``Zstd``.
 
   .. note::
 
