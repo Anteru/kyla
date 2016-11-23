@@ -20,6 +20,12 @@ from functools import partial
 import time
 import sys
 
+def PrintOutput(result):
+    if result.stdout:
+        print ('Captured stdout:', result.stdout.decode ('utf-8'))
+    if result.stderr:
+        print ('Captured stderr:', result.stderr.decode ('utf-8'))
+
 class KylaRunner:
     def __init__(self, kclBinaryPath, verbose):
         self._kcl = kclBinaryPath
@@ -41,6 +47,7 @@ class KylaRunner:
         result = subprocess.run (args,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         if self._verbose:
             print ('Result:', result.returncode)
+            PrintOutput (result)
         return result.returncode == 0
 
     def Install(self, source, target, filesets=[], key=None):
@@ -72,8 +79,9 @@ class KylaRunner:
             result = subprocess.run (args,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
             if self._verbose:
                 print ('Result:', result.returncode)
+                PrintOutput (result)
             return result.returncode == 0
-        except e:
+        except:
             if self._verbose:
                 print ('Result:', 'ERROR')
             return False

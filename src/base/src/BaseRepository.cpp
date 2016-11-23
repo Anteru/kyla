@@ -92,19 +92,6 @@ int64_t BaseRepository::GetFilesetFileCountImpl (const Uuid& id)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-std::string BaseRepository::GetFilesetNameImpl (const Uuid& id)
-{
-	static const char* querySql =
-		"SELECT Name FROM file_sets WHERE Uuid = ?";
-
-	auto query = GetDatabase ().Prepare (querySql);
-	query.BindArguments (id);
-	query.Step ();
-
-	return query.GetText (0);
-}
-
-///////////////////////////////////////////////////////////////////////////////
 void BaseRepository::RepairImpl (Repository& /*source*/,
 	ExecutionContext& /*context*/)
 {

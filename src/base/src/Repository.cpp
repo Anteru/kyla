@@ -49,12 +49,6 @@ std::vector<Uuid> Repository::GetFilesets ()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-std::string Repository::GetFilesetName (const Uuid& id)
-{
-	return GetFilesetNameImpl (id);
-}
-
-///////////////////////////////////////////////////////////////////////////////
 int64_t Repository::GetFilesetSize (const Uuid& id)
 {
 	return GetFilesetSizeImpl (id);

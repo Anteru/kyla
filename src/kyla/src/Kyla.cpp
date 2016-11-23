@@ -705,14 +705,6 @@ int kylaQueryFileset_1_0 (KylaInstaller* installer,
 			pResultSize, pResult, *internal->log,
 			"kylaQueryFileset");
 	}
-
-	case kylaFilesetProperty_Name:
-	{
-		return KylaGet (repository->p->GetFilesetName (uuid),
-			pResultSize, pResult, *internal->log,
-			"kylaQueryFileset");
-	}
-
 	default:
 		internal->log->Error ("kylaQueryFileset", "invalid property id");
 		return kylaResult_ErrorInvalidArgument;

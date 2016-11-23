@@ -292,8 +292,8 @@ void DeployedRepository::UpdateFilesets ()
 	// Insert those we don't have yet into our file_sets, but which are
 	// pending
 	db_.Execute (
-		"INSERT INTO file_sets (Name, Uuid) "
-		"SELECT Name, Uuid FROM source.file_sets "
+		"INSERT INTO file_sets (Uuid) "
+		"SELECT Uuid FROM source.file_sets "
 		"WHERE source.file_sets.Uuid IN (SELECT Uuid FROM pending_file_sets) "
 		"AND NOT source.file_sets.Uuid IN (SELECT Uuid FROM file_sets)");
 }

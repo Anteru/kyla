@@ -38,12 +38,11 @@ class FileRepositoryBuilder:
 		self._packageType = packageType
 
 	class FileSetBuilder:
-		def __init__ (self, name, fileSetId = None):
+		def __init__ (self, fileSetId = None):
 			if fileSetId is None:
 				fileSetId = uuid.uuid4 ()
 
 			self.__element = etree.Element ('FileSet')
-			self.__element.set ('Name', name)
 			self.__element.set ('Id', _IdString (fileSetId))
 			self.__id = fileSetId
 

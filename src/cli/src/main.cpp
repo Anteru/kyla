@@ -312,27 +312,9 @@ int QueryFilesets (const std::vector<std::string>& options,
 	KYLA_CHECKED_CALL (installer->GetRepositoryProperty (installer, source,
 		kylaRepositoryProperty_AvailableFilesets, &resultSize, filesets.data ()));
 	
-	const auto queryName = vm ["name"].as<bool> ();
-
 	for (const auto& filesetId : filesets) {
-		if (queryName) {
-			size_t nameSize = 0;
-
-			installer->GetFilesetProperty (installer, source,
-				filesetId, 
-				kylaFilesetProperty_Name, &nameSize, nullptr);
-			std::vector<char> name;
-			name.resize (nameSize);
-
-			KYLA_CHECKED_CALL (installer->GetFilesetProperty (installer,
-				source,	filesetId,
-				kylaFilesetProperty_Name, &nameSize, name.data ()));
-
-			std::cout << ToString (kyla::Uuid{ filesetId.bytes }) << " " << name.data ();
-		} else {
-			std::cout << ToString (kyla::Uuid{ filesetId.bytes });
-		}
-
+		std::cout << ToString (kyla::Uuid{ filesetId.bytes });
+	
 		size_t int64Size = sizeof (std::int64_t);
 		std::int64_t fileCount, size;
 		KYLA_CHECKED_CALL (installer->GetFilesetProperty (installer, source,

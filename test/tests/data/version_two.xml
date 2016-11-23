@@ -4,7 +4,7 @@
 		<Type>Packed</Type>
 	</Package>
 	<FileSets>
-		<FileSet Id="2151452d-70d5-4b5a-9be6-b5501cf72f20" Name="F0">
+		<FileSet Id="2151452d-70d5-4b5a-9be6-b5501cf72f20">
 			<File Source="2.txt" Target="base.txt" />
 		</FileSet>
 	</FileSets>

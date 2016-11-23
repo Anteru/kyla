@@ -21,7 +21,6 @@ public:
 
 private:
 	virtual std::vector<Uuid> GetFilesetsImpl () override;
-	virtual std::string GetFilesetNameImpl (const Uuid& filesetId) override;
 	virtual int64_t GetFilesetFileCountImpl (const Uuid& filesetId) override;
 	virtual int64_t GetFilesetSizeImpl (const Uuid& filesetId) override;
 	virtual bool IsEncryptedImpl () override;

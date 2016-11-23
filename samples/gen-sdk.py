@@ -30,14 +30,14 @@ if __name__ == '__main__':
     print ('Generating SDK installer', flush=True)
     sdk = FileRepositoryBuilder ()
 
-    docs = sdk.AddFileSet ('docs')
+    docs = sdk.AddFileSet ()
     docs.AddFilesFromDirectory ('staging_sdk/docs', prefix='docs')
 
     shutil.copyfile (os.path.join (srcDir, 'scripts/kyla.py'), 'staging_sdk/python/kyla.py')
-    pythonBindings = sdk.AddFileSet ('python-bindings')
+    pythonBindings = sdk.AddFileSet ()
     pythonBindings.AddFilesFromDirectory ('staging_sdk/python', prefix='python')
 
-    binaries = sdk.AddFileSet ('binaries')
+    binaries = sdk.AddFileSet ()
 
     print ('Copying binaries', flush=True)
     binaryFiles = [
@@ -50,9 +50,9 @@ if __name__ == '__main__':
     shutil.copyfile (os.path.join (srcDir, 'src/ui/info.json'), 'staging_sdk/bin/info.json')
 
     binaries.AddFilesFromDirectory ('staging_sdk/bin', prefix='bin')
-    include_files = sdk.AddFileSet ('include_files')
+    include_files = sdk.AddFileSet ()
     include_files.AddFilesFromDirectory ('staging_sdk/include', prefix='include')
-    samples = sdk.AddFileSet ('samples')
+    samples = sdk.AddFileSet ()
     samples.AddFilesFromDirectory ('staging_sdk/samples', prefix='samples')
     doc = sdk.Finalize ()
     open ('sdk.xml', 'w').write (doc)

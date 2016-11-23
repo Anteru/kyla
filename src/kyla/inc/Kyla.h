@@ -154,19 +154,14 @@ enum kylaRepositoryProperty
 enum kylaFilesetProperty
 {
 	/**
-	The name of the fileset, as a null-terminated, UTF8 encoded string.
-	*/
-	kylaFilesetProperty_Name,
-
-	/**
 	The size of the file set when deployed, stored in an int64_t.
 	*/
-	kylaFilesetProperty_Size,
+	kylaFilesetProperty_Size = 1,
 
 	/**
 	The number of files when deployed, stored in an int64_t.
 	*/
-	kylaFilesetProperty_FileCount
+	kylaFilesetProperty_FileCount = 2
 };
 
 struct KylaInstaller

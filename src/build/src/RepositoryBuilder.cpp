@@ -48,6 +48,7 @@ details.
 namespace {
 using namespace kyla;
 
+///////////////////////////////////////////////////////////////////////////////
 struct BuildStatistics
 {
 	int64 bytesStoredUncompressed = 0;
@@ -59,12 +60,14 @@ struct BuildStatistics
 		std::chrono::high_resolution_clock::duration::zero ();
 };
 
+///////////////////////////////////////////////////////////////////////////////
 struct BuildContext
 {
 	Path sourceDirectory;
 	Path targetDirectory;
 };
 
+///////////////////////////////////////////////////////////////////////////////
 struct File
 {
 	Path source;
@@ -73,13 +76,26 @@ struct File
 	SHA256Digest hash;
 };
 
+///////////////////////////////////////////////////////////////////////////////
 struct FileSet
 {
 	std::vector<File> files;
 
-	std::string name;
-	Uuid id;
+	Uuid uuid;
+
+	// Computes the file hashes and the file set hash
+	void ComputeHashes (const Path& sourceDirectory);
 };
+
+///////////////////////////////////////////////////////////////////////////////
+void FileSet::ComputeHashes (const Path& sourceDirectory)
+{
+	std::vector<byte> fileSetHashSource;
+
+	for (auto& file : files) {
+		file.hash = ComputeSHA256 (sourceDirectory / file.source);
+	}
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 struct ContentObject
@@ -155,8 +171,7 @@ void AssignFileSetsToPackages (const pugi::xml_document& doc,
 	for (const auto& fileSetNode : doc.select_nodes ("//FileSet")) {
 		FileSet fileSet;
 
-		fileSet.id = Uuid::Parse (fileSetNode.node ().attribute ("Id").as_string ());
-		fileSet.name = fileSetNode.node ().attribute ("Name").as_string ();
+		fileSet.uuid = Uuid::Parse (fileSetNode.node ().attribute ("Id").as_string ());
 
 		// Default package name is main
 		std::string sourcePackageId = "main";
@@ -182,17 +197,6 @@ void AssignFileSetsToPackages (const pugi::xml_document& doc,
 		}
 
 		package.fileSets.emplace_back (std::move (fileSet));
-	}
-}
-
-///////////////////////////////////////////////////////////////////////////////
-void HashFiles (std::vector<FileSet>& fileSets,
-	const BuildContext& ctx)
-{
-	for (auto& fileSet : fileSets) {
-		for (auto& file : fileSet.files) {
-			file.hash = ComputeSHA256 (ctx.sourceDirectory / file.source);
-		}
 	}
 }
 
@@ -295,13 +299,13 @@ private:
 	{
 		auto fileSetsInsert = db.BeginTransaction ();
 		auto fileSetsInsertQuery = db.Prepare (
-			"INSERT INTO file_sets (Uuid, Name) VALUES (?, ?);");
+			"INSERT INTO file_sets (Uuid) VALUES (?);");
 
 		std::map<Path, std::int64_t> result;
 
 		for (const auto& fileSet : fileSets) {
 			fileSetsInsertQuery.BindArguments (
-				fileSet.id, fileSet.name);
+				fileSet.uuid);
 
 			fileSetsInsertQuery.Step ();
 			fileSetsInsertQuery.Reset ();
@@ -479,13 +483,13 @@ private:
 	{
 		auto fileSetsInsert = db.BeginTransaction ();
 		auto fileSetsInsertQuery = db.Prepare (
-			"INSERT INTO file_sets (Uuid, Name) VALUES (?, ?);");
+			"INSERT INTO file_sets (Uuid) VALUES (?);");
 
 		std::map<Path, std::int64_t> result;
 
 		for (const auto& fileSet : fileSets) {
 			fileSetsInsertQuery.BindArguments (
-				fileSet.id, fileSet.name);
+				fileSet.uuid);
 
 			fileSetsInsertQuery.Step ();
 			fileSetsInsertQuery.Reset ();
@@ -608,7 +612,7 @@ private:
 		auto filesInsertQuery = db.Prepare (
 			"INSERT INTO files (Path, ContentObjectId, FileSetId) VALUES (?, ?, ?);");
 		auto packageInsertQuery = db.Prepare (
-			"INSERT INTO source_packages (Name, Filename, Uuid) VALUES (?, ?, ?)");
+			"INSERT INTO source_packages (Filename, Uuid) VALUES (?, ?)");
 		auto storageMappingInsertQuery = db.Prepare (
 			"INSERT INTO storage_mapping "
 			"(ContentObjectId, SourcePackageId, PackageOffset, PackageSize, SourceOffset, SourceSize) "
@@ -638,7 +642,7 @@ private:
 
 		package->Write (ArrayRef<PackageHeader> (packageHeader));
 
-		packageInsertQuery.BindArguments (sourcePackage.name, (sourcePackage.name + ".kypkg"),
+		packageInsertQuery.BindArguments (sourcePackage.name + ".kypkg",
 			Uuid::CreateRandom ());
 		packageInsertQuery.Step ();
 		packageInsertQuery.Reset ();
@@ -806,7 +810,9 @@ void BuildRepository (const KylaBuildSettings* settings)
 
 	const auto hashStartTime = std::chrono::high_resolution_clock::now ();
 	for (auto& sourcePackage : sourcePackages) {
-		HashFiles (sourcePackage.second.fileSets, ctx);
+		for (auto& fileSet : sourcePackage.second.fileSets) {
+			fileSet.ComputeHashes (ctx.sourceDirectory);
+		}
 	}
 	const auto hashTime = std::chrono::high_resolution_clock::now () -
 		hashStartTime;

@@ -167,7 +167,6 @@ struct Repository
 		ExecutionContext& context);
 
 	std::vector<Uuid> GetFilesets ();
-	std::string GetFilesetName (const Uuid& filesetId);
 	int64_t GetFilesetFileCount (const Uuid& filesetId);
 	int64_t GetFilesetSize (const Uuid& filesetId);
 
@@ -185,7 +184,6 @@ private:
 	virtual void RepairImpl (Repository& source,
 		ExecutionContext& context) = 0;
 	virtual std::vector<Uuid> GetFilesetsImpl () = 0;
-	virtual std::string GetFilesetNameImpl (const Uuid& filesetId) = 0;
 	virtual int64_t GetFilesetFileCountImpl (const Uuid& filesetId) = 0;
 	virtual int64_t GetFilesetSizeImpl (const Uuid& filesetId) = 0;
 	virtual void ConfigureImpl (Repository& other,

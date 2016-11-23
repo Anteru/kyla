@@ -214,16 +214,6 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 		kylaRepositoryProperty_AvailableFilesets, &resultSize, filesets.data ());
 
 	for (const auto& fs : filesets) {
-		std::size_t length = 0;
-		installer->GetFilesetProperty (installer, sourceRepository,
-			fs, kylaFilesetProperty_Name,
-			&length, nullptr);
-		std::vector<char> name;
-		name.resize (length);
-		installer->GetFilesetProperty (installer, sourceRepository,
-			fs, kylaFilesetProperty_Name,
-			&length, name.data ());
-
 		std::int64_t filesetSize = 0;
 		std::size_t filesetResultSize = sizeof (filesetSize);
 
@@ -232,7 +222,7 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 			&filesetResultSize, &filesetSize);
 
 		auto item = new FilesetListItem (fs,
-			filesetSize, name.data ());
+			filesetSize, "<missing name>");
 		ui->featureSelection->addItem (item);
 		item->setCheckState (Qt::Checked);
 	}
