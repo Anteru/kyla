@@ -1,15 +1,19 @@
 <?xml version="1.0" ?>
 <FileRepository>
-	<Package>
-		<Type>Packed</Type>
-		<Encryption>
-			<Key>toomanysecrets</Key>
-		</Encryption>
-	</Package>
-	<FileSets>
-		<FileSet Id="cc3f60a7-7b24-4a54-8dfa-6f811efd4af0">
-			<File Source="1.txt" />
-			<File Source="2.txt" />
-		</FileSet>
-	</FileSets>
+	<Features>
+		<Feature Id="3111b6f8-3f2b-419e-b8bc-826d839e44c9">
+			<Reference Id="5ee578f3-de17-4e76-9c7b-07cfa7384915"/>
+		</Feature>
+	</Features>
+	<Files>
+		<Group Id="5ee578f3-de17-4e76-9c7b-07cfa7384915">
+			<File Source="1.txt"/>
+			<File Source="2.txt"/>
+		</Group>
+		<Packages>
+			<Encryption>
+				<Key>toomanysecrets</Key>
+			</Encryption>
+		</Packages>
+	</Files>
 </FileRepository>

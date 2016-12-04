@@ -1,42 +1,58 @@
 PRAGMA foreign_keys = ON;
 
--- All content objects stored in this file repository
-CREATE TABLE content_objects (
+CREATE TABLE features (
 	Id INTEGER PRIMARY KEY NOT NULL,
-	Hash BLOB NOT NULL UNIQUE,
-	Size INTEGER NOT NULL);
+	Uuid BLOB NOT NULL UNIQUE
+);
+
+CREATE INDEX features_uuid_idx ON features (Uuid ASC);
+
+CREATE TABLE feature_dependencies (
+	SourceId INTEGER NOT NULL,
+	TargetId INTEGER NOT NULL,
+	-- This will be typically 'requires'
+	Relation TEXT NOT NULL,
+	FOREIGN KEY(SourceId) REFERENCES features(Id),
+	FOREIGN KEY(TargetId) REFERENCES features(Id)
+);
 
 -- Store embedded resources like logos, UI info, etc.
-CREATE TABLE resources (
+CREATE TABLE ui_resources (
 	Uuid BLOB NOT NULL UNIQUE,
 	Hash BLOB NOT NULL,
 	Content BLOB NOT NULL,
 	CompressionAlgorithm VARCHAR,
 	SourceSize INTEGER NOT NULL
-)
+);
 
--- All file sets stored in this repository
-CREATE TABLE file_sets (
+-- FileStorage engine
+-- All contents stored in this repository
+CREATE TABLE fs_contents (
 	Id INTEGER PRIMARY KEY NOT NULL,
-	Uuid BLOB NOT NULL UNIQUE);
+	Hash BLOB NOT NULL UNIQUE,
+	Size INTEGER NOT NULL);
 
-CREATE TABLE files (
+-- Maps file contents to file paths
+CREATE TABLE fs_files (
 	Path TEXT PRIMARY KEY NOT NULL,
-	ContentObjectId INTEGER NOT NULL,
-	FileSetId INTEGER NOT NULL,
-	FOREIGN KEY(ContentObjectId) REFERENCES content_objects(Id),
-	FOREIGN KEY(FileSetId) REFERENCES file_sets(Id));
+	ContentId INTEGER NOT NULL,
+	FeatureId INTEGER NOT NULL,
+	FOREIGN KEY(ContentId) REFERENCES fs_contents(Id),
+	FOREIGN KEY(FeatureId) REFERENCES features(Id));
 
-CREATE TABLE source_packages (
-	Id INTEGER PRIMARY KEY NOT NULL,
-	Filename VARCHAR NOT NULL UNIQUE,
-	Uuid BLOB NOT NULL UNIQUE);
+CREATE INDEX fs_files_feature_id_idx ON fs_files (FeatureId ASC);
 
--- Maps one content object to one or more source packages
-CREATE TABLE storage_mapping (
+-- Content is stored in packages -- in a loose repository,
+-- each content goes into its own package
+CREATE TABLE fs_packages (
 	Id INTEGER PRIMARY KEY NOT NULL,
-	ContentObjectId INTEGER,
-	SourcePackageId INTEGER,
+	Filename VARCHAR NOT NULL UNIQUE);
+
+-- Content is stored in chunks which are placed in packages
+CREATE TABLE fs_chunks (
+	Id INTEGER PRIMARY KEY NOT NULL,
+	ContentId INTEGER,
+	PackageId INTEGER,
 	-- Offset inside the source package
 	PackageOffset INTEGER NOT NULL,
 	-- Size inside a package with compression etc.
@@ -45,36 +61,41 @@ CREATE TABLE storage_mapping (
 	SourceOffset INTEGER NOT NULL,
 	-- Source size - a chunk may be smaller than the whole content object
 	SourceSize INTEGER NOT NULL,
-	FOREIGN KEY(ContentObjectId) REFERENCES content_objects(Id),
-	FOREIGN KEY(SourcePackageId) REFERENCES source_packages(Id));
+	FOREIGN KEY(ContentId) REFERENCES fs_contents(Id),
+	FOREIGN KEY(PackageId) REFERENCES fs_packages(Id));
 
--- If populated, this table stores the hashes of each storage mapping chunk
-CREATE TABLE storage_hashes (
-	StorageMappingId INTEGER PRIMARY KEY NOT NULL,
+CREATE INDEX fs_chunks_content_id_idx ON fs_chunks (ContentId ASC);
+CREATE INDEX fs_chunks_package_id_idx ON fs_chunks (PackageId ASC);
+
+-- This table stores the hashes of each chunk
+-- If compression is enabled, this will be the hash of the
+-- compressed data. Encryption will always happen afterwards
+CREATE TABLE fs_chunk_hashes (
+	ChunkId INTEGER PRIMARY KEY NOT NULL,
 	Hash BLOB NOT NULL,
-	FOREIGN KEY(StorageMappingId) REFERENCES storage_mapping(Id)
+	FOREIGN KEY(ChunkId) REFERENCES fs_chunks(Id)
 );
 
 -- If populated, this table stores the encryption data for chunks
-CREATE TABLE storage_encryption (
-	StorageMappingId INTEGER PRIMARY KEY NOT NULL,
+CREATE TABLE fs_chunk_encryption (
+	ChunkId INTEGER PRIMARY KEY NOT NULL,
 	Algorithm VARCHAR NOT NULL,
 	-- IV, Salt, etc. - this is algorithm-dependent
 	Data BLOB NOT NULL UNIQUE,
 	-- Size before and after the compression
 	InputSize INTEGER NOT NULL,
 	OutputSize INTEGER NOT NULL,
-	FOREIGN KEY(StorageMappingId) REFERENCES storage_mapping(Id)
+	FOREIGN KEY(ChunkId) REFERENCES fs_chunks(Id)
 );
 
--- If populated, this table stores the encryption data for chunks
-CREATE TABLE storage_compression (
-	StorageMappingId INTEGER PRIMARY KEY NOT NULL,
+-- If populated, this table stores the compression data for chunks
+CREATE TABLE fs_chunk_compression (
+	ChunkId INTEGER PRIMARY KEY NOT NULL,
 	Algorithm VARCHAR NOT NULL,
 	-- Size before and after the compression
 	InputSize INTEGER NOT NULL,
 	OutputSize INTEGER NOT NULL,
-	FOREIGN KEY(StorageMappingId) REFERENCES storage_mapping(Id)
+	FOREIGN KEY(ChunkId) REFERENCES fs_chunks(Id)
 );
 
 -- Take advantage of SQLite's dynamic types here so we don't have to store
@@ -84,40 +105,35 @@ CREATE TABLE properties (
 	Value NOT NULL
 );
 
-INSERT INTO properties (Name, Value) 
+INSERT INTO properties (Name, Value)
 VALUES ('database_version', 1);
 
-CREATE INDEX files_file_set_id_idx ON files (FileSetId ASC);
-CREATE INDEX storage_mapping_content_object_id_idx ON storage_mapping (ContentObjectId ASC);
-CREATE INDEX content_object_hash_idx ON content_objects (Hash ASC);
-CREATE INDEX files_path_idx ON files (Path ASC);
+CREATE VIEW fs_contents_with_reference_count AS
+	SELECT Id, Hash, Size, (SELECT COUNT(*) FROM fs_files WHERE ContentId=Id) AS ReferenceCount
+	FROM fs_contents;
 
-CREATE VIEW content_objects_with_reference_count AS 
-	SELECT Id, Hash, Size, (SELECT COUNT(*) FROM files WHERE ContentObjectId=Id) AS ReferenceCount
-	FROM content_objects;
-
-CREATE VIEW storage_data_view AS 
-	SELECT 
-		source_packages.Id AS SourcePackageId,
-		storage_mapping.PackageOffset AS PackageOffset, 
-		storage_mapping.PackageSize AS PackageSize,
-		storage_mapping.SourceOffset AS SourceOffset, 
-		content_objects.Hash AS ContentHash,
-		content_objects.Size as TotalSize,
-		storage_mapping.SourceSize AS SourceSize,
-		storage_mapping.Id AS StorageMappingId,
-		storage_compression.Algorithm AS CompressionAlgorithm,
-		storage_compression.InputSize AS CompressionInputSize,
-		storage_compression.OutputSize AS CompressionOutputSize,
-		storage_encryption.Algorithm AS EncryptionAlgorithm,
-		storage_encryption.Data AS EncryptionData,
-		storage_encryption.InputSize AS EncryptionInputSize,
-		storage_encryption.OutputSize AS EncryptionOutputSize,
-		storage_hashes.Hash AS StorageHash
-	FROM storage_mapping
-	INNER JOIN content_objects ON storage_mapping.ContentObjectId = content_objects.Id
-	INNER JOIN source_packages ON storage_mapping.SourcePackageId = source_packages.Id
-	LEFT JOIN storage_hashes ON storage_hashes.StorageMappingId = storage_mapping.Id
-	LEFT JOIN storage_compression ON storage_compression.StorageMappingId = storage_mapping.Id
-	LEFT JOIN storage_encryption ON storage_encryption.StorageMappingId = storage_mapping.Id
-	ORDER BY PackageOffset;
+CREATE VIEW fs_content_view AS
+	SELECT
+		fs_packages.Id AS PackageId,
+		fs_chunks.PackageOffset AS PackageOffset,
+		fs_chunks.PackageSize AS PackageSize,
+		fs_chunks.SourceOffset AS SourceOffset,
+		fs_contents.Hash AS ContentHash,
+		fs_contents.Size as TotalSize,
+		fs_chunks.SourceSize AS SourceSize,
+		fs_chunks.Id AS ChunkId,
+		fs_chunk_compression.Algorithm AS CompressionAlgorithm,
+		fs_chunk_compression.InputSize AS CompressionInputSize,
+		fs_chunk_compression.OutputSize AS CompressionOutputSize,
+		fs_chunk_encryption.Algorithm AS EncryptionAlgorithm,
+		fs_chunk_encryption.Data AS EncryptionData,
+		fs_chunk_encryption.InputSize AS EncryptionInputSize,
+		fs_chunk_encryption.OutputSize AS EncryptionOutputSize,
+		fs_chunk_hashes.Hash AS StorageHash
+	FROM fs_chunks
+	INNER JOIN fs_contents ON fs_chunks.ContentId = fs_contents.Id
+	INNER JOIN fs_packages ON fs_chunks.PackageId = fs_packages.Id
+	LEFT JOIN fs_chunk_hashes ON fs_chunk_hashes.ChunkId = fs_chunks.Id
+	LEFT JOIN fs_chunk_compression ON fs_chunk_compression.ChunkId = fs_chunks.Id
+	LEFT JOIN fs_chunk_encryption ON fs_chunk_encryption.ChunkId = fs_chunks.Id
+	ORDER BY PackageId, PackageOffset;

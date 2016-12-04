@@ -128,7 +128,7 @@ void DeployedRepository::RepairImpl (Repository& source,
 	/// to be recovered.
 
 	std::unordered_multimap<SHA256Digest, Path,
-		HashDigestHash, HashDigestEqual> requiredEntries;
+		ArrayRefHash, ArrayRefEqual> requiredEntries;
 
 	// Extract keys
 	std::vector<SHA256Digest> requiredContentObjects;

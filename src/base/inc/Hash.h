@@ -69,21 +69,24 @@ struct ArrayAdapter<HashDigest<Size>>
 	typedef byte Type;
 };
 
-struct HashDigestEqual
+struct ArrayRefEqual
 {
-	template <int Size>
-	bool operator () (const HashDigest<Size>& a, const HashDigest<Size>& b) const
+	bool operator () (const ArrayRef<>& a, const ArrayRef<>& b) const
 	{
-		return ::memcmp (a.bytes, b.bytes, Size) == 0;
+		if (a.GetSize () != b.GetSize ()) {
+			return 0;
+		} else {
+			return ::memcmp (a.GetData (), b.GetData (), a.GetSize ()) == 0;
+		}
 	}
 };
 
-struct HashDigestHash
+struct ArrayRefHash
 {
-	template <int Size>
-	std::size_t operator () (const HashDigest<Size>& a) const
+	std::size_t operator () (const ArrayRef<>& a) const
 	{
-		return boost::hash_range (a.bytes, a.bytes + Size);
+		auto asByteRef = a.ToByteRef ();
+		return boost::hash_range (asByteRef.GetData (), asByteRef.GetData () + asByteRef.GetSize ());
 	}
 };
 

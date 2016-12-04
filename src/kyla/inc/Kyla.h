@@ -125,11 +125,11 @@ struct KylaUuid
 enum kylaRepositoryProperty
 {
 	/**
-	The list of available filesets, provided as KylaUuids.
+	The list of available features, provided as KylaUuids.
 
 	The result is a tightly packed array of KylaUuid instances.
 	*/
-	kylaRepositoryProperty_AvailableFilesets,
+	kylaRepositoryProperty_AvailableFeatures = 1,
 
 	/**
 	Whether the repository is encrypted or not.
@@ -137,31 +137,18 @@ enum kylaRepositoryProperty
 	The result is an int which is 0 if not encrypted and 1 if
 	the repository is encrypted. For encrypted repositories, set
 	the key using kylaRepositoryProperty_DecryptionKey
-
-	@since 1.1
+	
+	@since 2.0
 	*/
-	kylaRepositoryProperty_IsEncrypted,
-
-	/**
-	The decryption key for this repository. By default, this will
-	be NULL, and can be set using SetRepositoryProperty.
-
-	@since 1.1
-	*/
-	kylaRepositoryProperty_DecryptionKey
+	kylaRepositoryProperty_IsEncrypted = 2
 };
 
-enum kylaFilesetProperty
+enum kylaFeatureProperty
 {
 	/**
 	The size of the file set when deployed, stored in an int64_t.
 	*/
-	kylaFilesetProperty_Size = 1,
-
-	/**
-	The number of files when deployed, stored in an int64_t.
-	*/
-	kylaFilesetProperty_FileCount = 2
+	kylaFeatureProperty_Size = 1,
 };
 
 struct KylaInstaller
@@ -231,9 +218,7 @@ struct KylaInstaller
 	If result is not null, resultSize must be set to the size of the buffer
 	result points to.
 
-	Before 1.1, this was called QueryRepository
-
-	@since 1.1
+	@since 2.0
 	*/
 	int (*GetRepositoryProperty)(KylaInstaller* installer,
 		KylaSourceRepository repository,
@@ -242,19 +227,17 @@ struct KylaInstaller
 		void* result);
 
 	/**
-	Get a file set property.
+	Get a feature property.
 
 	The propertyId must be one of enumeration values from
-	kylaFilesetProperty. If resultSize is provided, the size of the result
+	kylaFeatureProperty. If resultSize is provided, the size of the result
 	is written into it. If result is provided, the result is written into it.
 	If result is not null, resultSize must be set to the size of the buffer
 	result points to.
 
-	Before 1.1, this function was called QueryFileset
-
-	@since 1.1
+	@since 2.0
 	*/
-	int (*GetFilesetProperty)(KylaInstaller* installer,
+	int (*GetFeatureProperty)(KylaInstaller* installer,
 		KylaSourceRepository repository,
 		struct KylaUuid id,
 		int propertyId,
@@ -269,34 +252,10 @@ struct KylaInstaller
 	int (*Execute)(KylaInstaller* installer, kylaAction action,
 		KylaTargetRepository target, KylaSourceRepository source,
 		const KylaDesiredState* desiredState);
-
-	/**
-	Set a repository option. Properties must be set before calling Execute
-	to be effective.
-
-	@since 1.1
-	*/
-	int (*SetRepositoryProperty)(KylaInstaller* installer,
-		KylaSourceRepository repository,
-		int propertyId,
-		size_t propertySize,
-		const void* propertyValue);
-
-	/**
-	Get an embedded resource in the source repository.
-
-	@since 1.1
-	*/
-	int (*GetResource)(KylaInstaller* installer,
-		KylaSourceRepository repository,
-		KylaUuid id,
-		size_t* resultSize,
-		void* result);
 };
 
 #define KYLA_MAKE_API_VERSION(major,minor,patch) (major << 22 | minor << 12 | patch)
-#define KYLA_API_VERSION_1_0 KYLA_MAKE_API_VERSION(1,0,0)
-#define KYLA_API_VERSION_1_1 KYLA_MAKE_API_VERSION(1,1,0)
+#define KYLA_API_VERSION_2_0 KYLA_MAKE_API_VERSION(2,0,0)
 
 /**
 Create a new installer. Installer must be non-null, and kylaApiVersion must be

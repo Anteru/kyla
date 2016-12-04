@@ -176,6 +176,9 @@ struct Repository
 	void SetDecryptionKey (const std::string& key);
 	std::string GetDecryptionKey () const;
 
+	std::vector<byte> GetResource (const Uuid& id);
+	void SetResource (const Uuid& id, const ArrayRef<>& value);
+
 private:
 	virtual void ValidateImpl (const ValidationCallback& validationCallback,
 		ExecutionContext& context) = 0;

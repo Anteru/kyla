@@ -1,11 +1,13 @@
 <?xml version="1.0" ?>
-<FileRepository>
-	<Package>
-		<Type>Packed</Type>
-	</Package>
-	<FileSets>
-		<FileSet Id="2151452d-70d5-4b5a-9be6-b5501cf72f20">
-			<File Source="2.txt" Target="base.txt" />
-		</FileSet>
-	</FileSets>
-</FileRepository>
+<Repository>
+	<Features>
+		<Feature Id="77f7f196-8bff-44c3-987e-09e1473cd04e">
+			<Reference Id="f3b9780b-d7dd-44d1-87d4-2bb9d8bc27e6"/>
+		</Feature>
+	</Features>
+	<Files>
+		<Group Id="f3b9780b-d7dd-44d1-87d4-2bb9d8bc27e6">
+			<File Source="2.txt"/>
+		</Group>
+	</Files>
+</Repository>

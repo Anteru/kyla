@@ -114,57 +114,6 @@ int Build (const std::vector<std::string>& options,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int ExtractResource (const std::vector<std::string>& options,
-	po::variables_map& vm)
-{
-	po::options_description build_desc ("extract resource options");
-	build_desc.add_options ()
-		("id", po::value<std::string> ())
-		("target", po::value<std::string> ());
-
-	po::positional_options_description posBuild;
-	posBuild
-		.add ("id", 1)
-		.add ("target", 1);
-
-	try {
-		po::store (po::command_line_parser (options).options (build_desc)
-			.positional (posBuild).run (), vm);
-	} catch (const std::exception& e) {
-		std::cerr << e.what () << std::endl;
-		return 1;
-	}
-
-	KylaInstaller* installer = nullptr;
-	KYLA_CHECKED_CALL (kylaCreateInstaller (KYLA_API_VERSION_1_1, &installer));
-
-	assert (installer);
-
-	KylaTargetRepository source;
-	KYLA_CHECKED_CALL (installer->OpenSourceRepository (installer,
-		vm["source"].as<std::string> ().c_str (), 0, &source));
-
-	auto id = kyla::Uuid::Parse (vm["id"].as<std::string> ());
-	KylaUuid kId;
-	::memcpy (kId.bytes, id.GetData (), sizeof (kId.bytes));
-
-	size_t resultSize = 0;
-	KYLA_CHECKED_CALL (installer->GetResource (installer,
-		source, kId, &resultSize, nullptr));
-
-	std::vector<uint8_t> data;
-	data.resize (resultSize);
-	KYLA_CHECKED_CALL (installer->GetResource (installer,
-		source, kId, &resultSize, data.data ()));
-
-	FILE* output = fopen (vm["target"].as<std::string> ().c_str (), "wb");
-	fwrite (data.data (), 1, resultSize, output);
-	fclose (output);
-
-	return 0;
-}
-
-///////////////////////////////////////////////////////////////////////////////
 int Validate (const std::vector<std::string>& options,
 	po::variables_map& vm)
 {
@@ -230,7 +179,7 @@ int Validate (const std::vector<std::string>& options,
 	};
 
 	KylaInstaller* installer = nullptr;
-	KYLA_CHECKED_CALL (kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer));
+	KYLA_CHECKED_CALL (kylaCreateInstaller (KYLA_API_VERSION_2_0, &installer));
 
 	assert (installer);
 
@@ -247,11 +196,7 @@ int Validate (const std::vector<std::string>& options,
 	if (vm.find ("key") != vm.end ()) {
 		const auto key = vm ["key"].as<std::string> ();
 	
-		KYLA_CHECKED_CALL (installer->SetRepositoryProperty (
-			installer, repository, kylaRepositoryProperty_DecryptionKey,
-			key.size () + 1,
-			key.c_str ()
-		));
+		///@TODO(minor) Handle encryption
 	}
 
 	KYLA_CHECKED_CALL (installer->Execute (installer, kylaAction_Verify, 
@@ -289,7 +234,7 @@ int Repair (const std::vector<std::string>& options,
 	}
 
 	KylaInstaller* installer = nullptr;
-	KYLA_CHECKED_CALL (kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer));
+	KYLA_CHECKED_CALL (kylaCreateInstaller (KYLA_API_VERSION_2_0, &installer));
 
 	assert (installer);
 
@@ -340,7 +285,7 @@ int QueryFilesets (const std::vector<std::string>& options,
 	}
 
 	KylaInstaller* installer = nullptr;
-	kylaCreateInstaller (KYLA_API_VERSION_1_0, &installer);
+	kylaCreateInstaller (KYLA_API_VERSION_2_0, &installer);
 
 	assert (installer);
 
@@ -354,26 +299,23 @@ int QueryFilesets (const std::vector<std::string>& options,
 
 	std::size_t resultSize = 0;
 	KYLA_CHECKED_CALL (installer->GetRepositoryProperty (installer, source,
-		kylaRepositoryProperty_AvailableFilesets, &resultSize, nullptr));
+		kylaRepositoryProperty_AvailableFeatures, &resultSize, nullptr));
 
-	std::vector<KylaUuid> filesets;
-	filesets.resize (resultSize / sizeof (KylaUuid));
+	std::vector<KylaUuid> features;
+	features.resize (resultSize / sizeof (KylaUuid));
 	KYLA_CHECKED_CALL (installer->GetRepositoryProperty (installer, source,
-		kylaRepositoryProperty_AvailableFilesets, &resultSize, filesets.data ()));
+		kylaRepositoryProperty_AvailableFeatures, &resultSize, features.data ()));
 	
-	for (const auto& filesetId : filesets) {
-		std::cout << ToString (kyla::Uuid{ filesetId.bytes });
+	for (const auto& feature : features) {
+		std::cout << ToString (kyla::Uuid{ feature.bytes });
 	
 		size_t int64Size = sizeof (std::int64_t);
 		std::int64_t fileCount, size;
-		KYLA_CHECKED_CALL (installer->GetFilesetProperty (installer, source,
-			filesetId, kylaFilesetProperty_Size,
+		KYLA_CHECKED_CALL (installer->GetFeatureProperty (installer, source,
+			feature, kylaFeatureProperty_Size,
 			&int64Size, &size));
-		KYLA_CHECKED_CALL (installer->GetFilesetProperty (installer, source,
-			filesetId, kylaFilesetProperty_FileCount,
-			&int64Size, &fileCount));
 
-		std::cout << " " << fileCount << " " << size << std::endl;
+		std::cout << " " << size << std::endl;
 	}
 
 	installer->CloseRepository (installer, source);
@@ -408,7 +350,7 @@ int ConfigureOrInstall (const std::string& cmd,
 	}
 
 	KylaInstaller* installer = nullptr;
-	KYLA_CHECKED_CALL (kylaCreateInstaller (KYLA_API_VERSION_1_1, &installer));
+	KYLA_CHECKED_CALL (kylaCreateInstaller (KYLA_API_VERSION_2_0, &installer));
 
 	assert (installer);
 
@@ -427,11 +369,7 @@ int ConfigureOrInstall (const std::string& cmd,
 	if (vm.find ("key") != vm.end ()) {
 		const auto key = vm ["key"].as<std::string> ();
 		
-		KYLA_CHECKED_CALL (installer->SetRepositoryProperty (
-			installer, source, kylaRepositoryProperty_DecryptionKey,
-			key.size () + 1,
-			key.c_str ()
-		));
+		///@TODO(minor) Handle encryption
 	}
 
 	KylaTargetRepository target;
