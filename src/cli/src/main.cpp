@@ -310,7 +310,7 @@ int QueryFilesets (const std::vector<std::string>& options,
 		std::cout << ToString (kyla::Uuid{ feature.bytes });
 	
 		size_t int64Size = sizeof (std::int64_t);
-		std::int64_t fileCount, size;
+		std::int64_t size;
 		KYLA_CHECKED_CALL (installer->GetFeatureProperty (installer, source,
 			feature, kylaFeatureProperty_Size,
 			&int64Size, &size));
