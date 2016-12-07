@@ -130,23 +130,34 @@ private:
 struct Group : public RepositoryObjectBase<RepositoryObjectType::Group>
 {
 public:
-	Group (std::vector<std::unique_ptr<RepositoryObject>>&& children)
-	: children_ (std::move (children))
+	Group (const Uuid& uuid)
+	: uuid_ (uuid)
 	{
 	}
 
-	std::vector<std::unique_ptr<RepositoryObject>>& GetChildren ()
+	std::vector<RepositoryObject*>& GetChildren ()
 	{
 		return children_;
 	}
 
-	const std::vector<std::unique_ptr<RepositoryObject>>& GetChildren () const
+	const std::vector<RepositoryObject*>& GetChildren () const
 	{
 		return children_;
+	}
+
+	void AddChild (RepositoryObject* child)
+	{
+		children_.emplace_back (child);
+	}
+
+	const Uuid& GetUuid () const
+	{
+		return uuid_;
 	}
 	
 private:
-	std::vector<std::unique_ptr<RepositoryObject>> children_;
+	std::vector<RepositoryObject*> children_;
+	Uuid uuid_;
 };
 
 class RepositoryObjectLinker
@@ -168,10 +179,10 @@ public:
 	{
 		if (target->GetType () == RepositoryObjectType::Group) {
 			for (auto& child : static_cast<Group*> (target)->GetChildren ()) {
-				Prepare (source, child.get ());
+				Prepare (source, child);
 			}
 		} else {
-			pendingLinks_.emplace_back (source, target);
+			pendingLinks_.push_back ({ source, target });
 		}
 	}
 
@@ -183,35 +194,9 @@ public:
 			link.target->OnLinkAdded (link.source);
 		}
 	}
-}
+};
 
-///////////////////////////////////////////////////////////////////////////////
-std::unordered_map<std::string, Package> GetPackages (const pugi::xml_document& doc,
-	const BuildContext& ctx)
-{
-	std::unordered_map<std::string, Package> result;
-	std::unordered_set<std::string> packageNames;
-
-	for (const auto& packageNode : doc.select_nodes ("//Package")) {
-		Package package (packageNode.node (), ctx.buildDatabase);
-
-		if (packageNames.find (package.name) != packageNames.end ()) {
-			throw RuntimeException (
-				str (boost::format ("Package '%1%' already exists") % package.name),
-				KYLA_FILE_LINE);
-		} else {
-			packageNames.insert (package.name);
-		}
-
-		if (packageNode.node ().attribute ("Compression")) {
-			package.compressionAlgorithm = CompressionAlgorithmFromId (
-				packageNode.node ().attribute ("Compression").as_string ());
-		}
-	}
-
-	return result;
-}
-
+//////////////////////////////////////////////////////////////////////////////
 struct RepositoryBuilder
 {
 	virtual ~RepositoryBuilder ()
@@ -222,6 +207,413 @@ struct RepositoryBuilder
 
 	virtual void Build (const BuildContext& ctx,
 		BuildStatistics* statistics = nullptr) = 0;
+};
+
+struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
+{
+	Feature (pugi::xml_node& featureNode, BuildContext& ctx)
+	{
+		uuid_ = Uuid::Parse (featureNode.attribute ("Id").as_string ());
+
+		for (auto refNode : featureNode.children ("Reference")) {
+			references_.push_back (Reference{ 
+				Uuid::Parse (refNode.attribute ("Id").as_string ()) 
+			});
+		};
+
+		Persist (ctx.buildDatabase);
+	}
+
+	void Persist (Sql::Database& db)
+	{
+		auto statement = db.Prepare ("INSERT INTO features (Uuid) VALUES (?);");
+		statement.BindArguments (uuid_);
+		statement.Step ();
+		statement.Reset ();
+	}
+
+	int GetPersistentId () const
+	{
+		assert (persistentId_ != -1);
+		return persistentId_;
+	}
+
+	const Uuid& GetUuid () const
+	{
+		return uuid_;
+	}
+
+	const std::vector<Reference>& GetReferences () const
+	{
+		return references_;
+	}
+
+private:
+	Uuid uuid_;
+	int persistentId_ = -1;
+
+	std::vector<Reference> references_;
+};
+
+
+///////////////////////////////////////////////////////////////////////////////
+struct FileContents
+{
+	Path sourceFile;
+	SHA256Digest hash;
+	std::size_t size;
+
+	std::vector<Path> duplicates;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+struct File : public RepositoryObjectBase<RepositoryObjectType::FileStorage_File>
+{
+	Path source;
+	Path target;
+
+	FileContents* contents = nullptr;
+
+	int64 packageId = -1;
+	int64 featureId = -1;
+
+	File (const pugi::xml_node& node)
+	{
+		///@TODO(minor) Check if attributes are present
+
+		source = node.attribute ("Source").as_string ();
+
+		if (node.attribute ("Target")) {
+			target = node.attribute ("Target").as_string ();
+		} else {
+			target = source;
+		}
+	}
+
+private:
+	void OnLinkAddedImpl (RepositoryObject* source);
+};
+
+struct Package : public RepositoryObjectBase<RepositoryObjectType::FileStorage_Package>
+{
+	Package (const pugi::xml_node& node,
+		Sql::Database& db)
+	{
+		name = node.attribute ("Name").as_string ();
+
+		for (const auto& ref : node.children ("Reference")) {
+			references_.push_back (
+				Reference{
+				Uuid::Parse (ref.attribute ("Id").as_string ())
+			}
+			);
+		}
+
+		Persist (db);
+	}
+
+	Package (const std::string& name, std::vector<Reference>& references,
+		Sql::Database& db)
+		: name (name)
+		, references_ (references)
+	{
+		Persist (db);
+	}
+
+	void Persist (Sql::Database& db)
+	{
+		auto statement = db.Prepare ("INSERT INTO fs_packages (Filename) VALUES (?);");
+		statement.BindArguments (name);
+		statement.Step ();
+		persistentId_ = db.GetLastRowId ();
+	}
+
+	std::string name;
+	int64 persistentId_ = -1;
+
+	CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Brotli;
+	std::vector<Reference> references_;
+
+	std::vector<File*> referencedFiles;
+
+	int64 GetPersistentId () const
+	{
+		assert (persistentId_ != -1);
+		return persistentId_;
+	}
+
+	const std::vector<Reference>& GetReferences () const
+	{
+		return references_;
+	}
+
+	void AddLinkImpl (RepositoryObject* target)
+	{
+		if (target->GetType () == RepositoryObjectType::FileStorage_File) {
+			referencedFiles.push_back (static_cast<File*> (target));
+		}
+	}
+};
+
+//////////////////////////////////////////////////////////////////////////////
+void File::OnLinkAddedImpl (RepositoryObject* source)
+{
+	switch (source->GetType ()) {
+	case RepositoryObjectType::Feature:
+		featureId = static_cast<Feature*> (source)->GetPersistentId ();
+		break;
+
+	case RepositoryObjectType::FileStorage_Package:
+		packageId = static_cast<Package*> (source)->GetPersistentId ();
+		break;
+	}
+}
+
+struct FileStorage
+{
+private:
+	template <typename T>
+	using UniquePtrVector = std::vector<std::unique_ptr<T>>;
+	using RepositoryObjectMap = std::unordered_map<Uuid, RepositoryObject*,
+		ArrayRefHash, ArrayRefEqual>;
+	RepositoryObjectMap repositoryObjects_;
+
+	UniquePtrVector<File> files_;
+	UniquePtrVector<Group> groups_;
+	UniquePtrVector<Package> packages_;
+
+	using FileContentMap =
+		std::unordered_map<SHA256Digest, std::unique_ptr<FileContents>,
+		ArrayRefHash, ArrayRefEqual>;
+
+	FileContentMap fileContentMap_;
+
+	struct FileTreeWalker : public pugi::xml_tree_walker
+	{
+		FileTreeWalker (std::vector<std::unique_ptr<File>>& files,
+			std::vector<std::unique_ptr<Group>>& groups,
+			RepositoryObjectMap& repositoryObjects)
+			: files_ (files)
+			, groups_ (groups)
+			, repositoryObjects_ (repositoryObjects)
+		{
+		}
+
+		bool begin (pugi::xml_node& node)
+		{
+			if (strcmp (node.name (), "Group") == 0) {
+				auto uuid = Uuid::Parse (node.attribute ("Id").as_string ());
+				groups_.emplace_back (new Group{uuid});
+				auto ptr = groups_.back ().get ();
+				currentGroup_.push (ptr);
+				repositoryObjects_[uuid] = ptr;
+			}
+
+			return true;
+		}
+
+		bool for_each (pugi::xml_node& node)
+		{
+			if (strcmp (node.name (), "File") == 0) {
+				files_.emplace_back (new File{ node });
+				auto ptr = files_.back ().get ();
+
+				if (node.attribute ("Id")) {
+					auto uuid = Uuid::Parse (node.attribute ("Id").as_string ());
+					repositoryObjects_[uuid] = ptr;
+				}
+
+				if (! currentGroup_.empty ()) {
+					currentGroup_.top ()->AddChild (ptr);
+				}
+			}
+
+			return true;
+		}
+
+		bool end (pugi::xml_node& node)
+		{
+			if (strcmp (node.name (), "Group") == 0) {
+				currentGroup_.pop ();
+			}
+
+			return true;
+		}
+
+	private:
+		std::vector<std::unique_ptr<File>>& files_;
+		std::vector<std::unique_ptr<Group>>& groups_;
+		RepositoryObjectMap& repositoryObjects_;
+
+		Uuid currentId_;
+		std::stack<Group*> currentGroup_;
+	};
+
+public:
+	FileStorage (pugi::xml_node& filesNode, BuildContext& ctx)
+	{
+		PopulateFiles (filesNode, ctx);
+		PopulatePackages (filesNode, ctx);
+	}
+
+	const RepositoryObjectMap& GetRepositoryObjects () const
+	{
+		return repositoryObjects_;
+	}
+
+	void Persist (BuildContext& ctx)
+	{
+		// Write packages
+	}
+
+private:
+	void PopulateFiles (pugi::xml_node& filesNode, BuildContext& ctx)
+	{
+		// Traverse all groups and individual files, and add everything
+		// with an ID to repositoryObjects_
+		FileTreeWalker ftw{ files_, groups_, repositoryObjects_ };
+		filesNode.traverse (ftw);
+
+		// Now we have all files populated, so we hash the contents to
+		// update the file->fileContents field
+
+		HashFileContents (ctx.sourceDirectory);
+	}
+
+	void PopulatePackages (pugi::xml_node& filesNode, BuildContext& ctx)
+	{
+		// Packages can only reference files and groups inside the file storage
+		// We track all targets here, remove all which are assigned to a package,
+		// and put the remainder into a "main" package which is the default/catch-all
+		std::unordered_set<Uuid, ArrayRefHash, ArrayRefEqual> unassignedObjects;
+		for (auto& kv : repositoryObjects_) {
+			unassignedObjects.insert (kv.first);
+		}
+
+		auto packagesNode = filesNode.child ("Packages");
+		RepositoryObjectLinker linker;
+
+		if (packagesNode) {
+			for (auto packageNode : packagesNode.children ("Package")) {
+				packages_.emplace_back (new Package{ packageNode, ctx.buildDatabase });
+				auto ptr = packages_.back ().get ();
+
+				for (auto& reference : ptr->GetReferences ()) {
+					auto it = repositoryObjects_.find (reference.id);
+
+					if (it == repositoryObjects_.end ()) {
+						///@TODO(minor) Handle error
+					} else {
+						linker.Prepare (ptr, it->second);
+						unassignedObjects.erase (reference.id);
+					}
+				}
+			}
+		}
+
+		std::vector<Reference> mainPackageReferences;
+		for (const auto& uuid : unassignedObjects) {
+			mainPackageReferences.push_back (Reference{ uuid });
+		}
+
+		packages_.emplace_back (new Package{ "main", mainPackageReferences,
+			ctx.buildDatabase });
+		auto mainPackage = packages_.back ().get ();
+
+		for (auto& object : unassignedObjects) {
+			// This find is guaranteed to succeed, as unassignedObjects
+			// contains the keys of repositoryObjects_ minus the assigned ones
+			linker.Prepare (mainPackage, repositoryObjects_.find (object)->second);
+		}
+
+		linker.Link ();
+	}
+
+	void HashFileContents (const Path& sourcePath)
+	{
+		for (const auto& file : files_) {
+			const auto filePath = sourcePath / file->source;
+			const auto hash = ComputeSHA256 (filePath);
+
+			auto it = fileContentMap_.find (hash);
+			if (it == fileContentMap_.end ()) {
+				std::unique_ptr<FileContents> fileContents{ new FileContents };
+				fileContents->hash = hash;
+
+				auto fileStats = Stat (filePath);
+				fileContents->size = fileStats.size;
+				fileContents->sourceFile = filePath;
+				
+				fileContentMap_[hash] = std::move (fileContents);
+			} else {
+				it->second->duplicates.push_back (filePath);
+			}
+		}
+	}
+};
+
+class Repository
+{
+public:
+	void CreateFeatures (pugi::xml_node& root, BuildContext& ctx)
+	{
+		auto featuresNode = root.select_node ("/Repository/Features");
+
+		if (!featuresNode) {
+			///@TODO(minor) Handle error
+		} else {
+			for (auto& feature : featuresNode.node ().children ("Feature")) {
+				features_.emplace_back (std::move (new Feature{ feature, ctx }));
+				auto ptr = features_.back ().get ();
+
+				repositoryObjects_[ptr->GetUuid ()] = ptr;
+			}
+		}
+	}
+
+	void CreateFileStorage (pugi::xml_node& root, BuildContext& ctx)
+	{
+		auto filesNode = root.select_node ("/Repository/Files");
+
+		fileStorage_.reset (new FileStorage{
+			filesNode.node (), ctx
+		});
+
+		for (auto& kv : fileStorage_->GetRepositoryObjects ()) {
+			repositoryObjects_.insert (kv);
+		}
+	}
+
+	void LinkFeatures ()
+	{
+		RepositoryObjectLinker linker;
+
+		for (auto& feature : features_) {
+			for (auto& reference : feature->GetReferences ()) {
+				auto it = repositoryObjects_.find (reference.id);
+
+				if (it == repositoryObjects_.end ()) {
+					///@TODO(minor) Handle error
+				} else {
+					linker.Prepare (feature.get (), it->second);
+				}
+			}
+		}
+
+		linker.Link ();
+	}
+
+	void PersistFileStorage (BuildContext& ctx)
+	{
+		fileStorage_->Persist (ctx);
+	}
+
+private:
+	std::unordered_map<Uuid, RepositoryObject*,
+		ArrayRefHash, ArrayRefEqual> repositoryObjects_;
+
+	std::vector<std::unique_ptr<Feature> > features_;
+	std::unique_ptr<FileStorage> fileStorage_;
 };
 
 /**
@@ -269,9 +661,9 @@ private:
 	// The database is stored separately
 	struct PackageHeader
 	{
-		char id [8];
+		char id[8];
 		std::uint64_t version;
-		char reserved [48];
+		char reserved[48];
 
 		static void Initialize (PackageHeader& header)
 		{
@@ -323,9 +715,9 @@ private:
 		auto encryptionStartTime = std::chrono::high_resolution_clock::now ();
 		TransformationResult result;
 		result.inputBytes = static_cast<int64> (input.size ());
-		unsigned char salt [8] = {};
-		unsigned char key [64] = {};
-		unsigned char iv [16] = {};
+		unsigned char salt[8] = {};
+		unsigned char key[64] = {};
+		unsigned char iv[16] = {};
 
 		RAND_bytes (salt, sizeof (salt));
 		RAND_bytes (iv, sizeof (iv));
@@ -461,7 +853,7 @@ private:
 
 					TransformationResult compressionResult;
 					compressionResult = TransformCompress (readBuffer,
-							writeBuffer, compressor.get ());
+						writeBuffer, compressor.get ());
 
 					buildStatistics_.bytesStoredUncompressed +=
 						compressionResult.inputBytes;
@@ -516,7 +908,7 @@ private:
 					}
 
 					// Store encryption data
-					if (! encryptionKey.empty ()) {
+					if (!encryptionKey.empty ()) {
 						storageEncryptionInsertQuery.BindArguments (
 							storageMappingId,
 							"AES256",
@@ -546,315 +938,6 @@ private:
 	BuildStatistics buildStatistics_;
 	std::string encryptionKey_;
 };
-
-struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
-{
-	Feature (pugi::xml_node& featureNode, BuildContext& ctx)
-	{
-		uuid_ = Uuid::Parse (featureNode.attribute ("Id").as_string ());
-
-		for (auto refNode : featureNode.children ("Reference")) {
-			references_.push_back (Reference{ 
-				Uuid::Parse (refNode.attribute ("Id").as_string ()) 
-			});
-		};
-
-		Persist (ctx.buildDatabase);
-	}
-
-	void Persist (Sql::Database& db)
-	{
-		auto statement = db.Prepare ("INSERT INTO features (Uuid) VALUES (?);");
-		statement.BindArguments (uuid_);
-		statement.Step ();
-		statement.Reset ();
-	}
-
-	int GetPersistentId () const
-	{
-		assert (persistentId_ != -1);
-		return persistentId_;
-	}
-
-	const Uuid& GetUuid () const
-	{
-		return uuid_;
-	}
-
-	const std::vector<Reference>& GetReferences () const
-	{
-		return references_;
-	}
-
-private:
-	Uuid uuid_;
-	int persistentId_ = -1;
-
-	std::vector<Reference> references_;
-};
-
-
-///////////////////////////////////////////////////////////////////////////////
-struct FileContents
-{
-	Path sourceFile;
-	SHA256Digest hash;
-	std::size_t size;
-
-	std::vector<Path> duplicates;
-};
-
-struct File;
-
-struct Package : public RepositoryObjectBase<RepositoryObjectType::FileStorage_Package>
-{
-	Package (const pugi::xml_node& node,
-		Sql::Database& db)
-	{
-		name = node.attribute ("name").as_string ();
-
-		for (const auto& ref : node.children ("Reference")) {
-			references_.push_back (
-				Reference{
-				Uuid::Parse (ref.attribute ("Id").as_string ())
-			}
-			);
-		}
-
-		Persist (db);
-	}
-
-	Package (const std::string& name, std::vector<Reference>& references,
-		Sql::Database& db)
-		: name (name)
-		, references_ (references)
-	{
-		Persist (db);
-	}
-
-	void Persist (Sql::Database& db)
-	{
-
-
-		auto statement = db.Prepare ("INSERT INTO fs_packages (Filename) VALUES (?);");
-		statement.BindArguments (name);
-		statement.Step ();
-		persistentId_ = db.GetLastRowId ();
-	}
-
-	std::string name;
-	int64 persistentId_ = -1;
-
-	CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Brotli;
-	std::vector<Reference> references_;
-
-	std::vector<File*> referencedFiles;
-
-	int64 GetPersistentId () const
-	{
-		assert (persistentId_ != -1);
-		return persistentId_;
-	}
-
-	const std::vector<Reference>& GetReferences () const
-	{
-		return references_;
-	}
-
-	void AddLinkImpl (RepositoryObject* target)
-	{
-		if (target->GetType () == RepositoryObjectType::FileStorage_File) {
-			referencedFiles.push_back (static_cast<File*> (target));
-		}
-	}
-};
-
-///////////////////////////////////////////////////////////////////////////////
-struct File : public RepositoryObjectBase<RepositoryObjectType::FileStorage_File>
-{
-	Path source;
-	Path target;
-
-	FileContents* contents = nullptr;
-
-	int packageId = -1;
-	int featureId = -1;
-
-private:
-	void OnLinkAddedImpl (RepositoryObject* source)
-	{
-		switch (source->GetType ()) {
-		case RepositoryObjectType::Feature:
-			featureId = static_cast<Feature*> (source)->GetPersistentId ();
-			break;
-			
-		case RepositoryObjectType::FileStorage_Package:
-			packageId = static_cast<Package*> (source)->GetPersistentId ();
-			break;
-		}
-	}
-};
-
-struct FileStorage
-{
-	std::unordered_multimap<Uuid, RepositoryObject*,
-		ArrayRefHash, ArrayRefEqual> repositoryObjects_;
-
-	std::vector<std::unique_ptr<File>> files_;
-	std::vector<std::unique_ptr<Group>> groups_;
-	std::vector<std::unique_ptr<Package>> packages_;
-
-	using FileContentMap =
-		std::unordered_map<SHA256Digest, std::unique_ptr<FileContents>,
-		ArrayRefHash, ArrayRefEqual>;
-
-	FileContentMap fileContentMap;
-
-	const std::unordered_multimap<Uuid, RepositoryObject*,
-		ArrayRefHash, ArrayRefEqual>& GetRepositoryObjects () const
-	{
-		return repositoryObjects_;
-	}
-	
-	FileStorage (pugi::xml_node& filesNode, BuildContext& ctx)
-	{
-	}
-
-	void PopulateFiles (pugi::xml_node& filesNode, BuildContext& ctx)
-	{
-		// Traverse all groups and individual files, and add everything
-		// with an ID to repositoryObjects_
-
-		HashFileContents (ctx.sourceDirectory);
-	}
-
-	void PopulatePackages (pugi::xml_node& filesNode, BuildContext& ctx)
-	{
-		// Packages can only reference files and groups inside the file storage
-		// We track all targets here, remove all which are assigned to a package,
-		// and put the remainder into a "main" package which is the default/catch-all
-		std::unordered_set<Uuid, ArrayRefHash, ArrayRefEqual> unassignedObjects;
-		for (auto& kv : repositoryObjects_) {
-			unassignedObjects.insert (kv.first);
-		}
-
-		auto packagesNode = filesNode.child ("Packages");
-		RepositoryObjectLinker linker;
-
-		if (packagesNode) {
-			for (auto packageNode : packagesNode.children ("Package")) {
-				packages_.emplace_back (new Package{ packageNode, ctx.buildDatabase });
-				auto ptr = packages_.back ().get ();
-
-				for (auto& reference : ptr->GetReferences ()) {
-					auto it = repositoryObjects_.find (reference.id);
-
-					if (it == repositoryObjects_.end ()) {
-						///@TODO(minor) Handle error
-					} else {
-						linker.Prepare (ptr, it->second);
-						unassignedObjects.erase (reference.id);
-					}
-				}
-			}
-		}
-		
-		packages_.emplace_back (new Package{ "main", std::vector<Reference> {
-			unassignedObjects.begin (), unassignedObjects.end ()},
-			ctx.buildDatabase });
-		auto mainPackage = packages_.back ().get ();
-
-		for (auto& object : unassignedObjects) {
-			// This find is guaranteed to succeed, as unassignedObjects
-			// contains the keys of repositoryObjects_ minus the assigned ones
-			linker.Prepare (mainPackage, repositoryObjects_.find (object)->second);
-		}
-
-		linker.Link ();
-	}
-
-	void HashFileContents (const Path& sourcePath)
-	{
-		for (const auto& file : files_) {
-			const auto filePath = sourcePath / file->source;
-			const auto hash = ComputeSHA256 (filePath);
-
-			auto it = fileContentMap.find (hash);
-			if (it != fileContentMap.end ()) {
-				std::unique_ptr<FileContents> fileContents{ new FileContents };
-				fileContents->hash = hash;
-				auto fileStats = Stat (filePath);
-				fileContents->size = fileStats.size;
-				fileContents->sourceFile = filePath;
-				fileContentMap[hash] = std::move (fileContents);
-			} else {
-				it->second->duplicates.push_back (filePath);
-			}
-		}
-	}
-};
-
-class Repository
-{
-public:
-	void CreateFeatures (pugi::xml_node& root, BuildContext& ctx)
-	{
-		auto featuresNode = root.child ("Features");
-
-		if (!featuresNode) {
-			///@TODO(minor) Handle error
-		} else {
-			for (auto& feature : featuresNode.children ("Feature")) {
-				features_.emplace_back (std::move (new Feature{ feature, ctx }));
-				auto ptr = features_.back ().get ();
-
-				repositoryObjects_[ptr->GetUuid ()] = ptr;
-			}
-		}
-	}
-
-	void CreateFileStorage (pugi::xml_node& root, BuildContext& ctx)
-	{
-		auto filesNode = root.child ("Files");
-
-		fileStorage_.reset (new FileStorage{
-			filesNode, ctx
-		});
-
-		fileStorage_->PopulateFiles (filesNode, ctx);
-		fileStorage_->PopulatePackages (filesNode, ctx);
-
-		for (auto& kv : fileStorage_->GetRepositoryObjects ()) {
-			repositoryObjects_.insert (kv);
-		}
-	}
-
-	void LinkFeatures ()
-	{
-		RepositoryObjectLinker linker;
-
-		for (auto& feature : features_) {
-			for (auto& reference : feature->GetReferences ()) {
-				auto it = repositoryObjects_.find (reference.id);
-
-				if (it == repositoryObjects_.end ()) {
-					///@TODO(minor) Handle error
-				} else {
-					linker.Prepare (feature.get (), it->second);
-				}
-			}
-		}
-
-		linker.Link ();
-	}
-
-private:
-	std::unordered_map<Uuid, RepositoryObject*,
-		ArrayRefHash, ArrayRefEqual> repositoryObjects_;
-
-	std::vector<std::unique_ptr<Feature> > features_;
-	std::unique_ptr<FileStorage> fileStorage_;
-};
 }
 
 namespace kyla {
@@ -862,6 +945,8 @@ namespace kyla {
 void BuildRepository (const KylaBuildSettings* settings)
 {
 	const auto inputFile = settings->descriptorFile;
+
+	boost::filesystem::create_directories (settings->targetDirectory);
 
 	auto dbFile = Path{ settings->targetDirectory } / "repository.db";
 	boost::filesystem::remove (dbFile);
@@ -876,8 +961,6 @@ void BuildRepository (const KylaBuildSettings* settings)
 	BuildContext ctx {
 		settings->sourceDirectory, settings->targetDirectory, db
 	};
-
-	boost::filesystem::create_directories (ctx.targetDirectory);
 
 	pugi::xml_document doc;
 	if (!doc.load_file (inputFile)) {
