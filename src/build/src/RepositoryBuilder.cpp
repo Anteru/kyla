@@ -66,7 +66,7 @@ struct BuildContext
 	Path sourceDirectory;
 	Path targetDirectory;
 
-	Sql::Database& buildDatabase;
+	Sql::Database& db;
 };
 
 struct Reference
@@ -221,7 +221,7 @@ struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 			});
 		};
 
-		Persist (ctx.buildDatabase);
+		Persist (ctx.db);
 	}
 
 	void Persist (Sql::Database& db)
@@ -230,6 +230,8 @@ struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 		statement.BindArguments (uuid_);
 		statement.Step ();
 		statement.Reset ();
+
+		persistentId_ = db.GetLastRowId ();
 	}
 
 	int GetPersistentId () const
@@ -264,6 +266,8 @@ struct FileContents
 	std::size_t size;
 
 	std::vector<Path> duplicates;
+
+	int64 persistentId_ = -1;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -276,6 +280,8 @@ struct File : public RepositoryObjectBase<RepositoryObjectType::FileStorage_File
 
 	int64 packageId = -1;
 	int64 featureId = -1;
+
+	int64 persistentId_ = -1;
 
 	File (const pugi::xml_node& node)
 	{
@@ -369,6 +375,28 @@ void File::OnLinkAddedImpl (RepositoryObject* source)
 	}
 }
 
+struct XmlTreeWalker
+{
+	virtual bool OnEnter (pugi::xml_node&) = 0;
+	virtual bool OnNode (pugi::xml_node&) = 0;
+	virtual bool OnLeave (pugi::xml_node&) = 0;
+};
+
+void Traverse (pugi::xml_node& node, XmlTreeWalker& walker)
+{
+	if (!walker.OnEnter (node)) {
+		return;
+	}
+
+	if (walker.OnNode (node)) {
+		for (auto& child : node.children ()) {
+			Traverse (child, walker);
+		}
+	}
+
+	walker.OnLeave (node);
+}
+
 struct FileStorage
 {
 private:
@@ -388,7 +416,7 @@ private:
 
 	FileContentMap fileContentMap_;
 
-	struct FileTreeWalker : public pugi::xml_tree_walker
+	struct FileTreeWalker : public XmlTreeWalker
 	{
 		FileTreeWalker (std::vector<std::unique_ptr<File>>& files,
 			std::vector<std::unique_ptr<Group>>& groups,
@@ -399,7 +427,7 @@ private:
 		{
 		}
 
-		bool begin (pugi::xml_node& node)
+		bool OnEnter (pugi::xml_node& node)
 		{
 			if (strcmp (node.name (), "Group") == 0) {
 				auto uuid = Uuid::Parse (node.attribute ("Id").as_string ());
@@ -412,7 +440,7 @@ private:
 			return true;
 		}
 
-		bool for_each (pugi::xml_node& node)
+		bool OnNode (pugi::xml_node& node)
 		{
 			if (strcmp (node.name (), "File") == 0) {
 				files_.emplace_back (new File{ node });
@@ -431,7 +459,7 @@ private:
 			return true;
 		}
 
-		bool end (pugi::xml_node& node)
+		bool OnLeave (pugi::xml_node& node)
 		{
 			if (strcmp (node.name (), "Group") == 0) {
 				currentGroup_.pop ();
@@ -463,7 +491,20 @@ public:
 
 	void Persist (BuildContext& ctx)
 	{
-		// Write packages
+		auto fileInsertStatement = ctx.db.Prepare ("INSERT INTO fs_files (Path, ContentId, FeatureId) VALUES (?, ?, ?);");
+		
+		for (auto& file : files_) {
+			fileInsertStatement.BindArguments (file->target.string ().c_str (), file->contents->persistentId_,
+				file->featureId);
+			fileInsertStatement.Step ();
+			fileInsertStatement.Reset ();
+
+			file->persistentId_ = ctx.db.GetLastRowId ();
+		}
+
+		for (auto& package : packages_) {
+
+		}
 	}
 
 private:
@@ -472,12 +513,12 @@ private:
 		// Traverse all groups and individual files, and add everything
 		// with an ID to repositoryObjects_
 		FileTreeWalker ftw{ files_, groups_, repositoryObjects_ };
-		filesNode.traverse (ftw);
+		Traverse (filesNode, ftw);
 
 		// Now we have all files populated, so we hash the contents to
 		// update the file->fileContents field
 
-		HashFileContents (ctx.sourceDirectory);
+		CreateFileContents (ctx);
 	}
 
 	void PopulatePackages (pugi::xml_node& filesNode, BuildContext& ctx)
@@ -495,7 +536,7 @@ private:
 
 		if (packagesNode) {
 			for (auto packageNode : packagesNode.children ("Package")) {
-				packages_.emplace_back (new Package{ packageNode, ctx.buildDatabase });
+				packages_.emplace_back (new Package{ packageNode, ctx.db });
 				auto ptr = packages_.back ().get ();
 
 				for (auto& reference : ptr->GetReferences ()) {
@@ -511,28 +552,33 @@ private:
 			}
 		}
 
-		std::vector<Reference> mainPackageReferences;
-		for (const auto& uuid : unassignedObjects) {
-			mainPackageReferences.push_back (Reference{ uuid });
-		}
+		// Remaining objects go into the default "main" package
+		if (! unassignedObjects.empty ()) {
+			std::vector<Reference> mainPackageReferences;
+			for (const auto& uuid : unassignedObjects) {
+				mainPackageReferences.push_back (Reference{ uuid });
+			}
 
-		packages_.emplace_back (new Package{ "main", mainPackageReferences,
-			ctx.buildDatabase });
-		auto mainPackage = packages_.back ().get ();
+			packages_.emplace_back (new Package{ "main", mainPackageReferences,
+				ctx.db });
+			auto mainPackage = packages_.back ().get ();
 
-		for (auto& object : unassignedObjects) {
-			// This find is guaranteed to succeed, as unassignedObjects
-			// contains the keys of repositoryObjects_ minus the assigned ones
-			linker.Prepare (mainPackage, repositoryObjects_.find (object)->second);
+			for (auto& object : unassignedObjects) {
+				// This find is guaranteed to succeed, as unassignedObjects
+				// contains the keys of repositoryObjects_ minus the assigned ones
+				linker.Prepare (mainPackage, repositoryObjects_.find (object)->second);
+			}
 		}
 
 		linker.Link ();
 	}
 
-	void HashFileContents (const Path& sourcePath)
+	void CreateFileContents (BuildContext& ctx)
 	{
-		for (const auto& file : files_) {
-			const auto filePath = sourcePath / file->source;
+		auto statement = ctx.db.Prepare ("INSERT INTO fs_contents (Hash, Size) VALUES (?, ?);");
+
+		for (auto& file : files_) {
+			const auto filePath = ctx.sourceDirectory / file->source;
 			const auto hash = ComputeSHA256 (filePath);
 
 			auto it = fileContentMap_.find (hash);
@@ -543,9 +589,18 @@ private:
 				auto fileStats = Stat (filePath);
 				fileContents->size = fileStats.size;
 				fileContents->sourceFile = filePath;
+
+				statement.BindArguments (hash, fileStats.size);
+				statement.Step ();
+				statement.Reset ();
+
+				fileContents->persistentId_ = ctx.db.GetLastRowId ();
+
+				file->contents = fileContents.get ();
 				
 				fileContentMap_[hash] = std::move (fileContents);
 			} else {
+				file->contents = it->second.get ();
 				it->second->duplicates.push_back (filePath);
 			}
 		}
@@ -754,7 +809,6 @@ private:
 
 	void WritePackage (Sql::Database& db,
 		const Package& package,
-		const std::map<Path, int64>& fileToFileSetId,
 		const HashIntMap& uniqueContentObjects,
 		const Path& packagePath,
 		const std::string& encryptionKey)
@@ -978,6 +1032,7 @@ void BuildRepository (const KylaBuildSettings* settings)
 		hashStartTime;
 
 	repository.LinkFeatures ();
+	repository.PersistFileStorage (ctx);
 
 	std::unique_ptr<RepositoryBuilder> builder;
 
