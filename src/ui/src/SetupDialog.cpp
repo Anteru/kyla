@@ -179,9 +179,9 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 		[=]() -> void {
 		std::string key = ui->passwordEdit->text ().toStdString ();
 
-		installer->SetRepositoryProperty (installer, sourceRepository,
-			kylaRepositoryProperty_DecryptionKey, key.size () + 1,
-			key.c_str ());
+		/*
+		///@TODO(minor) Handle encryption
+		*/
 	});
 
 	connect (ui->featureSelection, &QListWidget::itemChanged,
@@ -206,19 +206,19 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 
 	std::size_t resultSize = 0;
 	installer->GetRepositoryProperty (installer, sourceRepository,
-		kylaRepositoryProperty_AvailableFilesets, &resultSize, nullptr);
+		kylaRepositoryProperty_AvailableFeatures, &resultSize, nullptr);
 
 	std::vector<KylaUuid> filesets;
 	filesets.resize (resultSize / sizeof (KylaUuid));
 	installer->GetRepositoryProperty (installer, sourceRepository,
-		kylaRepositoryProperty_AvailableFilesets, &resultSize, filesets.data ());
+		kylaRepositoryProperty_AvailableFeatures, &resultSize, filesets.data ());
 
 	for (const auto& fs : filesets) {
 		std::int64_t filesetSize = 0;
 		std::size_t filesetResultSize = sizeof (filesetSize);
 
-		installer->GetFilesetProperty (installer, sourceRepository,
-			fs, kylaFilesetProperty_Size,
+		installer->GetFeatureProperty (installer, sourceRepository,
+			fs, kylaFeatureProperty_Size,
 			&filesetResultSize, &filesetSize);
 
 		auto item = new FilesetListItem (fs,
