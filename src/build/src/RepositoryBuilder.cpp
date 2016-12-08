@@ -196,19 +196,6 @@ public:
 	}
 };
 
-//////////////////////////////////////////////////////////////////////////////
-struct RepositoryBuilder
-{
-	virtual ~RepositoryBuilder ()
-	{
-	}
-
-	virtual void Configure (const pugi::xml_document& repositoryDefinition) = 0;
-
-	virtual void Build (const BuildContext& ctx,
-		BuildStatistics* statistics = nullptr) = 0;
-};
-
 struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 {
 	Feature (pugi::xml_node& featureNode, BuildContext& ctx)
@@ -329,7 +316,7 @@ struct Package : public RepositoryObjectBase<RepositoryObjectType::FileStorage_P
 	void Persist (Sql::Database& db)
 	{
 		auto statement = db.Prepare ("INSERT INTO fs_packages (Filename) VALUES (?);");
-		statement.BindArguments (name);
+		statement.BindArguments (name + ".kypkg");
 		statement.Step ();
 		persistentId_ = db.GetLastRowId ();
 	}
@@ -410,6 +397,11 @@ private:
 	UniquePtrVector<Group> groups_;
 	UniquePtrVector<Package> packages_;
 
+	int64 chunkSize_ = 4 << 20; // 4 MiB chunks is the default
+	std::string encryptionKey_;
+
+	BuildStatistics buildStatistics_;
+
 	using FileContentMap =
 		std::unordered_map<SHA256Digest, std::unique_ptr<FileContents>,
 		ArrayRefHash, ArrayRefEqual>;
@@ -476,12 +468,277 @@ private:
 		Uuid currentId_;
 		std::stack<Group*> currentGroup_;
 	};
+	// The file starts with a header followed by all content objects.
+	// The database is stored separately
+	struct PackageHeader
+	{
+		char id[8];
+		std::uint64_t version;
+		char reserved[48];
+
+		static void Initialize (PackageHeader& header)
+		{
+			memset (&header, 0, sizeof (header));
+
+			memcpy (header.id, "KYLAPKG", 8);
+			header.version = 0x0002000000000000ULL;
+			// Major           ^^^^
+			// Minor               ^^^^
+			// Patch                   ^^^^^^^^
+		}
+	};
+
+	struct TransformationResult
+	{
+		int64 inputBytes = 0;
+		int64 outputBytes = 0;
+		std::chrono::nanoseconds duration = std::chrono::nanoseconds{ 0 };
+	};
+
+	static TransformationResult TransformCompress (std::vector<byte>& input,
+		std::vector<byte>& output, BlockCompressor* compressor)
+	{
+		auto compressionStartTime = std::chrono::high_resolution_clock::now ();
+
+		TransformationResult result;
+		result.inputBytes = static_cast<int64> (input.size ());
+
+		output.resize (
+			compressor->GetCompressionBound (result.inputBytes));
+
+		const auto compressedSize = compressor->Compress (
+			input, output);
+
+		output.resize (compressedSize);
+		result.outputBytes = compressedSize;
+
+		result.duration =
+			(std::chrono::high_resolution_clock::now () - compressionStartTime);
+
+		return result;
+	}
+
+	static TransformationResult TransformEncrypt (std::vector<byte>& input,
+		std::vector<byte>& output, const std::string& encryptionKey,
+		std::array<byte, 24>& encryptionData,
+		EVP_CIPHER_CTX* encryptionContext)
+	{
+		auto encryptionStartTime = std::chrono::high_resolution_clock::now ();
+		TransformationResult result;
+		result.inputBytes = static_cast<int64> (input.size ());
+		unsigned char salt[8] = {};
+		unsigned char key[64] = {};
+		unsigned char iv[16] = {};
+
+		RAND_bytes (salt, sizeof (salt));
+		RAND_bytes (iv, sizeof (iv));
+
+		PKCS5_PBKDF2_HMAC_SHA1 (encryptionKey.data (),
+			static_cast<int> (encryptionKey.size ()),
+			salt, sizeof (salt), 4096, 64, key);
+
+		::memcpy (encryptionData.data (), salt, sizeof (salt));
+		::memcpy (encryptionData.data () + sizeof (salt), iv, sizeof (iv));
+
+		EVP_EncryptInit_ex (encryptionContext, EVP_aes_256_cbc (), nullptr,
+			key, iv);
+
+		// We need to have storage for 2 AES blocks at the end
+		output.resize (input.size () + 32);
+
+		int bytesEncrypted = 0;
+		int outputLength = static_cast<int> (output.size ());
+		EVP_EncryptUpdate (encryptionContext, output.data (),
+			&outputLength, input.data (), static_cast<int> (input.size ()));
+		bytesEncrypted += outputLength;
+		EVP_EncryptFinal_ex (encryptionContext, output.data () + bytesEncrypted,
+			&outputLength);
+		bytesEncrypted += outputLength;
+		output.resize (bytesEncrypted);
+		result.outputBytes = bytesEncrypted;
+
+		result.duration =
+			(std::chrono::high_resolution_clock::now () - encryptionStartTime);
+
+		return result;
+	}
+
+public:
+	void WritePackage (Sql::Database& db,
+		const Package& package,
+		const Path& packagePath,
+		const std::string& encryptionKey)
+	{
+		auto contentObjectInsert = db.BeginTransaction ();
+		auto chunkInsertQuery = db.Prepare (
+			"INSERT INTO fs_chunks "
+			"(ContentId, PackageId, PackageOffset, PackageSize, SourceOffset, SourceSize) "
+			"VALUES (?, ?, ?, ?, ?, ?)");
+
+		auto chunkHashesInsertQuery = db.Prepare (
+			"INSERT INTO fs_chunk_hashes "
+			"(ChunkId, Hash) "
+			"VALUES (?, ?)"
+		);
+		auto chunkCompressionInsertQuery = db.Prepare (
+			"INSERT INTO fs_chunk_compression "
+			"(ChunkId, Algorithm, InputSize, OutputSize) "
+			"VALUES (?, ?, ?, ?)"
+		);
+		auto chunkEncryptionInsertQuery = db.Prepare (
+			"INSERT INTO fs_chunk_encryption "
+			"(ChunkId, Algorithm, Data, InputSize, OutputSize) "
+			"VALUES (?, ?, ?, ?, ?)"
+		);
+
+		///@TODO(minor) Support splitting packages for media limits
+		auto packageFile = CreateFile (packagePath / (package.name + ".kypkg"));
+
+		PackageHeader packageHeader;
+		PackageHeader::Initialize (packageHeader);
+
+		packageFile->Write (ArrayRef<PackageHeader> (packageHeader));
+		const auto packageId = package.GetPersistentId ();
+
+		auto compressor = CreateBlockCompressor (package.compressionAlgorithm);
+		auto compressorId = IdFromCompressionAlgorithm (package.compressionAlgorithm);
+
+		EVP_CIPHER_CTX* encryptionContext = nullptr;
+		if (!encryptionKey.empty ()) {
+			encryptionContext = EVP_CIPHER_CTX_new ();
+		}
+
+		std::vector<byte> readBuffer, writeBuffer;
+
+		std::unordered_set<FileContents*> uniqueFileContents;
+		for (auto& file : package.referencedFiles) {
+			uniqueFileContents.insert (file->contents);
+		}
+
+		// We can insert content objects directly - every unique file is one
+		for (const auto& fileContent : uniqueFileContents) {
+			const auto contentId = fileContent->persistentId_;
+			///@TODO(minor) Support per-file compression algorithms
+
+			auto inputFile = OpenFile (fileContent->sourceFile, FileOpenMode::Read);
+			const auto inputFileSize = inputFile->GetSize ();
+
+			assert (inputFileSize == fileContent->size);
+
+			if (inputFileSize == 0) {
+				// If it's a null-byte file, we still store a storage mapping
+				const auto startOffset = packageFile->Tell ();
+
+				chunkInsertQuery.BindArguments (
+					contentId,
+					packageId,
+					startOffset, 0 /* = size */,
+					0 /* = output offset */,
+					0 /* = uncompressed size */);
+				chunkInsertQuery.Step ();
+				chunkInsertQuery.Reset ();
+			} else {
+				readBuffer.resize (std::min (
+					chunkSize_, inputFileSize));
+
+				int64 bytesRead = -1;
+				int64 readOffset = 0;
+				while ((bytesRead = inputFile->Read (readBuffer)) > 0) {
+					readBuffer.resize (bytesRead);
+
+					TransformationResult compressionResult;
+					compressionResult = TransformCompress (readBuffer,
+						writeBuffer, compressor.get ());
+
+					buildStatistics_.bytesStoredUncompressed +=
+						compressionResult.inputBytes;
+					buildStatistics_.bytesStoredCompressed +=
+						compressionResult.outputBytes;
+
+					const auto compressedChunkHash = ComputeSHA256 (writeBuffer);
+
+					TransformationResult encryptionResult;
+					std::array<byte, 24> encryptionData;
+					if (!encryptionKey.empty ()) {
+						std::swap (readBuffer, writeBuffer);
+
+						encryptionResult = TransformEncrypt (readBuffer,
+							writeBuffer, encryptionKey,
+							encryptionData, encryptionContext);
+
+						buildStatistics_.encryptionTime +=
+							encryptionResult.duration;
+					}
+
+					const auto startOffset = packageFile->Tell ();
+					packageFile->Write (writeBuffer);
+					const auto endOffset = packageFile->Tell ();
+
+					chunkInsertQuery.BindArguments (contentId, packageId,
+						startOffset, endOffset - startOffset,
+						readOffset,
+						bytesRead);
+					chunkInsertQuery.Step ();
+					chunkInsertQuery.Reset ();
+
+					auto storageMappingId = db.GetLastRowId ();
+
+					// Store the hash
+					chunkHashesInsertQuery.BindArguments (
+						storageMappingId, compressedChunkHash
+					);
+					chunkHashesInsertQuery.Step ();
+					chunkHashesInsertQuery.Reset ();
+
+					// Store the compression data if not uncompressed
+					if (package.compressionAlgorithm != CompressionAlgorithm::Uncompressed) {
+						chunkCompressionInsertQuery.BindArguments (
+							storageMappingId,
+							compressorId,
+							compressionResult.inputBytes,
+							compressionResult.outputBytes
+						);
+						chunkCompressionInsertQuery.Step ();
+						chunkCompressionInsertQuery.Reset ();
+					}
+
+					// Store encryption data
+					if (!encryptionKey.empty ()) {
+						chunkEncryptionInsertQuery.BindArguments (
+							storageMappingId,
+							"AES256",
+							encryptionData,
+							encryptionResult.inputBytes,
+							encryptionResult.outputBytes
+						);
+						chunkEncryptionInsertQuery.Step ();
+						chunkEncryptionInsertQuery.Reset ();
+					}
+
+					readOffset += bytesRead;
+				}
+			}
+		}
+
+		contentObjectInsert.Commit ();
+
+		if (encryptionContext) {
+			EVP_CIPHER_CTX_free (encryptionContext);
+		}
+	}
 
 public:
 	FileStorage (pugi::xml_node& filesNode, BuildContext& ctx)
 	{
 		PopulateFiles (filesNode, ctx);
 		PopulatePackages (filesNode, ctx);
+
+		auto encryptionNode = filesNode.select_node ("/Packages/Encryption");
+
+		if (encryptionNode) {
+			auto keyNode = encryptionNode.node ().child ("Key");
+			encryptionKey_ = keyNode.value ();
+		}
 	}
 
 	const RepositoryObjectMap& GetRepositoryObjects () const
@@ -503,7 +760,7 @@ public:
 		}
 
 		for (auto& package : packages_) {
-
+			WritePackage (ctx.db, *package, ctx.targetDirectory, encryptionKey_);
 		}
 	}
 
@@ -670,328 +927,6 @@ private:
 	std::vector<std::unique_ptr<Feature> > features_;
 	std::unique_ptr<FileStorage> fileStorage_;
 };
-
-/**
-Store all files into one or more source packages. A source package can be
-compressed as well.
-*/
-struct PackedRepositoryBuilder final : public RepositoryBuilder
-{
-	using HashIntMap = std::unordered_map<SHA256Digest, int64, ArrayRefHash, ArrayRefEqual>;
-
-	void Configure (const pugi::xml_document& repositoryDefinition) override
-	{
-		auto chunkSizeNode = repositoryDefinition.select_node ("//Package/ChunkSize");
-
-		if (chunkSizeNode) {
-			chunkSize_ = chunkSizeNode.node ().text ().as_llong ();
-
-			// Some compressors expect integer-sized chunks, so we clamp to
-			// 2^31-1 here - this is a safety measure, as 2 GiB sized chunks
-			// should never be used
-			chunkSize_ = std::min (chunkSize_, static_cast<int64> ((1ll << 31) - 1));
-
-			assert (chunkSize_ >= 1);
-		}
-
-		auto encryptionNode = repositoryDefinition.select_node ("//Package/Encryption");
-
-		if (encryptionNode) {
-			encryptionKey_ = encryptionNode.node ().select_node ("Key").node ().text ().as_string ();
-		}
-	}
-
-	void Build (const BuildContext& ctx,
-		BuildStatistics* statistics) override
-	{
-		buildStatistics_ = BuildStatistics ();
-
-		if (statistics) {
-			*statistics = buildStatistics_;
-		}
-	}
-
-private:
-	// The file starts with a header followed by all content objects.
-	// The database is stored separately
-	struct PackageHeader
-	{
-		char id[8];
-		std::uint64_t version;
-		char reserved[48];
-
-		static void Initialize (PackageHeader& header)
-		{
-			memset (&header, 0, sizeof (header));
-
-			memcpy (header.id, "KYLAPKG", 8);
-			header.version = 0x0002000000000000ULL;
-			// Major           ^^^^
-			// Minor               ^^^^
-			// Patch                   ^^^^^^^^
-		}
-	};
-
-	struct TransformationResult
-	{
-		int64 inputBytes = 0;
-		int64 outputBytes = 0;
-		std::chrono::nanoseconds duration = std::chrono::nanoseconds{ 0 };
-	};
-
-	static TransformationResult TransformCompress (std::vector<byte>& input,
-		std::vector<byte>& output, BlockCompressor* compressor)
-	{
-		auto compressionStartTime = std::chrono::high_resolution_clock::now ();
-
-		TransformationResult result;
-		result.inputBytes = static_cast<int64> (input.size ());
-
-		output.resize (
-			compressor->GetCompressionBound (result.inputBytes));
-
-		const auto compressedSize = compressor->Compress (
-			input, output);
-
-		output.resize (compressedSize);
-		result.outputBytes = compressedSize;
-
-		result.duration =
-			(std::chrono::high_resolution_clock::now () - compressionStartTime);
-
-		return result;
-	}
-
-	static TransformationResult TransformEncrypt (std::vector<byte>& input,
-		std::vector<byte>& output, const std::string& encryptionKey,
-		std::array<byte, 24>& encryptionData,
-		EVP_CIPHER_CTX* encryptionContext)
-	{
-		auto encryptionStartTime = std::chrono::high_resolution_clock::now ();
-		TransformationResult result;
-		result.inputBytes = static_cast<int64> (input.size ());
-		unsigned char salt[8] = {};
-		unsigned char key[64] = {};
-		unsigned char iv[16] = {};
-
-		RAND_bytes (salt, sizeof (salt));
-		RAND_bytes (iv, sizeof (iv));
-
-		PKCS5_PBKDF2_HMAC_SHA1 (encryptionKey.data (),
-			static_cast<int> (encryptionKey.size ()),
-			salt, sizeof (salt), 4096, 64, key);
-
-		::memcpy (encryptionData.data (), salt, sizeof (salt));
-		::memcpy (encryptionData.data () + sizeof (salt), iv, sizeof (iv));
-
-		EVP_EncryptInit_ex (encryptionContext, EVP_aes_256_cbc (), nullptr,
-			key, iv);
-
-		// We need to have storage for 2 AES blocks at the end
-		output.resize (input.size () + 32);
-
-		int bytesEncrypted = 0;
-		int outputLength = static_cast<int> (output.size ());
-		EVP_EncryptUpdate (encryptionContext, output.data (),
-			&outputLength, input.data (), static_cast<int> (input.size ()));
-		bytesEncrypted += outputLength;
-		EVP_EncryptFinal_ex (encryptionContext, output.data () + bytesEncrypted,
-			&outputLength);
-		bytesEncrypted += outputLength;
-		output.resize (bytesEncrypted);
-		result.outputBytes = bytesEncrypted;
-
-		result.duration =
-			(std::chrono::high_resolution_clock::now () - encryptionStartTime);
-
-		return result;
-	}
-
-	void WritePackage (Sql::Database& db,
-		const Package& package,
-		const HashIntMap& uniqueContentObjects,
-		const Path& packagePath,
-		const std::string& encryptionKey)
-	{
-#if 0
-		auto contentObjectInsert = db.BeginTransaction ();
-		auto filesInsertQuery = db.Prepare (
-			"INSERT INTO files (Path, ContentObjectId, FileSetId) VALUES (?, ?, ?);");
-		auto packageInsertQuery = db.Prepare (
-			"INSERT INTO source_packages (Filename, Uuid) VALUES (?, ?)");
-		auto storageMappingInsertQuery = db.Prepare (
-			"INSERT INTO storage_mapping "
-			"(ContentObjectId, SourcePackageId, PackageOffset, PackageSize, SourceOffset, SourceSize) "
-			"VALUES (?, ?, ?, ?, ?, ?)");
-
-		auto storageHashesInsertQuery = db.Prepare (
-			"INSERT INTO storage_hashes "
-			"(StorageMappingId, Hash) "
-			"VALUES (?, ?)"
-		);
-		auto storageCompressionInsertQuery = db.Prepare (
-			"INSERT INTO storage_compression "
-			"(StorageMappingId, Algorithm, InputSize, OutputSize) "
-			"VALUES (?, ?, ?, ?)"
-		);
-		auto storageEncryptionInsertQuery = db.Prepare (
-			"INSERT INTO storage_encryption "
-			"(StorageMappingId, Algorithm, Data, InputSize, OutputSize) "
-			"VALUES (?, ?, ?, ?, ?)"
-		);
-
-		///@TODO(minor) Support splitting packages for media limits
-		auto packageFile = CreateFile (packagePath / (package.name + ".kypkg"));
-
-		PackageHeader packageHeader;
-		PackageHeader::Initialize (packageHeader);
-
-		packageFile->Write (ArrayRef<PackageHeader> (packageHeader));
-
-		packageInsertQuery.BindArguments (package.name + ".kypkg",
-			Uuid::CreateRandom ());
-		packageInsertQuery.Step ();
-		packageInsertQuery.Reset ();
-
-		const auto packageId = db.GetLastRowId ();
-
-		auto compressor = CreateBlockCompressor (package.compressionAlgorithm);
-		auto compressorId = IdFromCompressionAlgorithm (package.compressionAlgorithm);
-
-		EVP_CIPHER_CTX* encryptionContext = nullptr;
-		if (!encryptionKey.empty ()) {
-			encryptionContext = EVP_CIPHER_CTX_new ();
-		}
-
-		std::vector<byte> readBuffer, writeBuffer;
-
-		// We can insert content objects directly - every unique file is one
-		for (const auto& kv : package.fileContents) {
-			const auto contentObjectId = uniqueContentObjects.find (kv.hash)->second;
-
-			for (const auto& reference : kv.duplicates) {
-				const auto fileSetId = fileToFileSetId.find (reference)->second;
-
-				filesInsertQuery.BindArguments (
-					reference.string ().c_str (),
-					contentObjectId,
-					fileSetId);
-				filesInsertQuery.Step ();
-				filesInsertQuery.Reset ();
-			}
-
-			///@TODO(minor) Support per-file compression algorithms
-
-			auto inputFile = OpenFile (kv.sourceFile, FileOpenMode::Read);
-			const auto inputFileSize = inputFile->GetSize ();
-
-			if (inputFileSize == 0) {
-				// If it's a null-byte file, we still store a storage mapping
-				const auto startOffset = packageFile->Tell ();
-
-				storageMappingInsertQuery.BindArguments (contentObjectId,
-					packageId,
-					startOffset, 0 /* = size */,
-					0 /* = output offset */,
-					0 /* = uncompressed size */);
-				storageMappingInsertQuery.Step ();
-				storageMappingInsertQuery.Reset ();
-			} else {
-				readBuffer.resize (std::min (
-					chunkSize_, inputFileSize));
-
-				int64 bytesRead = -1;
-				int64 readOffset = 0;
-				while ((bytesRead = inputFile->Read (readBuffer)) > 0) {
-					readBuffer.resize (bytesRead);
-
-					TransformationResult compressionResult;
-					compressionResult = TransformCompress (readBuffer,
-						writeBuffer, compressor.get ());
-
-					buildStatistics_.bytesStoredUncompressed +=
-						compressionResult.inputBytes;
-					buildStatistics_.bytesStoredCompressed +=
-						compressionResult.outputBytes;
-
-					const auto compressedChunkHash = ComputeSHA256 (writeBuffer);
-
-					TransformationResult encryptionResult;
-					std::array<byte, 24> encryptionData;
-					if (!encryptionKey.empty ()) {
-						std::swap (readBuffer, writeBuffer);
-
-						encryptionResult = TransformEncrypt (readBuffer,
-							writeBuffer, encryptionKey,
-							encryptionData, encryptionContext);
-
-						buildStatistics_.encryptionTime +=
-							encryptionResult.duration;
-					}
-
-					const auto startOffset = packageFile->Tell ();
-					packageFile->Write (writeBuffer);
-					const auto endOffset = packageFile->Tell ();
-
-					storageMappingInsertQuery.BindArguments (contentObjectId, packageId,
-						startOffset, endOffset - startOffset,
-						readOffset,
-						bytesRead);
-					storageMappingInsertQuery.Step ();
-					storageMappingInsertQuery.Reset ();
-
-					auto storageMappingId = db.GetLastRowId ();
-
-					// Store the hash
-					storageHashesInsertQuery.BindArguments (
-						storageMappingId, compressedChunkHash
-					);
-					storageHashesInsertQuery.Step ();
-					storageHashesInsertQuery.Reset ();
-
-					// Store the compression data if not uncompressed
-					if (package.compressionAlgorithm != CompressionAlgorithm::Uncompressed) {
-						storageCompressionInsertQuery.BindArguments (
-							storageMappingId,
-							compressorId,
-							compressionResult.inputBytes,
-							compressionResult.outputBytes
-						);
-						storageCompressionInsertQuery.Step ();
-						storageCompressionInsertQuery.Reset ();
-					}
-
-					// Store encryption data
-					if (!encryptionKey.empty ()) {
-						storageEncryptionInsertQuery.BindArguments (
-							storageMappingId,
-							"AES256",
-							encryptionData,
-							encryptionResult.inputBytes,
-							encryptionResult.outputBytes
-						);
-						storageEncryptionInsertQuery.Step ();
-						storageEncryptionInsertQuery.Reset ();
-					}
-
-					readOffset += bytesRead;
-				}
-			}
-		}
-
-		contentObjectInsert.Commit ();
-
-		if (encryptionContext) {
-			EVP_CIPHER_CTX_free (encryptionContext);
-		}
-#endif
-	}
-
-	int64 chunkSize_ = 4 << 20; // 4 MiB chunks is the default
-
-	BuildStatistics buildStatistics_;
-	std::string encryptionKey_;
-};
 }
 
 namespace kyla {
@@ -1034,13 +969,7 @@ void BuildRepository (const KylaBuildSettings* settings)
 	repository.LinkFeatures ();
 	repository.PersistFileStorage (ctx);
 
-	std::unique_ptr<RepositoryBuilder> builder;
-
-	builder.reset (new PackedRepositoryBuilder);
-	builder->Configure (doc);
-
 	BuildStatistics statistics;
-	builder->Build (ctx, &statistics);
 
 	db.Execute ("PRAGMA journal_mode=DELETE;");
 	// Necessary to get good index statistics
