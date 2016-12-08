@@ -221,7 +221,7 @@ struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 		persistentId_ = db.GetLastRowId ();
 	}
 
-	int GetPersistentId () const
+	int64 GetPersistentId () const
 	{
 		assert (persistentId_ != -1);
 		return persistentId_;
@@ -239,7 +239,7 @@ struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 
 private:
 	Uuid uuid_;
-	int persistentId_ = -1;
+	int64 persistentId_ = -1;
 
 	std::vector<Reference> references_;
 };
@@ -254,6 +254,19 @@ struct FileContents
 
 	std::vector<Path> duplicates;
 
+	void SetPersistentId (int64 id)
+	{
+		assert (persistentId_ == -1);
+		persistentId_ = id;
+	}
+
+	int64 GetPersistentId () const
+	{
+		assert (persistentId_ == -1);
+		return persistentId_;
+	}
+
+private:
 	int64 persistentId_ = -1;
 };
 
@@ -263,13 +276,37 @@ struct File : public RepositoryObjectBase<RepositoryObjectType::FileStorage_File
 	Path source;
 	Path target;
 
-	FileContents* contents = nullptr;
-
 	int64 packageId = -1;
 	int64 featureId = -1;
 
-	int64 persistentId_ = -1;
+	void SetPersistentId (int64 id)
+	{
+		assert (persistentId_ == -1);
+		persistentId_ = id;
+	}
 
+	int64 GetPersistentId () const
+	{
+		assert (persistentId_ == -1);
+		return persistentId_;
+	}
+
+	void SetFileContents (FileContents* contents)
+	{
+		assert (fileContents_ == nullptr);
+		fileContents_ = contents;
+	}
+
+	const FileContents* GetFileContents () const
+	{
+		return fileContents_;
+	}
+
+private:
+	int64 persistentId_ = -1;
+	FileContents* fileContents_ = nullptr;
+
+public:
 	File (const pugi::xml_node& node)
 	{
 		///@TODO(minor) Check if attributes are present
@@ -318,16 +355,11 @@ struct Package : public RepositoryObjectBase<RepositoryObjectType::FileStorage_P
 		auto statement = db.Prepare ("INSERT INTO fs_packages (Filename) VALUES (?);");
 		statement.BindArguments (name + ".kypkg");
 		statement.Step ();
+
 		persistentId_ = db.GetLastRowId ();
 	}
 
 	std::string name;
-	int64 persistentId_ = -1;
-
-	CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Brotli;
-	std::vector<Reference> references_;
-
-	std::vector<File*> referencedFiles;
 
 	int64 GetPersistentId () const
 	{
@@ -340,12 +372,28 @@ struct Package : public RepositoryObjectBase<RepositoryObjectType::FileStorage_P
 		return references_;
 	}
 
+	const std::vector<File*>& GetReferencedFiles () const
+	{
+		return referencedFiles_;
+	}
+
 	void AddLinkImpl (RepositoryObject* target)
 	{
 		if (target->GetType () == RepositoryObjectType::FileStorage_File) {
-			referencedFiles.push_back (static_cast<File*> (target));
+			referencedFiles_.push_back (static_cast<File*> (target));
 		}
 	}
+
+	CompressionAlgorithm GetCompressionAlgorithm () const
+	{
+		return compressionAlgorithm_;
+	}
+
+private:
+	std::vector<Reference> references_;
+	CompressionAlgorithm compressionAlgorithm_ = CompressionAlgorithm::Brotli;
+	int64 persistentId_ = -1;
+	std::vector<File*> referencedFiles_;
 };
 
 //////////////////////////////////////////////////////////////////////////////
@@ -362,13 +410,17 @@ void File::OnLinkAddedImpl (RepositoryObject* source)
 	}
 }
 
+//////////////////////////////////////////////////////////////////////////////
 struct XmlTreeWalker
 {
+	virtual ~XmlTreeWalker () = default;
+
 	virtual bool OnEnter (pugi::xml_node&) = 0;
 	virtual bool OnNode (pugi::xml_node&) = 0;
 	virtual bool OnLeave (pugi::xml_node&) = 0;
 };
 
+//////////////////////////////////////////////////////////////////////////////
 void Traverse (pugi::xml_node& node, XmlTreeWalker& walker)
 {
 	if (!walker.OnEnter (node)) {
@@ -465,9 +517,9 @@ private:
 		std::vector<std::unique_ptr<Group>>& groups_;
 		RepositoryObjectMap& repositoryObjects_;
 
-		Uuid currentId_;
 		std::stack<Group*> currentGroup_;
 	};
+
 	// The file starts with a header followed by all content objects.
 	// The database is stored separately
 	struct PackageHeader
@@ -580,11 +632,13 @@ public:
 			"(ChunkId, Hash) "
 			"VALUES (?, ?)"
 		);
+
 		auto chunkCompressionInsertQuery = db.Prepare (
 			"INSERT INTO fs_chunk_compression "
 			"(ChunkId, Algorithm, InputSize, OutputSize) "
 			"VALUES (?, ?, ?, ?)"
 		);
+
 		auto chunkEncryptionInsertQuery = db.Prepare (
 			"INSERT INTO fs_chunk_encryption "
 			"(ChunkId, Algorithm, Data, InputSize, OutputSize) "
@@ -600,8 +654,8 @@ public:
 		packageFile->Write (ArrayRef<PackageHeader> (packageHeader));
 		const auto packageId = package.GetPersistentId ();
 
-		auto compressor = CreateBlockCompressor (package.compressionAlgorithm);
-		auto compressorId = IdFromCompressionAlgorithm (package.compressionAlgorithm);
+		auto compressor = CreateBlockCompressor (package.GetCompressionAlgorithm ());
+		auto compressorId = IdFromCompressionAlgorithm (package.GetCompressionAlgorithm ());
 
 		EVP_CIPHER_CTX* encryptionContext = nullptr;
 		if (!encryptionKey.empty ()) {
@@ -610,14 +664,14 @@ public:
 
 		std::vector<byte> readBuffer, writeBuffer;
 
-		std::unordered_set<FileContents*> uniqueFileContents;
-		for (auto& file : package.referencedFiles) {
-			uniqueFileContents.insert (file->contents);
+		std::unordered_set<const FileContents*> uniqueFileContents;
+		for (auto& file : package.GetReferencedFiles ()) {
+			uniqueFileContents.insert (file->GetFileContents ());
 		}
 
 		// We can insert content objects directly - every unique file is one
 		for (const auto& fileContent : uniqueFileContents) {
-			const auto contentId = fileContent->persistentId_;
+			const auto contentId = fileContent->GetPersistentId ();
 			///@TODO(minor) Support per-file compression algorithms
 
 			auto inputFile = OpenFile (fileContent->sourceFile, FileOpenMode::Read);
@@ -691,7 +745,7 @@ public:
 					chunkHashesInsertQuery.Reset ();
 
 					// Store the compression data if not uncompressed
-					if (package.compressionAlgorithm != CompressionAlgorithm::Uncompressed) {
+					if (package.GetCompressionAlgorithm () != CompressionAlgorithm::Uncompressed) {
 						chunkCompressionInsertQuery.BindArguments (
 							storageMappingId,
 							compressorId,
@@ -751,12 +805,14 @@ public:
 		auto fileInsertStatement = ctx.db.Prepare ("INSERT INTO fs_files (Path, ContentId, FeatureId) VALUES (?, ?, ?);");
 		
 		for (auto& file : files_) {
-			fileInsertStatement.BindArguments (file->target.string ().c_str (), file->contents->persistentId_,
+			fileInsertStatement.BindArguments (
+				file->target.string ().c_str (), 
+				file->GetFileContents ()->GetPersistentId (),
 				file->featureId);
 			fileInsertStatement.Step ();
 			fileInsertStatement.Reset ();
 
-			file->persistentId_ = ctx.db.GetLastRowId ();
+			file->SetPersistentId (ctx.db.GetLastRowId ());
 		}
 
 		for (auto& package : packages_) {
@@ -851,13 +907,12 @@ private:
 				statement.Step ();
 				statement.Reset ();
 
-				fileContents->persistentId_ = ctx.db.GetLastRowId ();
-
-				file->contents = fileContents.get ();
+				fileContents->SetPersistentId (ctx.db.GetLastRowId ());
+				file->SetFileContents (fileContents.get ());
 				
 				fileContentMap_[hash] = std::move (fileContents);
 			} else {
-				file->contents = it->second.get ();
+				file->SetFileContents (it->second.get ());
 				it->second->duplicates.push_back (filePath);
 			}
 		}
