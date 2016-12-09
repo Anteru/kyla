@@ -60,13 +60,128 @@ struct BuildStatistics
 		std::chrono::high_resolution_clock::duration::zero ();
 };
 
+class BuildDatabase
+{
+public:
+	BuildDatabase (Sql::Database& db)
+		: db_ (db)
+		, fileInsertStatement_ (db.Prepare (
+			"INSERT INTO fs_files (Path, ContentId, FeatureId) VALUES (?, ?, ?);"))
+		, packageInsertStatement_ (db.Prepare ("INSERT INTO fs_packages (Filename) VALUES (?);"))
+		, contentInsertStatement_ (db.Prepare ("INSERT INTO fs_contents (Hash, Size) VALUES (?, ?);"))
+		, featureInsertStatement_ (db.Prepare ("INSERT INTO features (Uuid) VALUES (?);"))		
+		, chunkInsertQuery_ (db.Prepare (
+			"INSERT INTO fs_chunks "
+			"(ContentId, PackageId, PackageOffset, PackageSize, SourceOffset, SourceSize) "
+			"VALUES (?, ?, ?, ?, ?, ?)"))
+		, chunkHashesInsertQuery_ (db.Prepare (
+		"INSERT INTO fs_chunk_hashes "
+		"(ChunkId, Hash) "
+		"VALUES (?, ?)"))
+		, chunkCompressionInsertQuery_ (db.Prepare (
+		"INSERT INTO fs_chunk_compression "
+		"(ChunkId, Algorithm, InputSize, OutputSize) "
+		"VALUES (?, ?, ?, ?)"))
+			, chunkEncryptionInsertQuery_ (db.Prepare (
+		"INSERT INTO fs_chunk_encryption "
+		"(ChunkId, Algorithm, Data, InputSize, OutputSize) "
+		"VALUES (?, ?, ?, ?, ?)"))
+	{
+	}
+
+	int64 StoreFeature (const Uuid& uuid)
+	{
+		featureInsertStatement_.BindArguments (uuid);
+		featureInsertStatement_.Step ();
+		featureInsertStatement_.Reset ();
+
+		return db_.GetLastRowId ();
+	}
+
+	int64 StorePackage (const char* filename)
+	{
+		packageInsertStatement_.BindArguments (filename);
+		packageInsertStatement_.Step ();
+		packageInsertStatement_.Reset ();
+
+		return db_.GetLastRowId ();
+	}
+
+	int64 StoreContent (const SHA256Digest& hash, int64 size)
+	{
+		contentInsertStatement_.BindArguments (hash, size);
+		contentInsertStatement_.Step ();
+		contentInsertStatement_.Reset ();
+
+		return db_.GetLastRowId ();
+	}
+
+	int64 StoreFile (const char* path, int64 contentId, int64 featureId)
+	{
+		fileInsertStatement_.BindArguments (path, contentId, featureId);
+		fileInsertStatement_.Step ();
+		fileInsertStatement_.Reset ();
+
+		return db_.GetLastRowId ();
+	}
+
+	int64 StoreChunk (int64 contentId, int64 packageId, int64 packageOffset, int64 packageSize, int64 sourceOffset, int64 sourceSize)
+	{
+		chunkInsertQuery_.BindArguments (contentId, packageId, packageOffset, packageSize, sourceOffset, sourceSize);
+		chunkInsertQuery_.Step ();
+		chunkInsertQuery_.Reset ();
+
+		return db_.GetLastRowId ();
+	}
+
+	int64 StoreChunkHash (int64 chunkId, const SHA256Digest& hash)
+	{
+		chunkHashesInsertQuery_.BindArguments (chunkId, hash);
+		chunkHashesInsertQuery_.Step ();
+		chunkHashesInsertQuery_.Reset ();
+
+		return db_.GetLastRowId ();
+	}
+
+	int64 StoreChunkCompression (int64 chunkId, CompressionAlgorithm algorithm, int64 inputSize, int64 outputSize)
+	{
+		chunkCompressionInsertQuery_.BindArguments (chunkId, IdFromCompressionAlgorithm (algorithm), inputSize, outputSize);
+		chunkCompressionInsertQuery_.Step ();
+		chunkCompressionInsertQuery_.Reset ();
+
+		return db_.GetLastRowId ();
+
+	}
+
+	int64 StoreChunkEncryption (int64 chunkId, const char* algorithm, const ArrayRef<>& data, int64 inputSize, int64 outputSize)
+	{
+		chunkEncryptionInsertQuery_.BindArguments (chunkId, algorithm, data, inputSize, outputSize);
+		chunkEncryptionInsertQuery_.Step ();
+		chunkEncryptionInsertQuery_.Reset ();
+
+		return db_.GetLastRowId ();
+	}
+
+private:
+	Sql::Statement fileInsertStatement_;
+	Sql::Statement packageInsertStatement_;
+	Sql::Statement contentInsertStatement_;
+	Sql::Statement featureInsertStatement_;
+	Sql::Statement chunkInsertQuery_;
+	Sql::Statement chunkHashesInsertQuery_;
+	Sql::Statement chunkCompressionInsertQuery_;
+	Sql::Statement chunkEncryptionInsertQuery_;
+
+	Sql::Database& db_;
+};
+
 ///////////////////////////////////////////////////////////////////////////////
 struct BuildContext
 {
 	Path sourceDirectory;
 	Path targetDirectory;
 
-	Sql::Database& db;
+	BuildDatabase buildDatabase;
 };
 
 struct Reference
@@ -196,9 +311,10 @@ public:
 	}
 };
 
+//////////////////////////////////////////////////////////////////////////////
 struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 {
-	Feature (pugi::xml_node& featureNode, BuildContext& ctx)
+	Feature (pugi::xml_node& featureNode)
 	{
 		uuid_ = Uuid::Parse (featureNode.attribute ("Id").as_string ());
 
@@ -207,18 +323,12 @@ struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 				Uuid::Parse (refNode.attribute ("Id").as_string ()) 
 			});
 		};
-
-		Persist (ctx.db);
 	}
-
-	void Persist (Sql::Database& db)
+	
+	void Store (BuildDatabase& db)
 	{
-		auto statement = db.Prepare ("INSERT INTO features (Uuid) VALUES (?);");
-		statement.BindArguments (uuid_);
-		statement.Step ();
-		statement.Reset ();
-
-		persistentId_ = db.GetLastRowId ();
+		assert (persistentId_ == -1);
+		persistentId_ = db.StoreFeature (uuid_);
 	}
 
 	int64 GetPersistentId () const
@@ -246,7 +356,7 @@ private:
 
 
 ///////////////////////////////////////////////////////////////////////////////
-struct FileContents
+struct Content
 {
 	Path sourceFile;
 	SHA256Digest hash;
@@ -254,15 +364,15 @@ struct FileContents
 
 	std::vector<Path> duplicates;
 
-	void SetPersistentId (int64 id)
+	void Store (BuildDatabase& db)
 	{
 		assert (persistentId_ == -1);
-		persistentId_ = id;
+		persistentId_ = db.StoreContent (hash, size);
 	}
 
 	int64 GetPersistentId () const
 	{
-		assert (persistentId_ == -1);
+		assert (persistentId_ != -1);
 		return persistentId_;
 	}
 
@@ -270,7 +380,7 @@ private:
 	int64 persistentId_ = -1;
 };
 
-///////////////////////////////////////////////////////////////////////////////
+//////////////////////////////////////////////////////////////////////////////
 struct File : public RepositoryObjectBase<RepositoryObjectType::FileStorage_File>
 {
 	Path source;
@@ -279,10 +389,11 @@ struct File : public RepositoryObjectBase<RepositoryObjectType::FileStorage_File
 	int64 packageId = -1;
 	int64 featureId = -1;
 
-	void SetPersistentId (int64 id)
+	void Store (BuildDatabase& db)
 	{
 		assert (persistentId_ == -1);
-		persistentId_ = id;
+		persistentId_ = db.StoreFile (target.string ().c_str (),
+			fileContents_->GetPersistentId (), featureId);
 	}
 
 	int64 GetPersistentId () const
@@ -291,20 +402,20 @@ struct File : public RepositoryObjectBase<RepositoryObjectType::FileStorage_File
 		return persistentId_;
 	}
 
-	void SetFileContents (FileContents* contents)
+	void SetFileContents (Content* contents)
 	{
 		assert (fileContents_ == nullptr);
 		fileContents_ = contents;
 	}
 
-	const FileContents* GetFileContents () const
+	const Content* GetFileContents () const
 	{
 		return fileContents_;
 	}
 
 private:
 	int64 persistentId_ = -1;
-	FileContents* fileContents_ = nullptr;
+	Content* fileContents_ = nullptr;
 
 public:
 	File (const pugi::xml_node& node)
@@ -324,39 +435,30 @@ private:
 	void OnLinkAddedImpl (RepositoryObject* source);
 };
 
+//////////////////////////////////////////////////////////////////////////////
 struct Package : public RepositoryObjectBase<RepositoryObjectType::FileStorage_Package>
 {
-	Package (const pugi::xml_node& node,
-		Sql::Database& db)
+	Package (const pugi::xml_node& node)
 	{
 		name = node.attribute ("Name").as_string ();
+		name += ".kypkg";
 
 		for (const auto& ref : node.children ("Reference")) {
 			references_.push_back (
-				Reference{
-				Uuid::Parse (ref.attribute ("Id").as_string ())
-			}
+				{ Uuid::Parse (ref.attribute ("Id").as_string ()) }
 			);
 		}
-
-		Persist (db);
 	}
 
-	Package (const std::string& name, std::vector<Reference>& references,
-		Sql::Database& db)
+	Package (const std::string& name, std::vector<Reference>& references)
 		: name (name)
 		, references_ (references)
 	{
-		Persist (db);
 	}
 
-	void Persist (Sql::Database& db)
+	void Store (BuildDatabase& db)
 	{
-		auto statement = db.Prepare ("INSERT INTO fs_packages (Filename) VALUES (?);");
-		statement.BindArguments (name + ".kypkg");
-		statement.Step ();
-
-		persistentId_ = db.GetLastRowId ();
+		persistentId_ = db.StorePackage (name.c_str ());
 	}
 
 	std::string name;
@@ -387,6 +489,26 @@ struct Package : public RepositoryObjectBase<RepositoryObjectType::FileStorage_P
 	CompressionAlgorithm GetCompressionAlgorithm () const
 	{
 		return compressionAlgorithm_;
+	}
+
+	std::vector<const Content*> GetUniqueContents () const
+	{
+		std::vector<const Content*> uniqueFileContents;
+		for (auto& file : GetReferencedFiles ()) {
+			uniqueFileContents.push_back (file->GetFileContents ());
+		}
+
+		uniqueFileContents.erase (
+			std::unique (uniqueFileContents.begin (), uniqueFileContents.end ()),
+			uniqueFileContents.end ());
+
+		// We ensure deterministic order
+		std::sort (uniqueFileContents.begin (), uniqueFileContents.end (),
+			[](const Content* a, const Content* b) -> bool {
+			return ::memcmp (a->hash.bytes, b->hash.bytes, sizeof (a->hash.bytes)) < 0;
+		});
+
+		return uniqueFileContents;
 	}
 
 private:
@@ -436,6 +558,7 @@ void Traverse (pugi::xml_node& node, XmlTreeWalker& walker)
 	walker.OnLeave (node);
 }
 
+//////////////////////////////////////////////////////////////////////////////
 struct FileStorage
 {
 private:
@@ -455,7 +578,7 @@ private:
 	BuildStatistics buildStatistics_;
 
 	using FileContentMap =
-		std::unordered_map<SHA256Digest, std::unique_ptr<FileContents>,
+		std::unordered_map<SHA256Digest, std::unique_ptr<Content>,
 		ArrayRefHash, ArrayRefEqual>;
 
 	FileContentMap fileContentMap_;
@@ -616,37 +739,13 @@ private:
 	}
 
 public:
-	void WritePackage (Sql::Database& db,
+	void WritePackage (BuildDatabase& db,
 		const Package& package,
 		const Path& packagePath,
 		const std::string& encryptionKey)
 	{
-		auto contentObjectInsert = db.BeginTransaction ();
-		auto chunkInsertQuery = db.Prepare (
-			"INSERT INTO fs_chunks "
-			"(ContentId, PackageId, PackageOffset, PackageSize, SourceOffset, SourceSize) "
-			"VALUES (?, ?, ?, ?, ?, ?)");
-
-		auto chunkHashesInsertQuery = db.Prepare (
-			"INSERT INTO fs_chunk_hashes "
-			"(ChunkId, Hash) "
-			"VALUES (?, ?)"
-		);
-
-		auto chunkCompressionInsertQuery = db.Prepare (
-			"INSERT INTO fs_chunk_compression "
-			"(ChunkId, Algorithm, InputSize, OutputSize) "
-			"VALUES (?, ?, ?, ?)"
-		);
-
-		auto chunkEncryptionInsertQuery = db.Prepare (
-			"INSERT INTO fs_chunk_encryption "
-			"(ChunkId, Algorithm, Data, InputSize, OutputSize) "
-			"VALUES (?, ?, ?, ?, ?)"
-		);
-
 		///@TODO(minor) Support splitting packages for media limits
-		auto packageFile = CreateFile (packagePath / (package.name + ".kypkg"));
+		auto packageFile = CreateFile (packagePath / (package.name));
 
 		PackageHeader packageHeader;
 		PackageHeader::Initialize (packageHeader);
@@ -655,7 +754,6 @@ public:
 		const auto packageId = package.GetPersistentId ();
 
 		auto compressor = CreateBlockCompressor (package.GetCompressionAlgorithm ());
-		auto compressorId = IdFromCompressionAlgorithm (package.GetCompressionAlgorithm ());
 
 		EVP_CIPHER_CTX* encryptionContext = nullptr;
 		if (!encryptionKey.empty ()) {
@@ -663,34 +761,26 @@ public:
 		}
 
 		std::vector<byte> readBuffer, writeBuffer;
-
-		std::unordered_set<const FileContents*> uniqueFileContents;
-		for (auto& file : package.GetReferencedFiles ()) {
-			uniqueFileContents.insert (file->GetFileContents ());
-		}
-
-		// We can insert content objects directly - every unique file is one
-		for (const auto& fileContent : uniqueFileContents) {
-			const auto contentId = fileContent->GetPersistentId ();
+				
+		for (const auto& content : package.GetUniqueContents ()) {
+			const auto contentId = content->GetPersistentId ();
 			///@TODO(minor) Support per-file compression algorithms
 
-			auto inputFile = OpenFile (fileContent->sourceFile, FileOpenMode::Read);
+			auto inputFile = OpenFile (content->sourceFile, FileOpenMode::Read);
 			const auto inputFileSize = inputFile->GetSize ();
 
-			assert (inputFileSize == fileContent->size);
+			assert (inputFileSize == content->size);
 
 			if (inputFileSize == 0) {
 				// If it's a null-byte file, we still store a storage mapping
 				const auto startOffset = packageFile->Tell ();
 
-				chunkInsertQuery.BindArguments (
+				db.StoreChunk (
 					contentId,
 					packageId,
 					startOffset, 0 /* = size */,
 					0 /* = output offset */,
 					0 /* = uncompressed size */);
-				chunkInsertQuery.Step ();
-				chunkInsertQuery.Reset ();
 			} else {
 				readBuffer.resize (std::min (
 					chunkSize_, inputFileSize));
@@ -728,53 +818,42 @@ public:
 					packageFile->Write (writeBuffer);
 					const auto endOffset = packageFile->Tell ();
 
-					chunkInsertQuery.BindArguments (contentId, packageId,
+					const auto storageMappingId = db.StoreChunk (
+						contentId, packageId,
 						startOffset, endOffset - startOffset,
 						readOffset,
-						bytesRead);
-					chunkInsertQuery.Step ();
-					chunkInsertQuery.Reset ();
-
-					auto storageMappingId = db.GetLastRowId ();
+						bytesRead);					
 
 					// Store the hash
-					chunkHashesInsertQuery.BindArguments (
+					db.StoreChunkHash (
 						storageMappingId, compressedChunkHash
 					);
-					chunkHashesInsertQuery.Step ();
-					chunkHashesInsertQuery.Reset ();
 
 					// Store the compression data if not uncompressed
 					if (package.GetCompressionAlgorithm () != CompressionAlgorithm::Uncompressed) {
-						chunkCompressionInsertQuery.BindArguments (
+						db.StoreChunkCompression (
 							storageMappingId,
-							compressorId,
+							package.GetCompressionAlgorithm (),
 							compressionResult.inputBytes,
 							compressionResult.outputBytes
 						);
-						chunkCompressionInsertQuery.Step ();
-						chunkCompressionInsertQuery.Reset ();
 					}
 
 					// Store encryption data
 					if (!encryptionKey.empty ()) {
-						chunkEncryptionInsertQuery.BindArguments (
+						db.StoreChunkEncryption (
 							storageMappingId,
 							"AES256",
 							encryptionData,
 							encryptionResult.inputBytes,
 							encryptionResult.outputBytes
 						);
-						chunkEncryptionInsertQuery.Step ();
-						chunkEncryptionInsertQuery.Reset ();
 					}
 
 					readOffset += bytesRead;
 				}
 			}
 		}
-
-		contentObjectInsert.Commit ();
 
 		if (encryptionContext) {
 			EVP_CIPHER_CTX_free (encryptionContext);
@@ -802,21 +881,12 @@ public:
 
 	void Persist (BuildContext& ctx)
 	{
-		auto fileInsertStatement = ctx.db.Prepare ("INSERT INTO fs_files (Path, ContentId, FeatureId) VALUES (?, ?, ?);");
-		
 		for (auto& file : files_) {
-			fileInsertStatement.BindArguments (
-				file->target.string ().c_str (), 
-				file->GetFileContents ()->GetPersistentId (),
-				file->featureId);
-			fileInsertStatement.Step ();
-			fileInsertStatement.Reset ();
-
-			file->SetPersistentId (ctx.db.GetLastRowId ());
+			file->Store (ctx.buildDatabase);
 		}
 
 		for (auto& package : packages_) {
-			WritePackage (ctx.db, *package, ctx.targetDirectory, encryptionKey_);
+			WritePackage (ctx.buildDatabase, *package, ctx.targetDirectory, encryptionKey_);
 		}
 	}
 
@@ -849,8 +919,10 @@ private:
 
 		if (packagesNode) {
 			for (auto packageNode : packagesNode.children ("Package")) {
-				packages_.emplace_back (new Package{ packageNode, ctx.db });
+				packages_.emplace_back (new Package{ packageNode });
 				auto ptr = packages_.back ().get ();
+
+				ptr->Store (ctx.buildDatabase);
 
 				for (auto& reference : ptr->GetReferences ()) {
 					auto it = repositoryObjects_.find (reference.id);
@@ -872,9 +944,10 @@ private:
 				mainPackageReferences.push_back (Reference{ uuid });
 			}
 
-			packages_.emplace_back (new Package{ "main", mainPackageReferences,
-				ctx.db });
+			packages_.emplace_back (new Package{ "main", mainPackageReferences  });
 			auto mainPackage = packages_.back ().get ();
+
+			mainPackage->Store (ctx.buildDatabase);
 
 			for (auto& object : unassignedObjects) {
 				// This find is guaranteed to succeed, as unassignedObjects
@@ -888,26 +961,20 @@ private:
 
 	void CreateFileContents (BuildContext& ctx)
 	{
-		auto statement = ctx.db.Prepare ("INSERT INTO fs_contents (Hash, Size) VALUES (?, ?);");
-
 		for (auto& file : files_) {
 			const auto filePath = ctx.sourceDirectory / file->source;
 			const auto hash = ComputeSHA256 (filePath);
 
 			auto it = fileContentMap_.find (hash);
 			if (it == fileContentMap_.end ()) {
-				std::unique_ptr<FileContents> fileContents{ new FileContents };
+				std::unique_ptr<Content> fileContents{ new Content };
 				fileContents->hash = hash;
 
 				auto fileStats = Stat (filePath);
 				fileContents->size = fileStats.size;
 				fileContents->sourceFile = filePath;
 
-				statement.BindArguments (hash, fileStats.size);
-				statement.Step ();
-				statement.Reset ();
-
-				fileContents->SetPersistentId (ctx.db.GetLastRowId ());
+				fileContents->Store (ctx.buildDatabase);
 				file->SetFileContents (fileContents.get ());
 				
 				fileContentMap_[hash] = std::move (fileContents);
@@ -930,8 +997,10 @@ public:
 			///@TODO(minor) Handle error
 		} else {
 			for (auto& feature : featuresNode.node ().children ("Feature")) {
-				features_.emplace_back (std::move (new Feature{ feature, ctx }));
+				features_.emplace_back (std::move (new Feature{ feature }));
 				auto ptr = features_.back ().get ();
+
+				ptr->Store (ctx.buildDatabase);
 
 				repositoryObjects_[ptr->GetUuid ()] = ptr;
 			}
@@ -1002,10 +1071,6 @@ void BuildRepository (const KylaBuildSettings* settings)
 	db.Execute ("PRAGMA journal_mode=WAL;");
 	db.Execute ("PRAGMA synchronous=NORMAL;");
 
-	BuildContext ctx {
-		settings->sourceDirectory, settings->targetDirectory, db
-	};
-
 	pugi::xml_document doc;
 	if (!doc.load_file (inputFile)) {
 		throw RuntimeException ("Could not parse input file.",
@@ -1013,16 +1078,23 @@ void BuildRepository (const KylaBuildSettings* settings)
 	}
 
 	Repository repository;
-	repository.CreateFeatures (doc, ctx);
+	std::unique_ptr<BuildContext> ctx (new BuildContext {
+		settings->sourceDirectory, 
+		settings->targetDirectory, 
+		db
+	});
+	repository.CreateFeatures (doc, *ctx);
 	
 	const auto hashStartTime = std::chrono::high_resolution_clock::now ();
 	///@TODO(minor) Hash files
-	repository.CreateFileStorage (doc, ctx);
+	repository.CreateFileStorage (doc, *ctx);
 	const auto hashTime = std::chrono::high_resolution_clock::now () -
 		hashStartTime;
 
 	repository.LinkFeatures ();
-	repository.PersistFileStorage (ctx);
+	repository.PersistFileStorage (*ctx);
+
+	ctx.reset ();
 
 	BuildStatistics statistics;
 
