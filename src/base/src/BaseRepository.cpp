@@ -14,7 +14,7 @@ details.
 
 namespace kyla {
 ///////////////////////////////////////////////////////////////////////////////
-std::vector<Uuid> BaseRepository::GetFilesetsImpl ()
+std::vector<Uuid> BaseRepository::GetFeaturesImpl ()
 {
 	static const char* querySql =
 		"SELECT file_sets.Uuid FROM file_sets;";
@@ -37,7 +37,7 @@ std::vector<Uuid> BaseRepository::GetFilesetsImpl ()
 bool BaseRepository::IsEncryptedImpl ()
 {
 	static const char* querySql =
-		"SELECT EXISTS(SELECT 1 FROM storage_compression);";
+		"SELECT EXISTS(SELECT 1 FROM fs_chunk_encryption);";
 
 	auto query = GetDatabase ().Prepare (querySql);
 	query.Step ();
@@ -58,27 +58,10 @@ std::string BaseRepository::GetDecryptionKeyImpl () const
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int64_t BaseRepository::GetFilesetSizeImpl (const Uuid& id)
+int64_t BaseRepository::GetFeatureSizeImpl (const Uuid& id)
 {
 	static const char* querySql =
 		"SELECT SUM(content_objects.size) "
-		"FROM file_sets "
-		"INNER JOIN files ON file_sets.Id = files.FileSetId "
-		"INNER JOIN content_objects ON content_objects.Id = files.ContentObjectId "
-		"WHERE file_sets.Uuid = ?";
-
-	auto query = GetDatabase ().Prepare (querySql);
-	query.BindArguments (id);
-	query.Step ();
-
-	return query.GetInt64 (0);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-int64_t BaseRepository::GetFilesetFileCountImpl (const Uuid& id)
-{
-	static const char* querySql =
-		"SELECT COUNT(content_objects.Id) "
 		"FROM file_sets "
 		"INNER JOIN files ON file_sets.Id = files.FileSetId "
 		"INNER JOIN content_objects ON content_objects.Id = files.ContentObjectId "

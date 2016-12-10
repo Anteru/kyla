@@ -52,9 +52,9 @@ void DeployedRepository::ValidateImpl (const Repository::ValidationCallback& val
 	// (slower progress, but more things getting processed) and speed up
 	// towards the end (larger files, higher throughput)
 	static const char* queryFilesContentSql =
-		"SELECT files.path, content_objects.Hash, content_objects.Size "
-		"FROM files "
-		"LEFT JOIN content_objects ON content_objects.Id = files.ContentObjectId "
+		"SELECT files.path, fs_contents.Hash, fs_contents.Size "
+		"FROM fs_files "
+		"LEFT JOIN fs_contents ON fs_contents.Id = fs_files.ContentId "
 		"ORDER BY size";
 	
 	auto query = db_.Prepare (queryFilesContentSql);
@@ -62,7 +62,7 @@ void DeployedRepository::ValidateImpl (const Repository::ValidationCallback& val
 	const int64 objectCount = [=]() -> int64
 	{
 		static const char* queryObjectCountSql =
-			"SELECT COUNT(*) FROM content_objects";
+			"SELECT COUNT(*) FROM fs_contents";
 		auto countQuery = db_.Prepare (queryObjectCountSql);
 		countQuery.Step ();
 		return countQuery.GetInt64 (0);
@@ -177,8 +177,8 @@ void DeployedRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& re
 	const Repository::GetContentObjectCallback& getCallback)
 {
 	auto query = db_.Prepare (
-		"SELECT Path FROM files "
-		"WHERE ContentObjectId=(SELECT Id FROM content_objects WHERE Hash=?) "
+		"SELECT Path FROM fs_files "
+		"WHERE ContentId=(SELECT Id FROM fs_contents WHERE Hash=?) "
 		"LIMIT 1");
 
 	for (const auto& hash : requestedObjects) {
@@ -201,7 +201,7 @@ void DeployedRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& re
 
 ///////////////////////////////////////////////////////////////////////////////
 void DeployedRepository::ConfigureImpl (Repository& source,
-	const ArrayRef<Uuid>& filesets,
+	const ArrayRef<Uuid>& features,
 	ExecutionContext& context)
 {
 	// We do this in WAL mode for performance
@@ -214,9 +214,9 @@ void DeployedRepository::ConfigureImpl (Repository& source,
 	// allows us to process partially uninstalled repositories (or a
 	// repository that has been recovered.)
 	db_.Execute (
-		"DELETE FROM content_objects WHERE "
+		"DELETE FROM fs_contents WHERE "
 		"Id IN ("
-		"SELECT Id from content_objects_with_reference_count "
+		"SELECT Id from fs_contents_with_reference_count "
 		"WHERE ReferenceCount=0"
 		");");
 
@@ -232,12 +232,12 @@ void DeployedRepository::ConfigureImpl (Repository& source,
 
 	// Store the file sets we're going to install in a temporary table for
 	// joins, etc.
-	auto pendingFileSetTable = db_.CreateTemporaryTable ("pending_file_sets",
+	auto pendingFeaturesTable = db_.CreateTemporaryTable ("pending_features",
 		"Uuid BLOB NOT NULL UNIQUE");
 
-	PreparePendingFilesets (context.log, filesets, progressHelper);
-	UpdateFilesets ();
-	UpdateFilesetIdsForUnchangedFiles ();
+	PreparePendingFeatures (context.log, features, progressHelper);
+	UpdateFeatures ();
+	UpdateFeatureIdsForUnchangedFiles ();
 	RemoveChangedFiles (context.log);
 
 	progressHelper.SetStageFinished ();
@@ -256,18 +256,18 @@ void DeployedRepository::ConfigureImpl (Repository& source,
 
 ///////////////////////////////////////////////////////////////////////////////
 /**
-Create a new temporary table pending_file_sets which contains the UUIDs
+Create a new temporary table pending_features which contains the UUIDs
 of the file sets we're about to add
 */
-void DeployedRepository::PreparePendingFilesets (Log& log, const ArrayRef<Uuid>& filesets,
+void DeployedRepository::PreparePendingFeatures (Log& log, const ArrayRef<Uuid>& filesets,
 	ProgressHelper& progress)
 {
 	{
 		auto transaction = db_.BeginTransaction ();
 		auto insertFilesetQuery = db_.Prepare (
-			"INSERT INTO pending_file_sets (Uuid) VALUES (?);");
+			"INSERT INTO pending_features (Uuid) VALUES (?);");
 
-		log.Debug ("Configure", "Selecting filesets for configure");
+		log.Debug ("Configure", "Selecting features for configure");
 
 		progress.SetStageTarget (filesets.GetCount ());
 		progress.SetAction ("Configuring filesets");
@@ -276,7 +276,7 @@ void DeployedRepository::PreparePendingFilesets (Log& log, const ArrayRef<Uuid>&
 			insertFilesetQuery.Step ();
 			insertFilesetQuery.Reset ();
 
-			log.Debug ("Configure", boost::format ("Selected fileset: '%1%'") % ToString (fileset));
+			log.Debug ("Configure", boost::format ("Selected feature: '%1%'") % ToString (fileset));
 			++progress;
 		}
 
@@ -285,24 +285,24 @@ void DeployedRepository::PreparePendingFilesets (Log& log, const ArrayRef<Uuid>&
 }
 
 /**
-Insert the new filesets we're about to configure from pending_file_sets
+Insert the new filesets we're about to configure from pending_features
 */
-void DeployedRepository::UpdateFilesets ()
+void DeployedRepository::UpdateFeatures ()
 {
-	// Insert those we don't have yet into our file_sets, but which are
+	// Insert those we don't have yet into our features, but which are
 	// pending
 	db_.Execute (
-		"INSERT INTO file_sets (Uuid) "
-		"SELECT Uuid FROM source.file_sets "
-		"WHERE source.file_sets.Uuid IN (SELECT Uuid FROM pending_file_sets) "
-		"AND NOT source.file_sets.Uuid IN (SELECT Uuid FROM file_sets)");
+		"INSERT INTO features (Uuid) "
+		"SELECT Uuid FROM source.features "
+		"WHERE source.features.Uuid IN (SELECT Uuid FROM pending_features) "
+		"AND NOT source.features.Uuid IN (SELECT Uuid FROM features)");
 }
 
 /**
 Update the file set ids of all files which remain unchanged, but have moved
 to a new fileset.
 */
-void DeployedRepository::UpdateFilesetIdsForUnchangedFiles ()
+void DeployedRepository::UpdateFeatureIdsForUnchangedFiles ()
 {
 	// For files which have the same location and hash as before, update
 	// the fileset id
@@ -311,20 +311,20 @@ void DeployedRepository::UpdateFilesetIdsForUnchangedFiles ()
 	// inserted above
 	db_.Execute (
 		"UPDATE files "
-		"SET FileSetId=( "
-		"    SELECT main.file_sets.Id FROM main.file_sets "
-		"    WHERE main.file_sets.Uuid = ( "
-		"        SELECT source.file_sets.Uuid FROM source.files "
-		"        INNER JOIN source.file_sets ON source.files.FileSetId = source.file_sets.Id "
-		"        WHERE source.files.Path=main.files.path) "
+		"SET FeatureId=( "
+		"    SELECT main.features.Id FROM main.features "
+		"    WHERE main.features.Uuid = ( "
+		"        SELECT source.features.Uuid FROM source.fs_files "
+		"        INNER JOIN source.features ON source.fs_files.FeatureId = source.features.Id "
+		"        WHERE source.fs_files.Path=main.fs_files.path) "
 		") "
 		"WHERE "
 		"files.Path IN ( "
-		"SELECT main.files.Path FROM files AS MainFiles "
-		"    INNER JOIN main.content_objects ON main.files.ContentObjectId = main.content_objects.Id  "
-		"    INNER JOIN source.files ON source.files.Path = main.files.Path  "
-		"    INNER JOIN source.content_objects ON source.files.ContentObjectId = source.content_objects.Id "
-		"    WHERE main.content_objects.Hash IS source.content_objects.Hash "
+		"SELECT main.fs_files.Path FROM fs_files AS MainFiles "
+		"    INNER JOIN main.fs_contents ON main.fs_files.ContentId = main.fs_contents.Id  "
+		"    INNER JOIN source.fs_files ON source.fs_files.Path = main.fs_files.Path  "
+		"    INNER JOIN source.fs_contents ON source.fs_files.ContentId = source.fs_contents.Id "
+		"    WHERE main.fs_contents.Hash IS source.fs_contents.Hash "
 		") ");
 }
 
@@ -339,19 +339,19 @@ void DeployedRepository::RemoveChangedFiles (Log& log)
 	// we have to remove it (those files will get replaced)
 
 	auto changedFiles = db_.Prepare (
-		"SELECT main.files.Path AS Path, main.content_objects.Hash AS CurrentHash, source.content_objects.Hash AS NewHash FROM main.files "
-		"INNER JOIN main.content_objects ON main.files.ContentObjectId = main.content_objects.Id "
-		"INNER JOIN source.files ON source.files.Path = main.files.Path "
-		"INNER JOIN source.content_objects ON source.files.ContentObjectId = source.content_objects.Id "
+		"SELECT main.files.Path AS Path, main.fs_contents.Hash AS CurrentHash, source.fs_contents.Hash AS NewHash FROM main.fs_files "
+		"INNER JOIN main.fs_contents ON main.fs_files.ContentId = main.fs_contents.Id "
+		"INNER JOIN source.fs_files ON source.fs_files.Path = main.fs_files.Path "
+		"INNER JOIN source.fs_contents ON source.files.ContentId = source.fs_contents.Id "
 		"WHERE CurrentHash IS NOT NewHash "
-		"AND source.files.FileSetId IN "
-		"(SELECT Id FROM source.file_sets "
-		"WHERE Uuid IN (SELECT Uuid FROM pending_file_sets))");
+		"AND source.fs_files.FeatureId IN "
+		"(SELECT Id FROM source.features "
+		"WHERE Uuid IN (SELECT Uuid FROM pending_features))");
 
 	// files
 	{
 		auto deleteFileQuery = db_.Prepare (
-			"DELETE FROM files WHERE Path=?");
+			"DELETE FROM fs_files WHERE Path=?");
 
 		while (changedFiles.Step ()) {
 			deleteFileQuery.BindArguments (changedFiles.GetText (0));
@@ -367,9 +367,9 @@ void DeployedRepository::RemoveChangedFiles (Log& log)
 	}
 
 	// content objects
-	db_.Execute ("DELETE FROM content_objects "
+	db_.Execute ("DELETE FROM fs_contents "
 		"WHERE Id IN "
-		"(SELECT Id FROM content_objects_with_reference_count WHERE ReferenceCount = 0)");
+		"(SELECT Id FROM fs_contents_with_reference_count WHERE ReferenceCount = 0)");
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -385,13 +385,13 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 
 	{
 		auto diffQuery = db_.Prepare (
-			"SELECT DISTINCT Hash FROM source.content_objects "
-			"INNER JOIN source.files ON "
-			"source.content_objects.Id = source.files.ContentObjectId "
-			"WHERE source.files.FileSetId IN "
-			"(SELECT Id FROM source.file_sets "
-			"WHERE Uuid IN (SELECT Uuid FROM pending_file_sets)) "
-			"AND NOT Hash IN (SELECT Hash FROM main.content_objects)");
+			"SELECT DISTINCT Hash FROM source.fs_contents "
+			"INNER JOIN source.fs_files ON "
+			"source.fs_contents.Id = source.fs_files.ContentId "
+			"WHERE source.fs_files.FeatureId IN "
+			"(SELECT Id FROM source.features "
+			"WHERE Uuid IN (SELECT Uuid FROM pending_features)) "
+			"AND NOT Hash IN (SELECT Hash FROM main.fs_contents)");
 
 		while (diffQuery.Step ()) {
 			SHA256Digest contentObjectHash;
@@ -399,7 +399,7 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 			diffQuery.GetBlob (0, contentObjectHash);
 			requiredContentObjects.push_back (contentObjectHash);
 
-			log.Debug ("Configure", boost::format ("Discovered content object '%1%'") % ToString (contentObjectHash));
+			log.Debug ("Configure", boost::format ("Discovered content '%1%'") % ToString (contentObjectHash));
 		}
 	}
 
@@ -445,32 +445,32 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 		auto transaction = db_.BeginTransaction ();
 		log.Debug ("Configure", boost::format ("Received content object '%1%'") % hashString);
 
-		int64 contentObjectId = -1;
+		int64 ContentId = -1;
 		{
 			auto insertContentObjectQuery = db_.Prepare (
-				"INSERT INTO content_objects (Hash, Size) "
+				"INSERT INTO fs_contents (Hash, Size) "
 				"VALUES (?, ?);");
 
 			insertContentObjectQuery.BindArguments (hash, totalSize);
 			insertContentObjectQuery.Step ();
 			insertContentObjectQuery.Reset ();
 
-			contentObjectId = db_.GetLastRowId ();
+			ContentId = db_.GetLastRowId ();
 
-			log.Debug ("Configure", boost::format ("Stored content object '%1%' with id %2%") % hashString % contentObjectId);
+			log.Debug ("Configure", boost::format ("Stored content object '%1%' with id %2%") % hashString % ContentId);
 		}
 
 		auto insertFileQuery = db_.Prepare (
-			"INSERT INTO main.files (Path, ContentObjectId, FileSetId) "
-			"SELECT ?, ?, main.file_sets.Id FROM source.files "
-			"INNER JOIN source.file_sets ON source.file_sets.Id = source.files.FileSetId "
-			"INNER JOIN file_sets ON source.file_sets.Uuid = main.file_sets.Uuid "
+			"INSERT INTO main.fs_files (Path, ContentId, FeatureId) "
+			"SELECT ?, ?, main.features.Id FROM source.fs_files "
+			"INNER JOIN source.features ON source.features.Id = source.fs_files.FeatureId "
+			"INNER JOIN features ON source.features.Uuid = main.features.Uuid "
 			"WHERE source.files.path = ?"
 		);
 
 		auto getTargetFilesQuery = db_.Prepare (
-			"SELECT Path FROM source.files "
-			"WHERE source.files.ContentObjectId = (SELECT Id FROM source.content_objects WHERE source.content_objects.Hash = ?)");
+			"SELECT Path FROM source.fs_files "
+			"WHERE source.fs_files.ContentId = (SELECT Id FROM source.fs_contents WHERE source.fs_contents.Hash = ?)");
 
 		getTargetFilesQuery.BindArguments (hash);
 
@@ -511,7 +511,7 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 				file->Write (contents);
 			}
 
-			insertFileQuery.BindArguments (targetPath.string (), contentObjectId, targetPath.string ());
+			insertFileQuery.BindArguments (targetPath.string (), ContentId, targetPath.string ());
 			insertFileQuery.Step ();
 			insertFileQuery.Reset ();
 
@@ -539,25 +539,25 @@ void DeployedRepository::CopyExistingFiles (Log& log)
 	auto transaction = db_.BeginTransaction ();
 
 	auto diffQuery = db_.Prepare (
-		"SELECT Path, Hash FROM source.content_objects "
-		"INNER JOIN source.files ON "
-		"source.content_objects.Id = source.files.ContentObjectId "
-		"WHERE source.files.FileSetId IN "
-		"(SELECT Id FROM source.file_sets "
-		"WHERE Uuid IN (SELECT Uuid FROM pending_file_sets)) "
-		"AND NOT Path IN (SELECT Path FROM main.files)");
+		"SELECT Path, Hash FROM source.fs_contents "
+		"INNER JOIN source.fs_files ON "
+		"source.fs_contents.Id = source.fs_files.ContentId "
+		"WHERE source.fs_files.FeatureId IN "
+		"(SELECT Id FROM source.features "
+		"WHERE Uuid IN (SELECT Uuid FROM pending_features)) "
+		"AND NOT Path IN (SELECT Path FROM main.fs_files)");
 
 	auto exemplarQuery = db_.Prepare (
-		"SELECT Path, Id FROM files "
-		"INNER JOIN content_objects ON files.ContentObjectId = content_objects.Id "
+		"SELECT Path, Id FROM fs_files "
+		"INNER JOIN fs_contents ON files.ContentId = fs_contents.Id "
 		"WHERE Hash=?");
 
 	auto insertFileQuery = db_.Prepare (
-		"INSERT INTO main.files (Path, ContentObjectId, FileSetId) "
-		"SELECT ?, ?, main.file_sets.Id FROM source.files "
-		"INNER JOIN source.file_sets ON source.file_sets.Id = source.files.FileSetId "
-		"INNER JOIN file_sets ON source.file_sets.Uuid = main.file_sets.Uuid "
-		"WHERE source.files.path = ?"
+		"INSERT INTO main.fs_files (Path, ContentId, FeatureId) "
+		"SELECT ?, ?, main.features.Id FROM source.fs_files "
+		"INNER JOIN source.features ON source.features.Id = source.fs_files.FeatureId "
+		"INNER JOIN features ON source.features.Uuid = main.features.Uuid "
+		"WHERE source.fs_files.path = ?"
 	);
 
 	while (diffQuery.Step ()) {
@@ -586,24 +586,24 @@ void DeployedRepository::CopyExistingFiles (Log& log)
 
 ///////////////////////////////////////////////////////////////////////////////
 /**
-Remove unused file_sets, files and content objects.
+Remove unused features, files and content objects.
 */
 void DeployedRepository::Cleanup (Log& log)
 {
-	// The order here is files, file_sets, content_objects, to keep
+	// The order here is files, features, fs_contents, to keep
 	// referential integrity at all times
 
 	// files
 	{
 		auto unusedFilesQuery = db_.Prepare (
-			"SELECT Path FROM files WHERE FileSetId NOT IN ("
-			"    SELECT Id FROM file_sets WHERE file_sets.Uuid IN "
-			"        (SELECT Uuid FROM pending_file_sets)"
+			"SELECT Path FROM fs_files WHERE FeatureId NOT IN ("
+			"    SELECT Id FROM features WHERE features.Uuid IN "
+			"        (SELECT Uuid FROM pending_features)"
 			"    )"
 		);
 
 		auto deleteFileQuery = db_.Prepare (
-			"DELETE FROM files WHERE Path=?");
+			"DELETE FROM fs_files WHERE Path=?");
 
 		while (unusedFilesQuery.Step ()) {
 			deleteFileQuery.BindArguments (unusedFilesQuery.GetText (0));
@@ -618,18 +618,18 @@ void DeployedRepository::Cleanup (Log& log)
 		log.Debug ("Configure", "Deleted unused files from repository");
 	}
 
-	// file_sets
+	// features
 	{
-		db_.Execute ("DELETE FROM file_sets "
-			"WHERE file_sets.Uuid NOT IN (SELECT Uuid FROM pending_file_sets)");
+		db_.Execute ("DELETE FROM features "
+			"WHERE features.Uuid NOT IN (SELECT Uuid FROM pending_features)");
 
 		log.Debug ("Configure", "Deleted unused file sets from repository");
 	}
 
 	// content objects
-	db_.Execute ("DELETE FROM content_objects "
+	db_.Execute ("DELETE FROM fs_contents "
 		"WHERE Id IN "
-		"(SELECT Id FROM content_objects_with_reference_count WHERE ReferenceCount = 0)");
+		"(SELECT Id FROM fs_contents_with_reference_count WHERE ReferenceCount = 0)");
 
 	log.Debug ("Configure", "Deleted unused content objects from repository");
 }

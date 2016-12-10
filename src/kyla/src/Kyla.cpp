@@ -550,7 +550,7 @@ int kylaSetRepositoryProperty_1_1 (KylaInstaller* installer,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaQueryFileset_1_0 (KylaInstaller* installer,
+int kylaGetFeatureProperty_2_0 (KylaInstaller* installer,
 	KylaSourceRepository repository,
 	struct KylaUuid id,
 	int propertyId,
@@ -566,12 +566,12 @@ int kylaQueryFileset_1_0 (KylaInstaller* installer,
 	auto internal = GetInternalInstaller (installer);
 
 	if (repository == nullptr) {
-		internal->log->Error ("kylaQueryFileset", "repository was null");
+		internal->log->Error ("kylaQueryFeature", "repository was null");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
 	if (repository->repositoryType != KylaRepositoryImpl::RepositoryType::Source) {
-		internal->log->Error ("kylaQueryFileset", 
+		internal->log->Error ("kylaQueryFeature", 
 			"repository must be a source repository");
 		return kylaResult_ErrorInvalidArgument;
 	}
@@ -581,12 +581,12 @@ int kylaQueryFileset_1_0 (KylaInstaller* installer,
 	switch (propertyId) {
 	case kylaFeatureProperty_Size:
 	{
-		return KylaGet (repository->p->GetFilesetSize (uuid),
+		return KylaGet (repository->p->GetFeatureSize (uuid),
 			pResultSize, pResult, *internal->log,
-			"kylaQueryFileset");
+			"kylaQueryFeature");
 	}
 	default:
-		internal->log->Error ("kylaQueryFileset", "invalid property id");
+		internal->log->Error ("kylaQueryFeature", "invalid property id");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -717,7 +717,7 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** pInstaller)
 		installer->OpenSourceRepository = kylaOpenSourceRepository_2_0;
 		installer->OpenTargetRepository = kylaOpenTargetRepository_2_0;
 		installer->GetRepositoryProperty = kylaGetRepositoryProperty_2_0;
-		installer->GetFeatureProperty = nullptr;
+		installer->GetFeatureProperty = kylaGetFeatureProperty_2_0;
 		installer->SetLogCallback = kylaSetLogCallback_2_0;
 		installer->SetProgressCallback = kylaSetProgressCallback_2_0;
 		installer->SetValidationCallback = kylaSetValidationCallback_2_0;

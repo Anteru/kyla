@@ -98,7 +98,7 @@ struct PackedRepositoryBase::Decryptor
 
 This class provides the basic implementation for a packed repository, that is,
 a repository which stores the data in one or more source packages indexed using
-the storage_mapping and source_packages tables.
+the storage_mapping and fs_packages tables.
 
 The storage access itself is abstracted into the PackageFile class. This class
 is used instead of the generic File class as a package file only supports
@@ -131,9 +131,9 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 	// We need to join the requested objects on our existing data, so
 	// store them in a temporary table
 	auto requestedContentObjects = db.CreateTemporaryTable (
-		"requested_content_objects", "Hash BLOB NOT NULL UNIQUE");
+		"requested_fs_contents", "Hash BLOB NOT NULL UNIQUE");
 
-	auto tempObjectInsert = db.Prepare ("INSERT INTO requested_content_objects "
+	auto tempObjectInsert = db.Prepare ("INSERT INTO requested_fs_contents "
 		"(Hash) VALUES (?)");
 
 	for (const auto& obj : requestedObjects) {
@@ -145,12 +145,12 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 	// Find all source packages we need to handle
 	auto findSourcePackagesQuery = db.Prepare (
 		"SELECT DISTINCT "
-		"   source_packages.Filename AS Filename, "
-		"   source_packages.Id AS Id "
+		"   fs_packages.Filename AS Filename, "
+		"   fs_packages.Id AS Id "
 		"FROM storage_mapping "
-		"    INNER JOIN content_objects ON storage_mapping.ContentObjectId = content_objects.Id "
-		"    INNER JOIN source_packages ON storage_mapping.SourcePackageId = source_packages.Id "
-		"WHERE content_objects.Hash IN (SELECT Hash FROM requested_content_objects) "
+		"    INNER JOIN fs_contents ON storage_mapping.ContentId = fs_contents.Id "
+		"    INNER JOIN fs_packages ON storage_mapping.PackageId = fs_packages.Id "
+		"WHERE fs_contents.Hash IN (SELECT Hash FROM requested_fs_contents) "
 	);
 
 	// Finds the content objects we need in a particular source package, and
@@ -170,9 +170,9 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 		"	EncryptionInputSize, "		// = 11
 		"	EncryptionOutputSize, "		// = 12
 		"	StorageHash "				// = 13
-		"FROM storage_data_view "
-		"WHERE ContentHash IN (SELECT Hash FROM requested_content_objects) "
-		"    AND SourcePackageId = ? ");
+		"FROM fs_content_view "
+		"WHERE ContentHash IN (SELECT Hash FROM requested_fs_contents) "
+		"    AND PackageId = ? ");
 
 	std::vector<byte> writeBuffer;
 	std::vector<byte> readBuffer;
@@ -266,11 +266,11 @@ void PackedRepositoryBase::ValidateImpl (const Repository::ValidationCallback& v
 	// Queries as above
 	auto findSourcePackagesQuery = db.Prepare (
 		"SELECT DISTINCT "
-		"   source_packages.Filename AS Filename, "
-		"   source_packages.Id AS Id "
+		"   fs_packages.Filename AS Filename, "
+		"   fs_packages.Id AS Id "
 		"FROM storage_mapping "
-		"    INNER JOIN content_objects ON storage_mapping.ContentObjectId = content_objects.Id "
-		"    INNER JOIN source_packages ON storage_mapping.SourcePackageId = source_packages.Id"
+		"    INNER JOIN fs_contents ON storage_mapping.ContentId = fs_contents.Id "
+		"    INNER JOIN fs_packages ON storage_mapping.PackageId = fs_packages.Id"
 	);
 
 	auto contentObjectsInPackageQuery = db.Prepare (
@@ -285,9 +285,9 @@ void PackedRepositoryBase::ValidateImpl (const Repository::ValidationCallback& v
 		"	EncryptionOutputSize, "			// = 7
 		"	StorageHash, "					// = 8
 		"	ContentHash "					// = 9
-		"FROM storage_data_view "
-		"WHERE ContentHash IN (SELECT Hash FROM requested_content_objects) "
-		"    AND SourcePackageId = ? ");
+		"FROM fs_content_view "
+		"WHERE ContentHash IN (SELECT Hash FROM requested_fs_contents) "
+		"    AND PackageId = ? ");
 
 	std::vector<byte> compressionOutputBuffer;
 	std::vector<byte> readBuffer, writeBuffer;

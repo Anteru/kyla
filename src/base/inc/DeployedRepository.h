@@ -39,10 +39,10 @@ private:
 
 	Sql::Database& GetDatabaseImpl () override;
 
-	void PreparePendingFilesets (Log& log, const ArrayRef<Uuid>& filesets,
+	void PreparePendingFeatures (Log& log, const ArrayRef<Uuid>& filesets,
 		ProgressHelper& progress);
-	void UpdateFilesets ();
-	void UpdateFilesetIdsForUnchangedFiles ();
+	void UpdateFeatures ();
+	void UpdateFeatureIdsForUnchangedFiles ();
 	void RemoveChangedFiles (Log& log);
 	void GetNewContentObjects (Repository& source, Log& log,
 		ProgressHelper& progress);

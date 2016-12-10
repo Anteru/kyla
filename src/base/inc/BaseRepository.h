@@ -20,9 +20,8 @@ public:
 	virtual ~BaseRepository () = default;
 
 private:
-	virtual std::vector<Uuid> GetFilesetsImpl () override;
-	virtual int64_t GetFilesetFileCountImpl (const Uuid& filesetId) override;
-	virtual int64_t GetFilesetSizeImpl (const Uuid& filesetId) override;
+	virtual std::vector<Uuid> GetFeaturesImpl () override;
+	virtual int64_t GetFeatureSizeImpl (const Uuid& filesetId) override;
 	virtual bool IsEncryptedImpl () override;
 	virtual void SetDecryptionKeyImpl (const std::string& key) override;
 	virtual std::string GetDecryptionKeyImpl () const override;

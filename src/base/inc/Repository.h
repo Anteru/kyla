@@ -166,18 +166,14 @@ struct Repository
 		const ArrayRef<Uuid>& filesets,
 		ExecutionContext& context);
 
-	std::vector<Uuid> GetFilesets ();
-	int64_t GetFilesetFileCount (const Uuid& filesetId);
-	int64_t GetFilesetSize (const Uuid& filesetId);
+	std::vector<Uuid> GetFeatures ();
+	int64_t GetFeatureSize (const Uuid& filesetId);
 
 	Sql::Database& GetDatabase ();
 
 	bool IsEncrypted ();
 	void SetDecryptionKey (const std::string& key);
 	std::string GetDecryptionKey () const;
-
-	std::vector<byte> GetResource (const Uuid& id);
-	void SetResource (const Uuid& id, const ArrayRef<>& value);
 
 private:
 	virtual void ValidateImpl (const ValidationCallback& validationCallback,
@@ -186,9 +182,8 @@ private:
 		const GetContentObjectCallback& getCallback) = 0;
 	virtual void RepairImpl (Repository& source,
 		ExecutionContext& context) = 0;
-	virtual std::vector<Uuid> GetFilesetsImpl () = 0;
-	virtual int64_t GetFilesetFileCountImpl (const Uuid& filesetId) = 0;
-	virtual int64_t GetFilesetSizeImpl (const Uuid& filesetId) = 0;
+	virtual std::vector<Uuid> GetFeaturesImpl () = 0;
+	virtual int64_t GetFeatureSizeImpl (const Uuid& filesetId) = 0;
 	virtual void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& filesets,
 		ExecutionContext& context) = 0;
