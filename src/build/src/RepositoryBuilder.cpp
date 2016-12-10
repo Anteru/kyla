@@ -314,7 +314,7 @@ public:
 //////////////////////////////////////////////////////////////////////////////
 struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 {
-	Feature (pugi::xml_node& featureNode)
+	Feature (const pugi::xml_node& featureNode)
 	{
 		uuid_ = Uuid::Parse (featureNode.attribute ("Id").as_string ());
 
@@ -537,13 +537,13 @@ struct XmlTreeWalker
 {
 	virtual ~XmlTreeWalker () = default;
 
-	virtual bool OnEnter (pugi::xml_node&) = 0;
-	virtual bool OnNode (pugi::xml_node&) = 0;
-	virtual bool OnLeave (pugi::xml_node&) = 0;
+	virtual bool OnEnter (const pugi::xml_node&) = 0;
+	virtual bool OnNode (const pugi::xml_node&) = 0;
+	virtual bool OnLeave (const pugi::xml_node&) = 0;
 };
 
 //////////////////////////////////////////////////////////////////////////////
-void Traverse (pugi::xml_node& node, XmlTreeWalker& walker)
+void Traverse (const pugi::xml_node& node, XmlTreeWalker& walker)
 {
 	if (!walker.OnEnter (node)) {
 		return;
@@ -594,7 +594,7 @@ private:
 		{
 		}
 
-		bool OnEnter (pugi::xml_node& node)
+		bool OnEnter (const pugi::xml_node& node)
 		{
 			if (strcmp (node.name (), "Group") == 0) {
 				auto uuid = Uuid::Parse (node.attribute ("Id").as_string ());
@@ -607,7 +607,7 @@ private:
 			return true;
 		}
 
-		bool OnNode (pugi::xml_node& node)
+		bool OnNode (const pugi::xml_node& node)
 		{
 			if (strcmp (node.name (), "File") == 0) {
 				files_.emplace_back (new File{ node });
@@ -626,7 +626,7 @@ private:
 			return true;
 		}
 
-		bool OnLeave (pugi::xml_node& node)
+		bool OnLeave (const pugi::xml_node& node)
 		{
 			if (strcmp (node.name (), "Group") == 0) {
 				currentGroup_.pop ();
@@ -861,7 +861,7 @@ public:
 	}
 
 public:
-	FileStorage (pugi::xml_node& filesNode, BuildContext& ctx)
+	FileStorage (const pugi::xml_node& filesNode, BuildContext& ctx)
 	{
 		PopulateFiles (filesNode, ctx);
 		PopulatePackages (filesNode, ctx);
@@ -891,7 +891,7 @@ public:
 	}
 
 private:
-	void PopulateFiles (pugi::xml_node& filesNode, BuildContext& ctx)
+	void PopulateFiles (const pugi::xml_node& filesNode, BuildContext& ctx)
 	{
 		// Traverse all groups and individual files, and add everything
 		// with an ID to repositoryObjects_
@@ -904,7 +904,7 @@ private:
 		CreateFileContents (ctx);
 	}
 
-	void PopulatePackages (pugi::xml_node& filesNode, BuildContext& ctx)
+	void PopulatePackages (const pugi::xml_node& filesNode, BuildContext& ctx)
 	{
 		// Packages can only reference files and groups inside the file storage
 		// We track all targets here, remove all which are assigned to a package,
@@ -989,7 +989,7 @@ private:
 class Repository
 {
 public:
-	void CreateFeatures (pugi::xml_node& root, BuildContext& ctx)
+	void CreateFeatures (const pugi::xml_node& root, BuildContext& ctx)
 	{
 		auto featuresNode = root.select_node ("/Repository/Features");
 
@@ -1007,7 +1007,7 @@ public:
 		}
 	}
 
-	void CreateFileStorage (pugi::xml_node& root, BuildContext& ctx)
+	void CreateFileStorage (const pugi::xml_node& root, BuildContext& ctx)
 	{
 		auto filesNode = root.select_node ("/Repository/Files");
 
