@@ -7,7 +7,7 @@
 	</Features>
 	<Files>
 		<Group Id="f3b9780b-d7dd-44d1-87d4-2bb9d8bc27e6">
-			<File Source="2.txt"/>
+			<File Source="2.txt" Target="base.txt"/>
 		</Group>
 	</Files>
 </Repository>
