@@ -271,15 +271,17 @@ int Repair (const std::vector<std::string>& options,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int QueryFeature (const std::vector<std::string>& options,
+int QueryRepository (const std::vector<std::string>& options,
 	po::variables_map& vm)
 { 
-	po::options_description build_desc ("query-features options");
+	po::options_description build_desc ("query-repository options");
 	build_desc.add_options ()
+		("property", po::value<std::string> ())
 		("source", po::value<std::string> ());
 
 	po::positional_options_description posBuild;
 	posBuild
+		.add ("property", 1)
 		.add ("source", 1);
 
 	try {
@@ -304,28 +306,111 @@ int QueryFeature (const std::vector<std::string>& options,
 	}
 
 	KylaTargetRepository source;
-	KYLA_CHECKED_CALL (installer->OpenSourceRepository (installer, vm ["source"].as<std::string> ().c_str (),
+	KYLA_CHECKED_CALL (installer->OpenSourceRepository (installer, 
+		vm ["source"].as<std::string> ().c_str (),
 		kylaRepositoryOption_ReadOnly, &source));
 
-	std::size_t resultSize = 0;
-	KYLA_CHECKED_CALL (installer->GetRepositoryProperty (installer, source,
-		kylaRepositoryProperty_AvailableFeatures, &resultSize, nullptr));
+	const auto property = vm["property"].as<std::string> ();
 
-	std::vector<KylaUuid> features;
-	features.resize (resultSize / sizeof (KylaUuid));
-	KYLA_CHECKED_CALL (installer->GetRepositoryProperty (installer, source,
-		kylaRepositoryProperty_AvailableFeatures, &resultSize, features.data ()));
-	
-	for (const auto& feature : features) {
-		std::cout << ToString (kyla::Uuid{ feature.bytes });
-	
-		size_t int64Size = sizeof (std::int64_t);
-		std::int64_t size;
-		KYLA_CHECKED_CALL (installer->GetFeatureProperty (installer, source,
-			feature, kylaFeatureProperty_Size,
-			&int64Size, &size));
+	if (property == "features") {
+		std::size_t resultSize = 0;
+		KYLA_CHECKED_CALL (installer->GetRepositoryProperty (installer, source,
+			kylaRepositoryProperty_AvailableFeatures, &resultSize, nullptr));
 
-		std::cout << " " << size << std::endl;
+		std::vector<KylaUuid> features;
+		features.resize (resultSize / sizeof (KylaUuid));
+		KYLA_CHECKED_CALL (installer->GetRepositoryProperty (installer, source,
+			kylaRepositoryProperty_AvailableFeatures, &resultSize, features.data ()));
+	
+		for (const auto& feature : features) {
+			std::cout << ToString (kyla::Uuid{ feature.bytes }) << std::endl;
+		}
+	}
+
+	installer->CloseRepository (installer, source);
+	KYLA_CHECKED_CALL (kylaDestroyInstaller (installer));
+
+	return kylaResult_Ok;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+int QueryFeature (const std::vector<std::string>& options,
+	po::variables_map& vm)
+{
+	po::options_description build_desc ("query-repository options");
+	build_desc.add_options ()
+		("property", po::value<std::string> ())
+		("source", po::value<std::string> ())
+		("feature-id", po::value<std::string> ());
+
+	po::positional_options_description posBuild;
+	posBuild
+		.add ("property", 1)
+		.add ("source", 1)
+		.add ("feature-id", 1);
+
+	try {
+		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
+	} catch (const std::exception& e) {
+		std::cerr << e.what () << std::endl;
+		return 1;
+	}
+
+	if (vm["source"].empty ()) {
+		std::cerr << "No repository specified" << std::endl;
+		return 1;
+	}
+
+	KylaInstaller* installer = nullptr;
+	kylaCreateInstaller (KYLA_API_VERSION_2_0, &installer);
+
+	assert (installer);
+
+	if (vm["log"].as<bool> ()) {
+		installer->SetLogCallback (installer, StdoutLog, nullptr);
+	}
+
+	KylaTargetRepository source;
+	KYLA_CHECKED_CALL (installer->OpenSourceRepository (installer, vm["source"].as<std::string> ().c_str (),
+		kylaRepositoryOption_ReadOnly, &source));
+
+	KylaUuid featureId;
+	{
+		const auto tempId = kyla::Uuid::Parse (vm["feature-id"].as<std::string> ());
+		::memcpy (featureId.bytes, tempId.GetData (), sizeof (featureId.bytes));
+	}
+	const auto property = vm["property"].as<std::string> ();
+	
+	if (property == "dependencies") {
+		size_t resultSize = 0;
+		installer->GetFeatureProperty (installer, source,
+			featureId, kylaFeatureProperty_Dependencies, &resultSize, nullptr);
+
+		std::vector<KylaFeatureDependency> dependencies;
+		dependencies.resize (resultSize / sizeof (KylaFeatureDependency));
+
+		installer->GetFeatureProperty (installer, source,
+			featureId, kylaFeatureProperty_Dependencies, &resultSize, dependencies.data ());
+
+		for (const auto& dependency : dependencies) {
+			std::cout << ToString (kyla::Uuid (dependency.source.bytes)) << " ";
+
+			switch (dependency.relationship) {
+			case kylaFeatureRelationship_Requires:
+				std::cout << "requires";
+				break;
+			}
+
+			std::cout << " " << ToString (kyla::Uuid (dependency.target.bytes)) << std::endl;
+		}
+	} else if (property == "size") {
+		int64_t result = 0;
+		size_t resultSize = sizeof (result);
+
+		installer->GetFeatureProperty (installer, source,
+			featureId, kylaFeatureProperty_Size, &resultSize, &result);
+
+		std::cout << result << std::endl;
 	}
 
 	installer->CloseRepository (installer, source);
@@ -471,7 +556,9 @@ int main (int argc, char* argv [])
 			return Validate (options, vm);
 		} else if (cmd == "repair") {
 			return Repair (options, vm);
-		} else if (cmd == "query-features") {
+		} else if (cmd == "query-repository") {
+			return QueryRepository (options, vm);
+		} else if (cmd == "query-feature") {
 			return QueryFeature (options, vm);
 		} else if (cmd == "install" || cmd == "configure") {
 			return ConfigureOrInstall (cmd, options, vm);

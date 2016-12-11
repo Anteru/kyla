@@ -70,7 +70,12 @@ public:
 		, packageInsertStatement_ (db.Prepare ("INSERT INTO fs_packages (Filename) VALUES (?);"))
 		, packageDeleteStatement_ (db.Prepare ("DELETE FROM fs_packages WHERE Id=?;"))
 		, contentInsertStatement_ (db.Prepare ("INSERT INTO fs_contents (Hash, Size) VALUES (?, ?);"))
-		, featureInsertStatement_ (db.Prepare ("INSERT INTO features (Uuid) VALUES (?);"))		
+		, featureInsertStatement_ (db.Prepare ("INSERT INTO features (Uuid) VALUES (?);"))
+		, featureDependencyInsertStatement_ (db.Prepare (
+			"INSERT INTO feature_dependencies (SourceId, TargetId, Relation) VALUES ( "
+			"(SELECT Id FROM features WHERE Uuid=?), "
+			"(SELECT Id FROM features WHERE Uuid=?), "
+			"?);"))
 		, chunkInsertQuery_ (db.Prepare (
 			"INSERT INTO fs_chunks "
 			"(ContentId, PackageId, PackageOffset, PackageSize, SourceOffset, SourceSize) "
@@ -97,6 +102,15 @@ public:
 		featureInsertStatement_.Reset ();
 
 		return db_.GetLastRowId ();
+	}
+
+	void StoreFeatureDependency (const Uuid& source, const Uuid& target, 
+		const char* relation)
+	{
+		featureDependencyInsertStatement_.BindArguments (
+			source, target, relation);
+		featureDependencyInsertStatement_.Step ();
+		featureDependencyInsertStatement_.Reset ();
 	}
 
 	int64 StorePackage (const char* filename)
@@ -176,6 +190,7 @@ private:
 	Sql::Statement packageDeleteStatement_;
 	Sql::Statement contentInsertStatement_;
 	Sql::Statement featureInsertStatement_;
+	Sql::Statement featureDependencyInsertStatement_;
 	Sql::Statement chunkInsertQuery_;
 	Sql::Statement chunkHashesInsertQuery_;
 	Sql::Statement chunkCompressionInsertQuery_;
@@ -334,12 +349,28 @@ struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 				Uuid::Parse (refNode.attribute ("Id").as_string ()) 
 			});
 		};
+
+		for (auto depNode : featureNode.children ("Dependency")) {
+			dependencies_.push_back (Reference{
+				Uuid::Parse (depNode.attribute ("Id").as_string ())
+			});
+		}
 	}
 	
 	void Store (BuildDatabase& db)
 	{
 		assert (persistentId_ == -1);
 		persistentId_ = db.StoreFeature (uuid_);
+	}
+
+	void StoreDependencies (BuildDatabase& db)
+	{
+		// Can be only used after the feature has been stored
+		assert (persistentId_ != -1);
+
+		for (const auto& dependency : dependencies_) {
+			db.StoreFeatureDependency (uuid_, dependency.id, "requires");
+		}
 	}
 
 	int64 GetPersistentId () const
@@ -363,6 +394,7 @@ private:
 	int64 persistentId_ = -1;
 
 	std::vector<Reference> references_;
+	std::vector<Reference> dependencies_;
 };
 
 
@@ -1047,6 +1079,11 @@ public:
 
 				repositoryObjects_[ptr->GetUuid ()] = ptr;
 			}
+		}
+
+		// Store the dependencies now that every feature has been stored
+		for (auto& feature : features_) {
+			feature->StoreDependencies (ctx.buildDatabase);
 		}
 	}
 

@@ -115,6 +115,18 @@ struct KylaUuid
 	uint8_t bytes [16];
 };
 
+enum kylaFeatureRelationship
+{
+	kylaFeatureRelationship_Requires
+};
+
+struct KylaFeatureDependency
+{
+	KylaUuid source;
+	KylaUuid target;
+	kylaFeatureRelationship relationship;
+};
+
 enum kylaRepositoryProperty
 {
 	/**
@@ -148,6 +160,13 @@ enum kylaFeatureProperty
 	The size of the file set when deployed, stored in an int64_t.
 	*/
 	kylaFeatureProperty_Size = 1,
+
+	/**
+	All dependencies of this feature, as KylaFeatureDependency instances
+
+	@since 2.0
+	*/
+	kylaFeatureProperty_Dependencies = 2
 };
 
 struct KylaInstaller

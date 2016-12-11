@@ -623,6 +623,24 @@ int kylaGetFeatureProperty_2_0 (KylaInstaller* installer,
 			pResultSize, pResult, *internal->log,
 			"kylaQueryFeature");
 	}
+
+	case kylaFeatureProperty_Dependencies:
+	{
+		std::vector<KylaFeatureDependency> result;
+		for (const auto& dependency : repository->p->GetFeatureDependencies (uuid)) {
+			KylaFeatureDependency dep;
+			dep.relationship = kylaFeatureRelationship_Requires;
+			::memcpy (dep.source.bytes, dependency.source.GetData (),
+				sizeof (dep.source.bytes));
+			::memcpy (dep.target.bytes, dependency.target.GetData (),
+				sizeof (dep.target.bytes));
+			result.push_back (dep);
+		}
+
+		return KylaGet (result, pResultSize, pResult,
+			*internal->log, "kylaQueryFeature");
+	}
+
 	default:
 		internal->log->Error ("kylaQueryFeature", "invalid property id");
 		return kylaResult_ErrorInvalidArgument;

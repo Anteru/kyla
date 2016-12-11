@@ -33,6 +33,7 @@ private:
 	void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& featureIds,
 		ExecutionContext& context) override;
+	std::vector<Dependency> GetFeatureDependenciesImpl (const Uuid& featureId) override;
 
 protected:
 	std::string key_;

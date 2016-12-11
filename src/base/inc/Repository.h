@@ -169,6 +169,14 @@ struct Repository
 	std::vector<Uuid> GetFeatures ();
 	int64_t GetFeatureSize (const Uuid& featureId);
 
+	struct Dependency
+	{
+		Uuid source;
+		Uuid target;
+	};
+
+	std::vector<Dependency> GetFeatureDependencies (const Uuid& featureId);
+
 	Sql::Database& GetDatabase ();
 
 	bool IsEncrypted ();
@@ -191,6 +199,7 @@ private:
 	virtual void SetDecryptionKeyImpl (const std::string& key) = 0;
 	virtual std::string GetDecryptionKeyImpl () const = 0;
 	virtual Sql::Database& GetDatabaseImpl () = 0;
+	virtual std::vector<Dependency> GetFeatureDependenciesImpl (const Uuid& featureId) = 0;
 };
 
 std::unique_ptr<Repository> OpenRepository (const char* path,

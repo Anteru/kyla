@@ -17,7 +17,7 @@ namespace kyla {
 std::vector<Uuid> BaseRepository::GetFeaturesImpl ()
 {
 	static const char* querySql =
-		"SELECT file_sets.Uuid FROM file_sets;";
+		"SELECT Uuid FROM features;";
 
 	auto query = GetDatabase ().Prepare (querySql);
 
@@ -89,5 +89,28 @@ void BaseRepository::ConfigureImpl (Repository& /*other*/,
 	ExecutionContext& /*context*/)
 {
 	throw RuntimeException ("NOT IMPLEMENTED", KYLA_FILE_LINE);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::vector<Repository::Dependency> BaseRepository::GetFeatureDependenciesImpl (const Uuid& featureId)
+{
+	auto query = GetDatabase ().Prepare (
+		"SELECT SourceUuid, TargetUuid, Relation FROM "
+		"feature_dependencies_with_uuid WHERE SourceUuid=?1 OR TargetUuid=?1");
+
+	query.BindArguments (featureId);
+
+	std::vector<Repository::Dependency> result;
+	while (query.Step ()) {
+		Repository::Dependency dependency;
+		query.GetBlob (0, dependency.source);
+		query.GetBlob (1, dependency.target);
+
+		result.push_back (dependency);
+
+		///@TODO(minor) Assert all relationships are "requires"
+	}
+
+	return result;
 }
 }

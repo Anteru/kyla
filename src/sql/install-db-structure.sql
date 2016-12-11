@@ -16,6 +16,19 @@ CREATE TABLE feature_dependencies (
 	FOREIGN KEY(TargetId) REFERENCES features(Id)
 );
 
+CREATE  VIEW feature_dependencies_with_uuid AS
+	SELECT
+		source_features.Uuid AS SourceUuid,
+		target_features.Uuid AS TargetUuid,
+		Relation
+	FROM feature_dependencies
+		JOIN features
+			AS source_features
+			ON feature_dependencies.SourceId=source_features.Id
+		JOIN features
+			AS target_features
+			ON feature_dependencies.TargetId=target_features.Id;
+
 -- Store embedded resources like logos, UI info, etc.
 CREATE TABLE ui_resources (
 	Uuid BLOB NOT NULL UNIQUE,

@@ -72,6 +72,13 @@ std::string Repository::GetDecryptionKey () const
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+std::vector<Repository::Dependency> 
+Repository::GetFeatureDependencies (const Uuid& featureId)
+{
+	return GetFeatureDependenciesImpl (featureId);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<Repository> OpenRepository (const char* path,
 	const bool allowWrite)
 {
