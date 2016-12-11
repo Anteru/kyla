@@ -896,7 +896,7 @@ public:
 	{
 		PopulateFiles (filesNode, ctx);
 		PopulatePackages (filesNode, ctx);
-
+		
 		auto encryptionNode = filesNode.select_node ("/Packages/Encryption");
 
 		if (encryptionNode) {

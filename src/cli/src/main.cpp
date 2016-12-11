@@ -201,7 +201,11 @@ int Validate (const std::vector<std::string>& options,
 	if (vm.find ("key") != vm.end ()) {
 		const auto key = vm ["key"].as<std::string> ();
 	
-		///@TODO(minor) Handle encryption
+		installer->SetRepositoryProperty (
+			installer, sourceRepository, kylaRepositoryProperty_DecryptionKey,
+			key.size () + 1,
+			key.c_str ()
+		);
 	}
 
 	KYLA_CHECKED_CALL (installer->Execute (installer, kylaAction_Verify, 
@@ -368,20 +372,24 @@ int ConfigureOrInstall (const std::string& cmd,
 		installer->SetProgressCallback (installer, StdoutProgress, nullptr);
 	}
 
-	KylaSourceRepository source;
+	KylaSourceRepository sourceRepository;
 	KYLA_CHECKED_CALL (installer->OpenSourceRepository (installer, 
-		vm ["source"].as<std::string> ().c_str (), 0, &source));
+		vm ["source"].as<std::string> ().c_str (), 0, &sourceRepository));
 
 	if (vm.find ("key") != vm.end ()) {
-		const auto key = vm ["key"].as<std::string> ();
-		
-		///@TODO(minor) Handle encryption
+		const auto key = vm["key"].as<std::string> ();
+
+		installer->SetRepositoryProperty (
+			installer, sourceRepository, kylaRepositoryProperty_DecryptionKey,
+			key.size () + 1,
+			key.c_str ()
+		);
 	}
 
-	KylaTargetRepository target;
+	KylaTargetRepository targetRepository;
 	KYLA_CHECKED_CALL (installer->OpenTargetRepository (installer, 
 		vm ["target"].as<std::string> ().c_str (), 
-		cmd == "install" ? kylaRepositoryOption_Create : 0, &target));
+		cmd == "install" ? kylaRepositoryOption_Create : 0, &targetRepository));
 
 	const auto features = vm ["features"].as<std::vector<std::string>> ();
 
@@ -403,14 +411,14 @@ int ConfigureOrInstall (const std::string& cmd,
 
 	if (cmd == "install") {
 		result = installer->Execute (installer, kylaAction_Install,
-			target, source, &desiredState);
+			targetRepository, sourceRepository, &desiredState);
 	} else {
 		result = installer->Execute (installer, kylaAction_Configure,
-			target, source, &desiredState);
+			targetRepository, sourceRepository, &desiredState);
 	}
 
-	installer->CloseRepository (installer, source);
-	installer->CloseRepository (installer, target);
+	installer->CloseRepository (installer, sourceRepository);
+	installer->CloseRepository (installer, targetRepository);
 	KYLA_CHECKED_CALL (kylaDestroyInstaller (installer));
 
 	return result;

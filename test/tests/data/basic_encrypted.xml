@@ -1,5 +1,5 @@
 <?xml version="1.0" ?>
-<FileRepository>
+<Repository>
 	<Features>
 		<Feature Id="3111b6f8-3f2b-419e-b8bc-826d839e44c9">
 			<Reference Id="5ee578f3-de17-4e76-9c7b-07cfa7384915"/>
@@ -16,4 +16,4 @@
 			</Encryption>
 		</Packages>
 	</Files>
-</FileRepository>
+</Repository>

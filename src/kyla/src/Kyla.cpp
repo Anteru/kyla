@@ -73,6 +73,12 @@ struct KylaInstaller_2_0
 		size_t* resultSize,
 		void* result);
 
+	int (*SetRepositoryProperty)(KylaInstaller* installer,
+		KylaSourceRepository repository,
+		int propertyId,
+		size_t propertySize,
+		const void* propertyValue);
+
 	int (*GetFeatureProperty)(KylaInstaller* installer,
 		KylaSourceRepository repository,
 		struct KylaUuid id,
@@ -478,19 +484,30 @@ int kylaGetRepositoryProperty_2_0 (KylaInstaller* installer,
 	switch (propertyId) {
 	case kylaRepositoryProperty_AvailableFeatures:
 	{
-		///@TODO(minor) implement this	}
+		const auto value = repository->p->GetFeatures ();
+
+		return KylaGet (value,
+			pResultSize, pResult, *internal->log, "kylaGetRepositoryProperty");
 	}
 
 	case kylaRepositoryProperty_IsEncrypted:
 	{
-		int value = repository->p->IsEncrypted ();
+		const auto value = repository->p->IsEncrypted ();
+
+		return KylaGet (value,
+			pResultSize, pResult, *internal->log, "kylaGetRepositoryProperty");
+	}
+
+	case kylaRepositoryProperty_DecryptionKey:
+	{
+		const auto value = repository->p->GetDecryptionKey ();
 
 		return KylaGet (value,
 			pResultSize, pResult, *internal->log, "kylaGetRepositoryProperty");
 	}
 
 	default:
-		internal->log->Error ("kylaQueryRepository", "invalid property id");
+		internal->log->Error ("kylaGetRepositoryProperty", "invalid property id");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -500,7 +517,7 @@ int kylaGetRepositoryProperty_2_0 (KylaInstaller* installer,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaSetRepositoryProperty_1_1 (KylaInstaller* installer,
+int kylaSetRepositoryProperty_2_0 (KylaInstaller* installer,
 	KylaSourceRepository repository,
 	int propertyId,
 	size_t propertySize,
@@ -538,6 +555,26 @@ int kylaSetRepositoryProperty_1_1 (KylaInstaller* installer,
 		internal->log->Error ("kylaSetRepositoryProperty",
 			"Cannot set read-only property 'IsEncrypted'");
 		return kylaResult_ErrorInvalidArgument;
+	}
+
+	case kylaRepositoryProperty_DecryptionKey:
+	{
+		if (propertySize == 0) {
+			return kylaResult_ErrorInvalidArgument;
+		}
+
+		if (propertyValue == 0) {
+			return kylaResult_ErrorInvalidArgument;
+		}
+
+		const std::string key{
+			static_cast<const char*> (propertyValue),
+			static_cast<const char*> (propertyValue) + propertySize - 1
+					/* null terminated string*/
+		};
+
+		repository->p->SetDecryptionKey (key);
+		break;
 	}
 
 	default:
@@ -718,6 +755,7 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** pInstaller)
 		installer->OpenSourceRepository = kylaOpenSourceRepository_2_0;
 		installer->OpenTargetRepository = kylaOpenTargetRepository_2_0;
 		installer->GetRepositoryProperty = kylaGetRepositoryProperty_2_0;
+		installer->SetRepositoryProperty = kylaSetRepositoryProperty_2_0;
 		installer->GetFeatureProperty = kylaGetFeatureProperty_2_0;
 		installer->SetLogCallback = kylaSetLogCallback_2_0;
 		installer->SetProgressCallback = kylaSetProgressCallback_2_0;

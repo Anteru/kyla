@@ -133,7 +133,13 @@ enum kylaRepositoryProperty
 
 	@since 2.0
 	*/
-	kylaRepositoryProperty_IsEncrypted = 2
+	kylaRepositoryProperty_IsEncrypted = 2,
+
+	/**
+	The decryption key which will be used if the repository is encrypted.
+	@since 2.0
+	*/
+	kylaRepositoryProperty_DecryptionKey = 3
 };
 
 enum kylaFeatureProperty
@@ -218,6 +224,21 @@ struct KylaInstaller
 		int propertyId,
 		size_t* resultSize,
 		void* result);
+
+
+	/**
+	Set a repository property.
+
+	The propertyId must be one of enumeration values from
+	kylaRepositoryProperty.
+
+	@since 2.0
+	*/
+	int (*SetRepositoryProperty)(KylaInstaller* installer,
+		KylaSourceRepository repository,
+		int propertyId,
+		size_t propertySize,
+		const void* propertyValue);
 
 	/**
 	Get a feature property.
