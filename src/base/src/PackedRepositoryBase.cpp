@@ -258,9 +258,14 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void PackedRepositoryBase::ValidateImpl (const Repository::ValidationCallback& validationCallback,
-	ExecutionContext& context)
+void PackedRepositoryBase::RepairImpl (Repository& source,
+	ExecutionContext& context,
+	RepairCallback repairCallback,
+	bool restore)
 {
+	// A packed repository can't restore files
+	assert (restore == false);
+
 	auto& db = GetDatabase ();
 
 	// Queries as above
@@ -269,8 +274,8 @@ void PackedRepositoryBase::ValidateImpl (const Repository::ValidationCallback& v
 		"   fs_packages.Filename AS Filename, "
 		"   fs_packages.Id AS Id "
 		"FROM storage_mapping "
-		"    INNER JOIN fs_contents ON storage_mapping.ContentId = fs_contents.Id "
-		"    INNER JOIN fs_packages ON storage_mapping.PackageId = fs_packages.Id"
+		"    INNER JOIN fs_contents ON fs_chunks.ContentId = fs_contents.Id "
+		"    INNER JOIN fs_packages ON fs_chunks.PackageId = fs_packages.Id"
 	);
 
 	auto contentObjectsInPackageQuery = db.Prepare (
@@ -330,10 +335,13 @@ void PackedRepositoryBase::ValidateImpl (const Repository::ValidationCallback& v
 			contentObjectsInPackageQuery.GetBlob (8, storageDigest);
 			contentObjectsInPackageQuery.GetBlob (9, contentDigest);
 
-			if (ComputeSHA256 (readBuffer) != storageDigest) {
-				validationCallback (contentDigest, nullptr, ValidationResult::Corrupted);
+			auto actualHash = ComputeSHA256 (readBuffer);
+			auto hashString = ToString (actualHash);
+
+			if (actualHash != storageDigest) {
+				repairCallback (hashString.c_str (), RepairResult::Corrupted);
 			} else {
-				validationCallback (contentDigest, nullptr, ValidationResult::Ok);
+				repairCallback (hashString.c_str (), RepairResult::Ok);
 			}
 		}
 

@@ -26,9 +26,10 @@ private:
 	virtual void SetDecryptionKeyImpl (const std::string& key) override;
 	virtual std::string GetDecryptionKeyImpl () const override;
 
-	void RepairImpl (Repository& source, ExecutionContext& context) override;
-	void ValidateImpl (const ValidationCallback& validationCallback,
-		ExecutionContext& context) override;
+	void RepairImpl (Repository& source,
+		ExecutionContext& context,
+		RepairCallback repairCallback,
+		bool restore) override;
 	void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& featureIds,
 		ExecutionContext& context) override;

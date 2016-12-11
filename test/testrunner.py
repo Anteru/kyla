@@ -68,10 +68,9 @@ class KylaRunner:
 
         args +=  [source, target] + features
 
-        # validate doesn't handle source and features yet, so we need to strip
-        # those
+        # validate doesn't handle features yet, so we need to strip those
         if action == 'validate':
-            args = args[0:2] + ['--summary=false', args[3]]
+            args = args[0:2] + ['--summary=false', args[3:4]]
 
         if self._verbose:
             print ('Executing: "{}"'.format (' '.join (args)))

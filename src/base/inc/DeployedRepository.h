@@ -26,13 +26,12 @@ public:
 		ExecutionContext& context);
 
 private:
-	void ValidateImpl (const ValidationCallback& validationCallback,
-		ExecutionContext& context) override;
-
 	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) override;
 	void RepairImpl (Repository& source,
-		ExecutionContext& context) override;
+		ExecutionContext& context,
+		RepairCallback repairCallback,
+		bool restore) override;
 	void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& featureIds,
 		ExecutionContext& context) override;

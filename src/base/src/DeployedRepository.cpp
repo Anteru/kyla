@@ -44,19 +44,34 @@ Sql::Database& DeployedRepository::GetDatabaseImpl ()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void DeployedRepository::ValidateImpl (const Repository::ValidationCallback& validationCallback,
-	ExecutionContext& context)
+void DeployedRepository::RepairImpl (Repository& source,
+	ExecutionContext& context,
+	RepairCallback repairCallback,
+	bool restore)
 {
+	// We use the validation logic here to find missing content objects
+	// and fetch them from the source repository
+	///@TODO(major) Handle the case that the database itself is corrupted
+	/// In this case, we should probably prompt and ask what file sets need
+	/// to be recovered.
+
+	std::unordered_multimap<SHA256Digest, Path,
+		ArrayRefHash, ArrayRefEqual> requiredEntries;
+
+	// Extract keys
+	std::vector<SHA256Digest> requiredContentObjects;
+
+	///@TODO(minor) Handle progress reporting - should call an internal validate
 	// Get a list of (file, hash, size)
 	// We sort by size first so we get small objects out of the way first
 	// (slower progress, but more things getting processed) and speed up
 	// towards the end (larger files, higher throughput)
 	static const char* queryFilesContentSql =
-		"SELECT files.path, fs_contents.Hash, fs_contents.Size "
+		"SELECT fs_files.path, fs_contents.Hash, fs_contents.Size "
 		"FROM fs_files "
 		"LEFT JOIN fs_contents ON fs_contents.Id = fs_files.ContentId "
 		"ORDER BY size";
-	
+
 	auto query = db_.Prepare (queryFilesContentSql);
 
 	const int64 objectCount = [=]() -> int64
@@ -79,8 +94,12 @@ void DeployedRepository::ValidateImpl (const Repository::ValidationCallback& val
 
 		const auto filePath = path_ / path;
 		if (!boost::filesystem::exists (filePath)) {
-			validationCallback (hash, filePath.string ().c_str (),
-				ValidationResult::Missing);
+			if (restore) {
+				requiredContentObjects.push_back (hash);
+			} else {
+				repairCallback (filePath.string ().c_str (),
+					RepairResult::Missing);
+			}
 
 			++progress;
 			continue;
@@ -92,9 +111,13 @@ void DeployedRepository::ValidateImpl (const Repository::ValidationCallback& val
 		/// This would indicate the file got deleted or is read-protected
 		/// while the validation is running
 
-		if (statResult.size != size) {
-			validationCallback (hash, filePath.string ().c_str (),
-				ValidationResult::Corrupted);
+		if (statResult.size != size && !restore) {
+			if (restore) {
+				requiredContentObjects.push_back (hash);
+			} else {
+				repairCallback (filePath.string ().c_str (),
+					RepairResult::Corrupted);
+			}
 
 			++progress;
 			continue;
@@ -103,73 +126,51 @@ void DeployedRepository::ValidateImpl (const Repository::ValidationCallback& val
 		// For size 0 files, don't bother checking the hash
 		///@TODO(minor) Assert hash is the null hash
 		if (size != 0 && ComputeSHA256 (filePath) != hash) {
-			validationCallback (hash, filePath.string ().c_str (),
-				ValidationResult::Corrupted);
+			if (restore) {
+				requiredContentObjects.push_back (hash);
+			} else {
+				repairCallback (filePath.string ().c_str (),
+					RepairResult::Corrupted);
+			}
 
 			++progress;
 			continue;
 		}
 
-		validationCallback (hash, filePath.string ().c_str (),
-			ValidationResult::Ok);
+		repairCallback (filePath.string ().c_str (),
+			RepairResult::Ok);
 
 		++progress;
 	}
-}
 
-///////////////////////////////////////////////////////////////////////////////
-void DeployedRepository::RepairImpl (Repository& source,
-	ExecutionContext& context)
-{
-	// We use the validation logic here to find missing content objects
-	// and fetch them from the source repository
-	///@TODO(major) Handle the case that the database itself is corrupted
-	/// In this case, we should probably prompt and ask what file sets need
-	/// to be recovered.
+	if (restore) {
+		source.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
+			const ArrayRef<>& contents,
+			const int64 offset,
+			const int64 totalSize) -> void {
+			// We lookup all paths from the map here - could do a query as well
+			// but as we built it anyway during validation, we reuse that
 
-	std::unordered_multimap<SHA256Digest, Path,
-		ArrayRefHash, ArrayRefEqual> requiredEntries;
+			auto range = requiredEntries.equal_range (hash);
+			for (auto it = range.first; it != range.second; ++it) {
+				std::unique_ptr<File> file;
 
-	// Extract keys
-	std::vector<SHA256Digest> requiredContentObjects;
+				if (offset == 0) {
+					file = CreateFile (it->second);
+					file->SetSize (contents.GetSize ());
+				} else {
+					file = OpenFile (it->second, FileOpenMode::Write);
+				}
 
-	///@TODO(minor) Handle progress reporting - should call an internal validate
-	Validate ([&](const SHA256Digest& hash, const char* path, const ValidationResult result) -> void {
-		if (result != ValidationResult::Ok) {
-			// Missing or corrupted
+				byte* pointer = static_cast<byte*> (file->Map ());
+				::memcpy (pointer + offset, contents.GetData (), contents.GetSize ());
+				file->Unmap (pointer);
 
-			// New entry, so put it into the unique content objects as well
-			if (requiredEntries.find (hash) == requiredEntries.end ()) {
-				requiredContentObjects.push_back (hash);
+				repairCallback (it->second.string ().c_str (), 
+					RepairResult::Restored);
 			}
-
-			requiredEntries.emplace (std::make_pair (hash, Path{ path }));
-		}
-	}, context);
-
-	source.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
-		const ArrayRef<>& contents,
-		const int64 offset,
-		const int64 totalSize) -> void {
-		// We lookup all paths from the map here - could do a query as well
-		// but as we built it anyway during validation, we reuse that
-
-		auto range = requiredEntries.equal_range (hash);
-		for (auto it = range.first; it != range.second; ++it) {
-			std::unique_ptr<File> file;
-
-			if (offset == 0) {
-				file = CreateFile (it->second);
-				file->SetSize (contents.GetSize ());
-			} else {
-				file = OpenFile (it->second, FileOpenMode::Write);
-			}
-
-			byte* pointer = static_cast<byte*> (file->Map ());
-			::memcpy (pointer + offset, contents.GetData (), contents.GetSize ());
-			file->Unmap (pointer);
-		}
-	});
+		});
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////

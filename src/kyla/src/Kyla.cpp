@@ -248,18 +248,16 @@ int kylaExecute_2_0 (
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	if (action != kylaAction_Verify) {
-		if (sourceRepository == nullptr) {
-			return kylaResult_ErrorInvalidArgument;
-		}
-
-		if (sourceRepository->repositoryType != KylaRepositoryImpl::RepositoryType::Source) {
-			internal->log->Error ("kylaExecute", "source repository has is not a valid source. "
-				"A source repository must be opened using OpenSourceRepository.");
-			return kylaResult_ErrorInvalidArgument;
-		}
+	if (sourceRepository == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
 	}
 
+	if (sourceRepository->repositoryType != KylaRepositoryImpl::RepositoryType::Source) {
+		internal->log->Error ("kylaExecute", "source repository has is not a valid source. "
+			"A source repository must be opened using OpenSourceRepository.");
+		return kylaResult_ErrorInvalidArgument;
+	}
+	
 	std::vector<kyla::Uuid> featureIds;
 
 	if (desiredState == nullptr) {
@@ -326,7 +324,9 @@ int kylaExecute_2_0 (
 		}
 
 		///@TODO(minor) Pass through the feature ids
-		targetRepository->p->Repair (*sourceRepository->p, executionContext);
+		targetRepository->p->Repair (*sourceRepository->p, executionContext,
+			[](const char* path, const kyla::RepairResult) -> void {},
+			true);
 
 		break;
 
@@ -335,9 +335,10 @@ int kylaExecute_2_0 (
 			targetRepository->path.string ().c_str (),
 			(targetRepository->options & kylaRepositoryOption_ReadOnly) == kylaRepositoryOption_ReadOnly);
 
-		///@TODO(minor) Pass through the source feature set and feature ids
-		targetRepository->p->Validate ([&](const kyla::SHA256Digest& object,
-			const char* path, const kyla::ValidationResult result) -> void {
+		///@TODO(minor) Pass through the feature ids
+		targetRepository->p->Repair (
+			*sourceRepository->p, executionContext,
+			[&](const char* path, const kyla::RepairResult result) -> void {
 			kylaValidationItemInfo info;
 
 			info.filename = path;
@@ -348,7 +349,7 @@ int kylaExecute_2_0 (
 					&info,
 					internal->validationCallbackContext);
 			}
-		}, executionContext);
+		}, false);
 
 		break;
 

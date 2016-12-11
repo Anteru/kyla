@@ -76,14 +76,9 @@ int64_t BaseRepository::GetFeatureSizeImpl (const Uuid& id)
 
 ///////////////////////////////////////////////////////////////////////////////
 void BaseRepository::RepairImpl (Repository& /*source*/,
-	ExecutionContext& /*context*/)
-{
-	throw RuntimeException ("NOT IMPLEMENTED", KYLA_FILE_LINE);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-void BaseRepository::ValidateImpl (const ValidationCallback& /*validationCallback*/,
-	ExecutionContext& /*context*/)
+	ExecutionContext& /*context*/,
+	RepairCallback /*repairCallback*/,
+	bool /*restore*/)
 {
 	throw RuntimeException ("NOT IMPLEMENTED", KYLA_FILE_LINE);
 }

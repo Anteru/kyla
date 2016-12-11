@@ -23,7 +23,6 @@ SET(HEADERS
 	inc/FileIO.h
 	inc/Hash.h
 	inc/Log.h
-	inc/LooseRepository.h
 	inc/PackedRepository.h
 	inc/PackedRepositoryBase.h
 	inc/Repository.h
@@ -43,7 +42,6 @@ SET(SOURCES
 	src/FileIO.cpp
 	src/Hash.cpp
 	src/Log.cpp
-	src/LooseRepository.cpp
 	src/PackedRepository.cpp
 	src/PackedRepositoryBase.cpp
 	src/Repository.cpp

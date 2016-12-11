@@ -123,11 +123,12 @@ private:
 	std::string stageName_;
 };
 
-enum class ValidationResult
+enum class RepairResult
 {
 	Ok,
 	Corrupted,
-	Missing
+	Missing,
+	Restored
 };
 
 struct Repository
@@ -144,13 +145,10 @@ struct Repository
 		Progress& progress;
 	};
 
-	using ValidationCallback = std::function<void (const SHA256Digest& contentObject,
-		const char* path,
-		const ValidationResult validationResult)>;
-
-	void Validate (const ValidationCallback& validationCallback,
-		ExecutionContext& context);
-
+	using RepairCallback = std::function<void (
+		const char* item,
+		const RepairResult repairResult)>;
+	
 	using GetContentObjectCallback = std::function<void (const SHA256Digest& objectDigest,
 		const ArrayRef<>& contents,
 		const int64 offset,
@@ -160,7 +158,9 @@ struct Repository
 		const GetContentObjectCallback& getCallback);
 
 	void Repair (Repository& source,
-		ExecutionContext& context);
+		ExecutionContext& context,
+		RepairCallback repairCallback,
+		bool restore);
 
 	void Configure (Repository& other,
 		const ArrayRef<Uuid>& features,
@@ -176,12 +176,12 @@ struct Repository
 	std::string GetDecryptionKey () const;
 
 private:
-	virtual void ValidateImpl (const ValidationCallback& validationCallback,
-		ExecutionContext& context) = 0;
 	virtual void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) = 0;
 	virtual void RepairImpl (Repository& source,
-		ExecutionContext& context) = 0;
+		ExecutionContext& context,
+		RepairCallback repairCallback,
+		bool restore) = 0;
 	virtual std::vector<Uuid> GetFeaturesImpl () = 0;
 	virtual int64_t GetFeatureSizeImpl (const Uuid& featureId) = 0;
 	virtual void ConfigureImpl (Repository& other,

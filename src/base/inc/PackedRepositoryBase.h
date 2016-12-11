@@ -30,13 +30,15 @@ public:
 	};
 
 private:
-	void ValidateImpl (const ValidationCallback& validationCallback,
-		ExecutionContext& context) override;
-
 	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) override;
 
 	virtual std::unique_ptr<PackageFile> OpenPackage (const std::string& packageName) const = 0;
+	
+	void RepairImpl (Repository& source,
+		ExecutionContext& context,
+		RepairCallback repairCallback,
+		bool restore) override;
 
 protected:
 	void SetDecryptionKeyImpl (const std::string& key) override;

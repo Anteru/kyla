@@ -124,11 +124,13 @@ int Validate (const std::vector<std::string>& options,
 		("summary,s", po::value<bool> ()->default_value (true),
 			"show summary")
 		("key", po::value<std::string> ())
-		("input", po::value<std::string> ());
+		("source", po::value<std::string> ())
+		("target", po::value<std::string> ());
 
 	po::positional_options_description posBuild;
 	posBuild
-		.add ("input", 1);
+		.add ("source", 1)
+		.add ("target", 1);
 
 	try {
 		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
@@ -189,9 +191,12 @@ int Validate (const std::vector<std::string>& options,
 
 	installer->SetValidationCallback (installer, validationCallback, &context);
 
-	KylaTargetRepository repository;
-	KYLA_CHECKED_CALL (installer->OpenTargetRepository (installer, 
-		vm ["input"].as<std::string> ().c_str (), 0, &repository));
+	KylaTargetRepository sourceRepository, targetRepository;
+	KYLA_CHECKED_CALL (installer->OpenSourceRepository (installer,
+		vm["source"].as<std::string> ().c_str (), 0, &sourceRepository));
+
+	KYLA_CHECKED_CALL (installer->OpenTargetRepository (installer,
+		vm ["target"].as<std::string> ().c_str (), 0, &targetRepository));
 
 	if (vm.find ("key") != vm.end ()) {
 		const auto key = vm ["key"].as<std::string> ();
@@ -200,9 +205,10 @@ int Validate (const std::vector<std::string>& options,
 	}
 
 	KYLA_CHECKED_CALL (installer->Execute (installer, kylaAction_Verify, 
-		repository, nullptr, nullptr));
+		targetRepository, sourceRepository, nullptr));
 
-	installer->CloseRepository (installer, repository);
+	installer->CloseRepository (installer, sourceRepository);
+	installer->CloseRepository (installer, targetRepository);
 	KYLA_CHECKED_CALL (kylaDestroyInstaller (installer));
 
 	if (vm ["summary"].as<bool> ()) {

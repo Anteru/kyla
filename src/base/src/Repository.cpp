@@ -10,22 +10,15 @@ details.
 #include "Repository.h"
 
 #include "DeployedRepository.h"
-#include "LooseRepository.h"
 #include "PackedRepository.h"
 #include "WebRepository.h"
 
 namespace kyla {
 ///////////////////////////////////////////////////////////////////////////////
-void Repository::Validate (const ValidationCallback& validationCallback,
-	ExecutionContext& context)
+void Repository::Repair (Repository& source, ExecutionContext& context,
+	RepairCallback repairCallback, bool restore)
 {
-	ValidateImpl (validationCallback, context);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-void Repository::Repair (Repository& source, ExecutionContext& context)
-{
-	RepairImpl (source, context);
+	RepairImpl (source, context, repairCallback, restore);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -86,9 +79,6 @@ std::unique_ptr<Repository> OpenRepository (const char* path,
 	/// various repository types
 	if (strncmp (path, "http", 4) == 0) {
 		return std::unique_ptr<Repository> (new WebRepository{ path });
-	} else if (boost::filesystem::exists (Path{ path } / Path{ ".ky" })) {
-		// .ky indicates a loose repository
-		return std::unique_ptr<Repository> (new LooseRepository{ path });
 	} else if (boost::filesystem::exists (Path{ path } / "repository.db")) {
 		return std::unique_ptr<Repository> (new PackedRepository{ path });
 	}  else {
