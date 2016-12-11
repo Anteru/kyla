@@ -1,11 +1,11 @@
 {
     "info" : {
-        "description" : "Installing two filesets"
+        "description" : "Configure two features"
     },
     "setup" : [
         {
             "generate-repository" : {
-                "source" : "data/two_filesets.xml",
+                "source" : "data/two_features.xml",
                 "source-directory" : "data/shared",
                 "target" : "test"
             }
@@ -16,7 +16,16 @@
             "install" : {
                 "source" : "test",
                 "target" : "deploy",
-                "filesets" : [
+                "features" : [
+                    "5d195f63-f424-431f-b7c5-8d57cd32f57b"
+                ]
+            }
+        },
+        {
+            "configure" : {
+                "source" : "test",
+                "target" : "deploy",
+                "features" : [
                     "5d195f63-f424-431f-b7c5-8d57cd32f57b",
                     "c8bed51b-cbba-4699-953a-834930704d89"
                 ]

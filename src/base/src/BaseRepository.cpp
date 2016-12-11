@@ -61,11 +61,11 @@ std::string BaseRepository::GetDecryptionKeyImpl () const
 int64_t BaseRepository::GetFeatureSizeImpl (const Uuid& id)
 {
 	static const char* querySql =
-		"SELECT SUM(content_objects.size) "
+		"SELECT SUM(fs_contents.size) "
 		"FROM file_sets "
-		"INNER JOIN files ON file_sets.Id = files.FileSetId "
-		"INNER JOIN content_objects ON content_objects.Id = files.ContentObjectId "
-		"WHERE file_sets.Uuid = ?";
+		"INNER JOIN fs_files ON features.Id = fs_files.FeatureId "
+		"INNER JOIN fs_contents ON fs_contents.Id = files.ContentId "
+		"WHERE features.Uuid = ?";
 
 	auto query = GetDatabase ().Prepare (querySql);
 	query.BindArguments (id);
@@ -90,7 +90,7 @@ void BaseRepository::ValidateImpl (const ValidationCallback& /*validationCallbac
 
 ///////////////////////////////////////////////////////////////////////////////
 void BaseRepository::ConfigureImpl (Repository& /*other*/,
-	const ArrayRef<Uuid>& /*filesets*/,
+	const ArrayRef<Uuid>& /*features*/,
 	ExecutionContext& /*context*/)
 {
 	throw RuntimeException ("NOT IMPLEMENTED", KYLA_FILE_LINE);

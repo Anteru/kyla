@@ -259,24 +259,24 @@ void DeployedRepository::ConfigureImpl (Repository& source,
 Create a new temporary table pending_features which contains the UUIDs
 of the file sets we're about to add
 */
-void DeployedRepository::PreparePendingFeatures (Log& log, const ArrayRef<Uuid>& filesets,
+void DeployedRepository::PreparePendingFeatures (Log& log, const ArrayRef<Uuid>& features,
 	ProgressHelper& progress)
 {
 	{
 		auto transaction = db_.BeginTransaction ();
-		auto insertFilesetQuery = db_.Prepare (
+		auto insertPendingFeatureQuery = db_.Prepare (
 			"INSERT INTO pending_features (Uuid) VALUES (?);");
 
 		log.Debug ("Configure", "Selecting features for configure");
 
-		progress.SetStageTarget (filesets.GetCount ());
-		progress.SetAction ("Configuring filesets");
-		for (const auto& fileset : filesets) {
-			insertFilesetQuery.BindArguments (fileset);
-			insertFilesetQuery.Step ();
-			insertFilesetQuery.Reset ();
+		progress.SetStageTarget (features.GetCount ());
+		progress.SetAction ("Configuring features");
+		for (const auto& feature : features) {
+			insertPendingFeatureQuery.BindArguments (feature);
+			insertPendingFeatureQuery.Step ();
+			insertPendingFeatureQuery.Reset ();
 
-			log.Debug ("Configure", boost::format ("Selected feature: '%1%'") % ToString (fileset));
+			log.Debug ("Configure", boost::format ("Selected feature: '%1%'") % ToString (feature));
 			++progress;
 		}
 
@@ -285,7 +285,7 @@ void DeployedRepository::PreparePendingFeatures (Log& log, const ArrayRef<Uuid>&
 }
 
 /**
-Insert the new filesets we're about to configure from pending_features
+Insert the new features we're about to configure from pending_features
 */
 void DeployedRepository::UpdateFeatures ()
 {
@@ -300,17 +300,17 @@ void DeployedRepository::UpdateFeatures ()
 
 /**
 Update the file set ids of all files which remain unchanged, but have moved
-to a new fileset.
+to a new features.
 */
 void DeployedRepository::UpdateFeatureIdsForUnchangedFiles ()
 {
 	// For files which have the same location and hash as before, update
-	// the fileset id
+	// the feature id
 	// This long query will find every file where the hash and the path
 	// remained the same, and update it to use the new file set id we just
 	// inserted above
 	db_.Execute (
-		"UPDATE files "
+		"UPDATE fs_files "
 		"SET FeatureId=( "
 		"    SELECT main.features.Id FROM main.features "
 		"    WHERE main.features.Uuid = ( "
@@ -319,7 +319,7 @@ void DeployedRepository::UpdateFeatureIdsForUnchangedFiles ()
 		"        WHERE source.fs_files.Path=main.fs_files.path) "
 		") "
 		"WHERE "
-		"files.Path IN ( "
+		"fs_files.Path IN ( "
 		"SELECT main.fs_files.Path FROM fs_files AS MainFiles "
 		"    INNER JOIN main.fs_contents ON main.fs_files.ContentId = main.fs_contents.Id  "
 		"    INNER JOIN source.fs_files ON source.fs_files.Path = main.fs_files.Path  "
@@ -339,10 +339,10 @@ void DeployedRepository::RemoveChangedFiles (Log& log)
 	// we have to remove it (those files will get replaced)
 
 	auto changedFiles = db_.Prepare (
-		"SELECT main.files.Path AS Path, main.fs_contents.Hash AS CurrentHash, source.fs_contents.Hash AS NewHash FROM main.fs_files "
+		"SELECT main.fs_files.Path AS Path, main.fs_contents.Hash AS CurrentHash, source.fs_contents.Hash AS NewHash FROM main.fs_files "
 		"INNER JOIN main.fs_contents ON main.fs_files.ContentId = main.fs_contents.Id "
 		"INNER JOIN source.fs_files ON source.fs_files.Path = main.fs_files.Path "
-		"INNER JOIN source.fs_contents ON source.files.ContentId = source.fs_contents.Id "
+		"INNER JOIN source.fs_contents ON source.fs_files.ContentId = source.fs_contents.Id "
 		"WHERE CurrentHash IS NOT NewHash "
 		"AND source.fs_files.FeatureId IN "
 		"(SELECT Id FROM source.features "
@@ -465,7 +465,7 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 			"SELECT ?, ?, main.features.Id FROM source.fs_files "
 			"INNER JOIN source.features ON source.features.Id = source.fs_files.FeatureId "
 			"INNER JOIN features ON source.features.Uuid = main.features.Uuid "
-			"WHERE source.files.path = ?"
+			"WHERE source.fs_files.path = ?"
 		);
 
 		auto getTargetFilesQuery = db_.Prepare (
@@ -549,7 +549,7 @@ void DeployedRepository::CopyExistingFiles (Log& log)
 
 	auto exemplarQuery = db_.Prepare (
 		"SELECT Path, Id FROM fs_files "
-		"INNER JOIN fs_contents ON files.ContentId = fs_contents.Id "
+		"INNER JOIN fs_contents ON fs_files.ContentId = fs_contents.Id "
 		"WHERE Hash=?");
 
 	auto insertFileQuery = db_.Prepare (
@@ -636,7 +636,7 @@ void DeployedRepository::Cleanup (Log& log)
 
 ///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (Repository& source,
-	const ArrayRef<Uuid>& filesets,
+	const ArrayRef<Uuid>& features,
 	const Path& targetDirectory,
 	Repository::ExecutionContext& context)
 {
@@ -651,7 +651,7 @@ std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (Repository& 
 	std::unique_ptr<DeployedRepository> result (new DeployedRepository{ 
 		targetDirectory.string ().c_str (), Sql::OpenMode::ReadWrite });
 
-	result->Configure (source, filesets, context);
+	result->Configure (source, features, context);
 
 	return std::move (result);
 }

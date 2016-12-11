@@ -17,8 +17,8 @@
                 "source" : "test",
                 "target" : "deploy",
                 "key" : "toomanysecrets",
-                "filesets" : [
-                    "cc3f60a7-7b24-4a54-8dfa-6f811efd4af0"
+                "features" : [
+                    "3111b6f8-3f2b-419e-b8bc-826d839e44c9"
                 ]
             }
         }

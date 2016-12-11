@@ -21,7 +21,7 @@ public:
 	~DeployedRepository ();
 
 	static std::unique_ptr<DeployedRepository> CreateFrom (Repository& source,
-		const ArrayRef<Uuid>& filesets,
+		const ArrayRef<Uuid>& featureIds,
 		const Path& targetDirectory,
 		ExecutionContext& context);
 
@@ -34,12 +34,12 @@ private:
 	void RepairImpl (Repository& source,
 		ExecutionContext& context) override;
 	void ConfigureImpl (Repository& other,
-		const ArrayRef<Uuid>& filesets,
+		const ArrayRef<Uuid>& featureIds,
 		ExecutionContext& context) override;
 
 	Sql::Database& GetDatabaseImpl () override;
 
-	void PreparePendingFeatures (Log& log, const ArrayRef<Uuid>& filesets,
+	void PreparePendingFeatures (Log& log, const ArrayRef<Uuid>& featureIds,
 		ProgressHelper& progress);
 	void UpdateFeatures ();
 	void UpdateFeatureIdsForUnchangedFiles ();

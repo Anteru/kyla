@@ -29,10 +29,10 @@ void Repository::Repair (Repository& source, ExecutionContext& context)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void Repository::Configure (Repository& source, const ArrayRef<Uuid>& filesets,
+void Repository::Configure (Repository& source, const ArrayRef<Uuid>& features,
 	ExecutionContext& context)
 {
-	ConfigureImpl (source, filesets, context);
+	ConfigureImpl (source, features, context);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -101,13 +101,13 @@ std::unique_ptr<Repository> OpenRepository (const char* path,
 ///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<Repository> DeployRepository (Repository& source,
 	const char* destinationPath,
-	const ArrayRef<Uuid>& filesets,
+	const ArrayRef<Uuid>& features,
 	Repository::ExecutionContext& context)
 {
 	Path targetPath{ destinationPath };
 	boost::filesystem::create_directories (destinationPath);
 
-	return std::unique_ptr<Repository> (DeployedRepository::CreateFrom (source, filesets, targetPath, 
+	return std::unique_ptr<Repository> (DeployedRepository::CreateFrom (source, features, targetPath, 
 		context).release ());
 }
 }

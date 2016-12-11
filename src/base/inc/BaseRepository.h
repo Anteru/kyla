@@ -21,7 +21,7 @@ public:
 
 private:
 	virtual std::vector<Uuid> GetFeaturesImpl () override;
-	virtual int64_t GetFeatureSizeImpl (const Uuid& filesetId) override;
+	virtual int64_t GetFeatureSizeImpl (const Uuid& featureId) override;
 	virtual bool IsEncryptedImpl () override;
 	virtual void SetDecryptionKeyImpl (const std::string& key) override;
 	virtual std::string GetDecryptionKeyImpl () const override;
@@ -30,7 +30,7 @@ private:
 	void ValidateImpl (const ValidationCallback& validationCallback,
 		ExecutionContext& context) override;
 	void ConfigureImpl (Repository& other,
-		const ArrayRef<Uuid>& filesets,
+		const ArrayRef<Uuid>& featureIds,
 		ExecutionContext& context) override;
 
 protected:

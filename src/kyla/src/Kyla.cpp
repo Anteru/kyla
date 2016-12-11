@@ -260,7 +260,7 @@ int kylaExecute_2_0 (
 		}
 	}
 
-	std::vector<kyla::Uuid> filesetIds;
+	std::vector<kyla::Uuid> featureIds;
 
 	if (desiredState == nullptr) {
 		switch (action) {
@@ -271,29 +271,29 @@ int kylaExecute_2_0 (
 			return kylaResult_ErrorInvalidArgument;
 		}
 	} else {
-		if (desiredState->filesetCount <= 0) {
+		if (desiredState->featureCount <= 0) {
 			internal->log->Error ("kylaExecute",
-				"desired state file set count must be greater than or equal to 1");
+				"desired state feature set count must be greater than or equal to 1");
 			return kylaResult_ErrorInvalidArgument;
 		}
 
-		if (desiredState->filesetIds == nullptr) {
+		if (desiredState->featureIds == nullptr) {
 			internal->log->Error ("kylaExecute",
-				"desired state must contain at least one file set id");
+				"desired state must contain at least one feature set id");
 			return kylaResult_ErrorInvalidArgument;
 		}
 
-		for (int i = 0; i < desiredState->filesetCount; ++i) {
-			if (desiredState->filesetIds [i] == nullptr) {
+		for (int i = 0; i < desiredState->featureCount; ++i) {
+			if (desiredState->featureIds [i] == nullptr) {
 				internal->log->Error ("kylaExecute",
-					"desired state file set id must not be null");
+					"desired state feature set id must not be null");
 				return kylaResult_ErrorInvalidArgument;
 			}
 		}
 
-		filesetIds.resize (desiredState->filesetCount);
-		for (int i = 0; i < desiredState->filesetCount; ++i) {
-			filesetIds [i] = kyla::Uuid{ desiredState->filesetIds [i] };
+		featureIds.resize (desiredState->featureCount);
+		for (int i = 0; i < desiredState->featureCount; ++i) {
+			featureIds [i] = kyla::Uuid{ desiredState->featureIds [i] };
 		}
 	}
 
@@ -303,7 +303,7 @@ int kylaExecute_2_0 (
 	switch (action) {
 	case kylaAction_Install:
 		targetRepository->p = kyla::DeployRepository (*sourceRepository->p,
-			targetRepository->path.string ().c_str (), filesetIds,
+			targetRepository->path.string ().c_str (), featureIds,
 			executionContext);
 		break;
 
@@ -314,7 +314,7 @@ int kylaExecute_2_0 (
 			return kylaResult_Error;
 		}
 		targetRepository->p->Configure (
-			*sourceRepository->p, filesetIds, executionContext);
+			*sourceRepository->p, featureIds, executionContext);
 
 		break;
 
@@ -325,7 +325,7 @@ int kylaExecute_2_0 (
 			return kylaResult_Error;
 		}
 
-		///@TODO(minor) Pass through the fileset ids
+		///@TODO(minor) Pass through the feature ids
 		targetRepository->p->Repair (*sourceRepository->p, executionContext);
 
 		break;
@@ -335,7 +335,7 @@ int kylaExecute_2_0 (
 			targetRepository->path.string ().c_str (),
 			(targetRepository->options & kylaRepositoryOption_ReadOnly) == kylaRepositoryOption_ReadOnly);
 
-		///@TODO(minor) Pass through the source file set and fileset ids
+		///@TODO(minor) Pass through the source feature set and feature ids
 		targetRepository->p->Validate ([&](const kyla::SHA256Digest& object,
 			const char* path, const kyla::ValidationResult result) -> void {
 			kylaValidationItemInfo info;
@@ -528,7 +528,7 @@ int kylaSetRepositoryProperty_1_1 (KylaInstaller* installer,
 	case kylaRepositoryProperty_AvailableFeatures:
 	{
 		internal->log->Error ("kylaSetRepositoryProperty",
-			"Cannot set read-only property 'AvailableFilesets'");
+			"Cannot set read-only property 'AvailableFeatures'");
 		return kylaResult_ErrorInvalidArgument;
 	}
 

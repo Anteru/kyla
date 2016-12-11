@@ -163,11 +163,11 @@ struct Repository
 		ExecutionContext& context);
 
 	void Configure (Repository& other,
-		const ArrayRef<Uuid>& filesets,
+		const ArrayRef<Uuid>& features,
 		ExecutionContext& context);
 
 	std::vector<Uuid> GetFeatures ();
-	int64_t GetFeatureSize (const Uuid& filesetId);
+	int64_t GetFeatureSize (const Uuid& featureId);
 
 	Sql::Database& GetDatabase ();
 
@@ -183,9 +183,9 @@ private:
 	virtual void RepairImpl (Repository& source,
 		ExecutionContext& context) = 0;
 	virtual std::vector<Uuid> GetFeaturesImpl () = 0;
-	virtual int64_t GetFeatureSizeImpl (const Uuid& filesetId) = 0;
+	virtual int64_t GetFeatureSizeImpl (const Uuid& featureId) = 0;
 	virtual void ConfigureImpl (Repository& other,
-		const ArrayRef<Uuid>& filesets,
+		const ArrayRef<Uuid>& features,
 		ExecutionContext& context) = 0;
 	virtual bool IsEncryptedImpl () = 0;
 	virtual void SetDecryptionKeyImpl (const std::string& key) = 0;
@@ -198,7 +198,7 @@ std::unique_ptr<Repository> OpenRepository (const char* path,
 
 std::unique_ptr<Repository> DeployRepository (Repository& source,
 	const char* targetPath,
-	const ArrayRef<Uuid>& selectedFilesets,
+	const ArrayRef<Uuid>& selectedFeatures,
 	Repository::ExecutionContext& context);
 }
 

@@ -261,10 +261,10 @@ int Repair (const std::vector<std::string>& options,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int QueryFilesets (const std::vector<std::string>& options,
+int QueryFeature (const std::vector<std::string>& options,
 	po::variables_map& vm)
 { 
-	po::options_description build_desc ("query-filesets options");
+	po::options_description build_desc ("query-features options");
 	build_desc.add_options ()
 		("source", po::value<std::string> ());
 
@@ -334,13 +334,13 @@ int ConfigureOrInstall (const std::string& cmd,
 		("key", po::value<std::string> ())
 		("source", po::value<std::string> ())
 		("target", po::value<std::string> ())
-		("file-sets", po::value<std::vector<std::string>> ()->composing ());
+		("features", po::value<std::vector<std::string>> ()->composing ());
 
 	po::positional_options_description posBuild;
 	posBuild
 		.add ("source", 1)
 		.add ("target", 1)
-		.add ("file-sets", -1);
+		.add ("features", -1);
 
 	try {
 		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
@@ -377,21 +377,21 @@ int ConfigureOrInstall (const std::string& cmd,
 		vm ["target"].as<std::string> ().c_str (), 
 		cmd == "install" ? kylaRepositoryOption_Create : 0, &target));
 
-	const auto filesets = vm ["file-sets"].as<std::vector<std::string>> ();
+	const auto features = vm ["features"].as<std::vector<std::string>> ();
 
-	std::vector<const uint8_t*> filesetPointers;
-	std::vector<kyla::Uuid> filesetIds;
-	for (const auto fileset : filesets) {
-		filesetIds.push_back (kyla::Uuid::Parse (fileset));
+	std::vector<const uint8_t*> featurePointers;
+	std::vector<kyla::Uuid> featureIds;
+	for (const auto feature : features) {
+		featureIds.push_back (kyla::Uuid::Parse (feature));
 	}
 
-	for (const auto& filesetId : filesetIds) {
-		filesetPointers.push_back (filesetId.GetData ());
+	for (const auto& featureId : featureIds) {
+		featurePointers.push_back (featureId.GetData ());
 	}
 
 	KylaDesiredState desiredState = {};
-	desiredState.filesetCount = static_cast<int> (filesetIds.size ());
-	desiredState.filesetIds = filesetPointers.data ();
+	desiredState.featureCount = static_cast<int> (featureIds.size ());
+	desiredState.featureIds = featurePointers.data ();
 
 	int result = -1;
 
@@ -457,8 +457,8 @@ int main (int argc, char* argv [])
 			return Validate (options, vm);
 		} else if (cmd == "repair") {
 			return Repair (options, vm);
-		} else if (cmd == "query-filesets") {
-			return QueryFilesets (options, vm);
+		} else if (cmd == "query-features") {
+			return QueryFeature (options, vm);
 		} else if (cmd == "install" || cmd == "configure") {
 			return ConfigureOrInstall (cmd, options, vm);
 		} else {

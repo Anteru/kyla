@@ -147,9 +147,9 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 		"SELECT DISTINCT "
 		"   fs_packages.Filename AS Filename, "
 		"   fs_packages.Id AS Id "
-		"FROM storage_mapping "
-		"    INNER JOIN fs_contents ON storage_mapping.ContentId = fs_contents.Id "
-		"    INNER JOIN fs_packages ON storage_mapping.PackageId = fs_packages.Id "
+		"FROM fs_chunks "
+		"    INNER JOIN fs_contents ON fs_chunks.ContentId = fs_contents.Id "
+		"    INNER JOIN fs_packages ON fs_chunks.PackageId = fs_packages.Id "
 		"WHERE fs_contents.Hash IN (SELECT Hash FROM requested_fs_contents) "
 	);
 

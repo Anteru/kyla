@@ -1,6 +1,6 @@
 {
     "info" : {
-        "description" : "Installing two filesets from two packages"
+        "description" : "Installing two features from two packages"
     },
     "setup" : [
         {
@@ -16,7 +16,7 @@
             "install" : {
                 "source" : "test",
                 "target" : "deploy",
-                "filesets" : [
+                "features" : [
                     "5d195f63-f424-431f-b7c5-8d57cd32f57b",
                     "c8bed51b-cbba-4699-953a-834930704d89"
                 ]

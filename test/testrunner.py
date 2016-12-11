@@ -19,6 +19,7 @@ from multiprocessing import Pool
 from functools import partial
 import time
 import sys
+import io
 
 def PrintOutput(result):
     if result.stdout:
@@ -50,24 +51,24 @@ class KylaRunner:
             PrintOutput (result)
         return result.returncode == 0
 
-    def Install(self, source, target, filesets=[], key=None):
-        return self._ExecuteAction ('install', source, target, filesets, key)
+    def Install(self, source, target, features=[], key=None):
+        return self._ExecuteAction ('install', source, target, features, key)
 
-    def Configure(self, source, target, filesets=[], key=None):
-        return self._ExecuteAction ('configure', source, target, filesets, key)
+    def Configure(self, source, target, features=[], key=None):
+        return self._ExecuteAction ('configure', source, target, features, key)
 
-    def Validate(self, source, target, filesets=[], key=None):
-        return self._ExecuteAction ('validate', source, target, filesets, key)
+    def Validate(self, source, target, features=[], key=None):
+        return self._ExecuteAction ('validate', source, target, features, key)
 
-    def _ExecuteAction(self, action, source, target, filesets, key):
+    def _ExecuteAction(self, action, source, target, features, key):
         args = [self._kcl, action]
 
         if key:
             args += ['--key', key]
 
-        args +=  [source, target] + filesets
+        args +=  [source, target] + features
 
-        # validate doesn't handle source and filesets yet, so we need to strip
+        # validate doesn't handle source and features yet, so we need to strip
         # those
         if action == 'validate':
             args = args[0:2] + ['--summary=false', args[3]]
@@ -91,6 +92,10 @@ class TestEnvironment:
         self.testDirectory = testDirectory
         self.kyla = kyla
         self.workingDirectory = os.path.abspath ('.')
+        self._errorLog = io.StringIO()
+
+    def LogError (self, *args):
+        self._errorLog.write (' '.join (map (str, args)) + '\n')
 
 class SetupGenerateRepository:
     def Execute(self, env : TestEnvironment, args):
@@ -108,25 +113,25 @@ class ExecuteInstall:
     def Execute(self, env : TestEnvironment, args):
         source = os.path.join (env.testDirectory, args ['source'])
         target = os.path.join (env.testDirectory, args ['target'])
-        filesets = args ['filesets']
+        features = args ['features']
 
-        return env.kyla.Install (source, target, filesets, args.get ('key', None))
+        return env.kyla.Install (source, target, features, args.get ('key', None))
 
 class ExecuteConfigure:
     def Execute(self, env : TestEnvironment, args):
         source = os.path.join (env.testDirectory, args ['source'])
         target = os.path.join (env.testDirectory, args ['target'])
-        filesets = args ['filesets']
+        features = args ['features']
 
-        return env.kyla.Configure (source, target, filesets, args.get ('key', None))
+        return env.kyla.Configure (source, target, features, args.get ('key', None))
 
 class ExecuteValidate:
     def Execute(self, env : TestEnvironment, args):
         source = os.path.join (env.testDirectory, args ['source'])
         target = os.path.join (env.testDirectory, args ['target'])
-        filesets = args ['filesets']
+        features = args ['features']
 
-        result = env.kyla.Validate (source, target, filesets, args.get ('key', None))
+        result = env.kyla.Validate (source, target, features, args.get ('key', None))
         if args.get ('result', 'pass') == 'pass':
             return result
         else:
@@ -160,10 +165,10 @@ class CheckHash:
                 contents = open (os.path.join (env.testDirectory, k), 'rb').read()
                 actualHash = hashlib.sha256 (contents).digest().hex()
                 if actualHash != v:
-                    print ('Wrong hash', k, 'expected', v, 'actual', actualHash)
+                    env.LogError ('Wrong hash', k, 'expected', v, 'actual', actualHash)
                     return False
             except:
-                print ('Could not hash', k)
+                env.LogError ('Could not hash', k)
                 return False
         return True
 
@@ -210,7 +215,6 @@ class Test:
                     r = hook.Execute (env, v)
 
                     if r == False:
-                        print (hook, 'failed')
                         return False
         return True
 

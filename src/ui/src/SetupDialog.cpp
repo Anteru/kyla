@@ -17,10 +17,10 @@ details.
 
 namespace {
 ///////////////////////////////////////////////////////////////////////////////
-class FilesetListItem : public QListWidgetItem
+class FeatureListItem : public QListWidgetItem
 {
 public:
-	FilesetListItem (const KylaUuid id, const std::int64_t size, const char* description)
+	FeatureListItem (const KylaUuid id, const std::int64_t size, const char* description)
 	: QListWidgetItem (description)
 	, id_ (id)
 	, size_ (size)
@@ -114,7 +114,7 @@ void InstallThread::run ()
 	std::vector<uint8_t> idStore;
 
 	int itemCount = 0;
-	for (const auto& id : parent_->GetSelectedFilesets ()) {
+	for (const auto& id : parent_->GetSelectedFeatures ()) {
 		idStore.insert (idStore.end (),
 			id.bytes, id.bytes + sizeof (id.bytes));
 		++itemCount;
@@ -125,8 +125,8 @@ void InstallThread::run ()
 		idPointers.push_back (idStore.data () + idStore.size () / itemCount * i);
 	}
 
-	desiredState.filesetCount = itemCount;
-	desiredState.filesetIds = idPointers.data ();
+	desiredState.featureCount = itemCount;
+	desiredState.featureIds = idPointers.data ();
 
 	auto executeResult = installer->Execute (installer, action,
 		targetRepository, 
@@ -189,7 +189,7 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 		std::int64_t totalSize = 0;
 
 		for (int i = 0; i < ui->featureSelection->count (); ++i) {
-			auto item = static_cast<FilesetListItem*> (ui->featureSelection->item (i));
+			auto item = static_cast<FeatureListItem*> (ui->featureSelection->item (i));
 
 			if (item->checkState () == Qt::Checked) {
 				totalSize += item->GetSize ();
@@ -208,21 +208,21 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 	installer->GetRepositoryProperty (installer, sourceRepository,
 		kylaRepositoryProperty_AvailableFeatures, &resultSize, nullptr);
 
-	std::vector<KylaUuid> filesets;
-	filesets.resize (resultSize / sizeof (KylaUuid));
+	std::vector<KylaUuid> features;
+	features.resize (resultSize / sizeof (KylaUuid));
 	installer->GetRepositoryProperty (installer, sourceRepository,
-		kylaRepositoryProperty_AvailableFeatures, &resultSize, filesets.data ());
+		kylaRepositoryProperty_AvailableFeatures, &resultSize, features.data ());
 
-	for (const auto& fs : filesets) {
-		std::int64_t filesetSize = 0;
-		std::size_t filesetResultSize = sizeof (filesetSize);
+	for (const auto& feature : features) {
+		std::int64_t featureSize = 0;
+		std::size_t featureResultSize = sizeof (featureSize);
 
 		installer->GetFeatureProperty (installer, sourceRepository,
-			fs, kylaFeatureProperty_Size,
-			&filesetResultSize, &filesetSize);
+			feature, kylaFeatureProperty_Size,
+			&featureResultSize, &featureSize);
 
-		auto item = new FilesetListItem (fs,
-			filesetSize, "<missing name>");
+		auto item = new FeatureListItem (feature,
+			featureSize, "<missing name>");
 		ui->featureSelection->addItem (item);
 		item->setCheckState (Qt::Checked);
 	}
@@ -275,12 +275,12 @@ SetupDialog::~SetupDialog()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-std::vector<KylaUuid> SetupDialog::GetSelectedFilesets () const
+std::vector<KylaUuid> SetupDialog::GetSelectedFeatures () const
 {
 	std::vector<KylaUuid> result;
 
 	for (int i = 0; i < ui->featureSelection->count (); ++i) {
-		auto item = static_cast<FilesetListItem*> (ui->featureSelection->item (i));
+		auto item = static_cast<FeatureListItem*> (ui->featureSelection->item (i));
 
 		if (item->checkState () == Qt::Checked) {
 			result.push_back (item->GetId ());

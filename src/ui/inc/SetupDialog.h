@@ -50,7 +50,7 @@ public:
 	explicit SetupDialog(SetupContext* context, QWidget *parent = 0);
 	~SetupDialog();
 	
-	std::vector<KylaUuid> GetSelectedFilesets () const;
+	std::vector<KylaUuid> GetSelectedFeatures () const;
 	QString GetTargetDirectory () const;
 	SetupContext* GetSetupContext () const;
 

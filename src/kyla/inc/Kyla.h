@@ -96,13 +96,6 @@ enum kylaRepositoryOption
 	kylaRepositoryOption_ReadOnly	= 1 << 1
 };
 
-struct KylaFilesetInfo
-{
-	uint8_t id [16];
-	int64_t fileCount;
-	int64_t fileSize;
-};
-
 enum kylaAction
 {
 	kylaAction_Install		= 1,
@@ -113,8 +106,8 @@ enum kylaAction
 
 struct KylaDesiredState
 {
-	int filesetCount;
-	const uint8_t* const* filesetIds;
+	int featureCount;
+	const uint8_t* const* featureIds;
 };
 
 struct KylaUuid
@@ -137,7 +130,7 @@ enum kylaRepositoryProperty
 	The result is an int which is 0 if not encrypted and 1 if
 	the repository is encrypted. For encrypted repositories, set
 	the key using kylaRepositoryProperty_DecryptionKey
-	
+
 	@since 2.0
 	*/
 	kylaRepositoryProperty_IsEncrypted = 2
