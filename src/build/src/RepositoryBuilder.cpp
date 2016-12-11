@@ -68,6 +68,7 @@ public:
 		, fileInsertStatement_ (db.Prepare (
 			"INSERT INTO fs_files (Path, ContentId, FeatureId) VALUES (?, ?, ?);"))
 		, packageInsertStatement_ (db.Prepare ("INSERT INTO fs_packages (Filename) VALUES (?);"))
+		, packageDeleteStatement_ (db.Prepare ("DELETE FROM fs_packages WHERE Id=?;"))
 		, contentInsertStatement_ (db.Prepare ("INSERT INTO fs_contents (Hash, Size) VALUES (?, ?);"))
 		, featureInsertStatement_ (db.Prepare ("INSERT INTO features (Uuid) VALUES (?);"))		
 		, chunkInsertQuery_ (db.Prepare (
@@ -105,6 +106,13 @@ public:
 		packageInsertStatement_.Reset ();
 
 		return db_.GetLastRowId ();
+	}
+
+	void DeletePackage (const int64 id)
+	{
+		packageDeleteStatement_.BindArguments (id);
+		packageDeleteStatement_.Step ();
+		packageDeleteStatement_.Reset ();
 	}
 
 	int64 StoreContent (const SHA256Digest& hash, int64 size)
@@ -165,6 +173,7 @@ public:
 private:
 	Sql::Statement fileInsertStatement_;
 	Sql::Statement packageInsertStatement_;
+	Sql::Statement packageDeleteStatement_;
 	Sql::Statement contentInsertStatement_;
 	Sql::Statement featureInsertStatement_;
 	Sql::Statement chunkInsertQuery_;
@@ -308,6 +317,8 @@ public:
 			link.source->AddLink (link.target);
 			link.target->OnLinkAdded (link.source);
 		}
+
+		pendingLinks_.clear ();
 	}
 };
 
@@ -461,6 +472,11 @@ struct Package : public RepositoryObjectBase<RepositoryObjectType::FileStorage_P
 		persistentId_ = db.StorePackage (name.c_str ());
 	}
 
+	void Delete (BuildDatabase& db)
+	{
+		db.DeletePackage (persistentId_);
+	}
+
 	std::string name;
 
 	int64 GetPersistentId () const
@@ -482,7 +498,15 @@ struct Package : public RepositoryObjectBase<RepositoryObjectType::FileStorage_P
 	void AddLinkImpl (RepositoryObject* target)
 	{
 		if (target->GetType () == RepositoryObjectType::FileStorage_File) {
-			referencedFiles_.push_back (static_cast<File*> (target));
+			auto ptr = static_cast<File*> (target);
+
+			// See PopulatePackages() for cases when we could double-link to the
+			// same file
+			if (ptr->packageId == -1) {
+				referencedFiles_.push_back (ptr);
+			} else {
+				assert (ptr->packageId != persistentId_);
+			}
 		}
 	}
 
@@ -527,7 +551,14 @@ void File::OnLinkAddedImpl (RepositoryObject* source)
 		break;
 
 	case RepositoryObjectType::FileStorage_Package:
-		packageId = static_cast<Package*> (source)->GetPersistentId ();
+		// See PopulatePackages() for cases when we could double-link to the
+		// same package
+		if (packageId == -1) {
+			packageId = static_cast<Package*> (source)->GetPersistentId ();
+		} else {
+			assert (packageId != static_cast<Package*>(source)->GetPersistentId ());
+		}
+
 		break;
 	}
 }
@@ -937,7 +968,13 @@ private:
 			}
 		}
 
+		linker.Link ();
+
 		// Remaining objects go into the default "main" package
+		// Notice that it's valid to have a file with an id inside a group with an
+		// id. This will result in both the file, and the group ending up in the
+		// unassignedObjects. In this case, the file/package linking will ensure
+		// that the package doesn't link against the same file twice
 		if (! unassignedObjects.empty ()) {
 			std::vector<Reference> mainPackageReferences;
 			for (const auto& uuid : unassignedObjects) {
@@ -946,7 +983,6 @@ private:
 
 			packages_.emplace_back (new Package{ "main", mainPackageReferences  });
 			auto mainPackage = packages_.back ().get ();
-
 			mainPackage->Store (ctx.buildDatabase);
 
 			for (auto& object : unassignedObjects) {
@@ -957,6 +993,13 @@ private:
 		}
 
 		linker.Link ();
+
+		// The main package could be empty now - if so, remove it again
+		auto mainPackage = packages_.back ().get ();
+		if (mainPackage->GetReferencedFiles ().empty ()) {
+			mainPackage->Delete (ctx.buildDatabase);
+			packages_.pop_back ();
+		}
 	}
 
 	void CreateFileContents (BuildContext& ctx)
