@@ -92,6 +92,12 @@ public:
 		"INSERT INTO fs_chunk_encryption "
 		"(ChunkId, Algorithm, Data, InputSize, OutputSize) "
 		"VALUES (?, ?, ?, ?, ?)"))
+		, uiFeatureTreeNodeInsertQuery_ (db.Prepare (
+			"INSERT INTO ui_feature_tree_nodes (Name, Description, ParentId) VALUES (?,?,?)"))
+		, uiFeatureTreeFeatureReferencesInsertQuery_ (db.Prepare (
+			"INSERT INTO ui_feature_tree_feature_references (NodeId, FeatureId) VALUES (?, "
+			"(SELECT Id FROM features WHERE Uuid=?))"
+		))
 	{
 	}
 
@@ -184,6 +190,34 @@ public:
 		return db_.GetLastRowId ();
 	}
 
+	int64 StoreUiFeatureTreeNode (const char* name, const char* description,
+		int64 parentId)
+	{
+		uiFeatureTreeNodeInsertQuery_.BindArguments (name, description);
+
+		if (parentId > 0) {
+			uiFeatureTreeNodeInsertQuery_.Bind (3, parentId);
+		} else {
+			uiFeatureTreeNodeInsertQuery_.Bind (3, Sql::Null ());
+		}
+
+		uiFeatureTreeNodeInsertQuery_.Step ();
+		uiFeatureTreeNodeInsertQuery_.Reset ();
+
+		return db_.GetLastRowId ();
+	}
+
+	int64 StoreUiFeatureTreeFeatureReference (int64 nodeId,
+		const Uuid& featureUuid)
+	{
+		uiFeatureTreeFeatureReferencesInsertQuery_.BindArguments (
+			nodeId, featureUuid);
+		uiFeatureTreeFeatureReferencesInsertQuery_.Step ();
+		uiFeatureTreeFeatureReferencesInsertQuery_.Reset ();
+
+		return db_.GetLastRowId ();
+	}
+
 private:
 	Sql::Statement fileInsertStatement_;
 	Sql::Statement packageInsertStatement_;
@@ -195,6 +229,8 @@ private:
 	Sql::Statement chunkHashesInsertQuery_;
 	Sql::Statement chunkCompressionInsertQuery_;
 	Sql::Statement chunkEncryptionInsertQuery_;
+	Sql::Statement uiFeatureTreeNodeInsertQuery_;
+	Sql::Statement uiFeatureTreeFeatureReferencesInsertQuery_;
 
 	Sql::Database& db_;
 };
@@ -978,60 +1014,60 @@ private:
 		}
 
 		auto packagesNode = filesNode.child ("Packages");
-		RepositoryObjectLinker linker;
+RepositoryObjectLinker linker;
 
-		if (packagesNode) {
-			for (auto packageNode : packagesNode.children ("Package")) {
-				packages_.emplace_back (new Package{ packageNode });
-				auto ptr = packages_.back ().get ();
+if (packagesNode) {
+	for (auto packageNode : packagesNode.children ("Package")) {
+		packages_.emplace_back (new Package{ packageNode });
+		auto ptr = packages_.back ().get ();
 
-				ptr->Store (ctx.buildDatabase);
+		ptr->Store (ctx.buildDatabase);
 
-				for (auto& reference : ptr->GetReferences ()) {
-					auto it = repositoryObjects_.find (reference.id);
+		for (auto& reference : ptr->GetReferences ()) {
+			auto it = repositoryObjects_.find (reference.id);
 
-					if (it == repositoryObjects_.end ()) {
-						///@TODO(minor) Handle error
-					} else {
-						linker.Prepare (ptr, it->second);
-						unassignedObjects.erase (reference.id);
-					}
-				}
+			if (it == repositoryObjects_.end ()) {
+				///@TODO(minor) Handle error
+			} else {
+				linker.Prepare (ptr, it->second);
+				unassignedObjects.erase (reference.id);
 			}
 		}
+	}
+}
 
-		linker.Link ();
+linker.Link ();
 
-		// Remaining objects go into the default "main" package
-		// Notice that it's valid to have a file with an id inside a group with an
-		// id. This will result in both the file, and the group ending up in the
-		// unassignedObjects. In this case, the file/package linking will ensure
-		// that the package doesn't link against the same file twice
-		if (! unassignedObjects.empty ()) {
-			std::vector<Reference> mainPackageReferences;
-			for (const auto& uuid : unassignedObjects) {
-				mainPackageReferences.push_back (Reference{ uuid });
-			}
+// Remaining objects go into the default "main" package
+// Notice that it's valid to have a file with an id inside a group with an
+// id. This will result in both the file, and the group ending up in the
+// unassignedObjects. In this case, the file/package linking will ensure
+// that the package doesn't link against the same file twice
+if (!unassignedObjects.empty ()) {
+	std::vector<Reference> mainPackageReferences;
+	for (const auto& uuid : unassignedObjects) {
+		mainPackageReferences.push_back (Reference{ uuid });
+	}
 
-			packages_.emplace_back (new Package{ "main", mainPackageReferences  });
-			auto mainPackage = packages_.back ().get ();
-			mainPackage->Store (ctx.buildDatabase);
+	packages_.emplace_back (new Package{ "main", mainPackageReferences });
+	auto mainPackage = packages_.back ().get ();
+	mainPackage->Store (ctx.buildDatabase);
 
-			for (auto& object : unassignedObjects) {
-				// This find is guaranteed to succeed, as unassignedObjects
-				// contains the keys of repositoryObjects_ minus the assigned ones
-				linker.Prepare (mainPackage, repositoryObjects_.find (object)->second);
-			}
-		}
+	for (auto& object : unassignedObjects) {
+		// This find is guaranteed to succeed, as unassignedObjects
+		// contains the keys of repositoryObjects_ minus the assigned ones
+		linker.Prepare (mainPackage, repositoryObjects_.find (object)->second);
+	}
+}
 
-		linker.Link ();
+linker.Link ();
 
-		// The main package could be empty now - if so, remove it again
-		auto mainPackage = packages_.back ().get ();
-		if (mainPackage->GetReferencedFiles ().empty ()) {
-			mainPackage->Delete (ctx.buildDatabase);
-			packages_.pop_back ();
-		}
+// The main package could be empty now - if so, remove it again
+auto mainPackage = packages_.back ().get ();
+if (mainPackage->GetReferencedFiles ().empty ()) {
+	mainPackage->Delete (ctx.buildDatabase);
+	packages_.pop_back ();
+}
 	}
 
 	void CreateFileContents (BuildContext& ctx)
@@ -1051,7 +1087,7 @@ private:
 
 				fileContents->Store (ctx.buildDatabase);
 				file->SetFileContents (fileContents.get ());
-				
+
 				fileContentMap_[hash] = std::move (fileContents);
 			} else {
 				file->SetFileContents (it->second.get ());
@@ -1059,6 +1095,52 @@ private:
 			}
 		}
 	}
+};
+
+struct FeatureTreeWalker : public XmlTreeWalker
+{
+public:
+	FeatureTreeWalker (BuildDatabase& db)
+		: db_ (db)
+	{
+	}
+
+	bool OnEnter (const pugi::xml_node& node) override
+	{
+		if (strcmp (node.name (), "Node") == 0) {
+			currentNodeId_.push (
+				db_.StoreUiFeatureTreeNode (
+					node.attribute ("Name").as_string (),
+					node.attribute ("Description").as_string (),
+					currentNodeId_.empty () ? -1 : currentNodeId_.top ()
+				));
+		} else if (strcmp (node.name (), "Reference") == 0) {
+			db_.StoreUiFeatureTreeFeatureReference (
+				currentNodeId_.top (),
+				Uuid::Parse (node.attribute ("Id").as_string ())
+			);
+		}
+
+		return true;
+	}
+
+	bool OnNode (const pugi::xml_node&) override
+	{
+		return true;
+	}
+
+	bool OnLeave (const pugi::xml_node& node) override
+	{
+		if (strcmp (node.name (), "Node") == 0) {
+			currentNodeId_.pop ();
+		}
+
+		return true;
+	}
+
+private:
+	BuildDatabase& db_;
+	std::stack<int64> currentNodeId_;
 };
 
 class Repository
@@ -1124,6 +1206,16 @@ public:
 		fileStorage_->Persist (ctx);
 	}
 
+	void CreateAndPersistUi (const pugi::xml_node& root, BuildContext& ctx)
+	{
+		auto uiNode = root.select_node ("/Repository/UI/FeatureTree");
+
+		if (uiNode) {
+			FeatureTreeWalker ftw{ ctx.buildDatabase };
+			Traverse (uiNode.node (), ftw);
+		}
+	}
+
 private:
 	std::unordered_map<Uuid, RepositoryObject*,
 		ArrayRefHash, ArrayRefEqual> repositoryObjects_;
@@ -1173,6 +1265,8 @@ void BuildRepository (const KylaBuildSettings* settings)
 
 	repository.LinkFeatures ();
 	repository.PersistFileStorage (*ctx);
+
+	repository.CreateAndPersistUi (doc, *ctx);
 
 	ctx.reset ();
 

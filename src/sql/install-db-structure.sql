@@ -38,6 +38,21 @@ CREATE TABLE ui_resources (
 	SourceSize INTEGER NOT NULL
 );
 
+CREATE TABLE ui_feature_tree_nodes (
+	Id INTEGER PRIMARY KEY NOT NULL,
+	Name TEXT NOT NULL,
+	Description TEXT,
+	ParentId INTEGER,
+	FOREIGN KEY(ParentId) REFERENCES ui_feature_tree_nodes(Id)
+);
+
+CREATE TABLE ui_feature_tree_feature_references (
+	NodeId INTEGER NOT NULL,
+	FeatureId INTEGER NOT NULL,
+	FOREIGN KEY(NodeId) REFERENCES ui_feature_tree_nodes(Id),
+	FOREIGN KEY(FeatureId) REFERENCES features(Id)
+);
+
 -- FileStorage engine
 -- All contents stored in this repository
 CREATE TABLE fs_contents (
