@@ -72,7 +72,7 @@ int Build (const std::vector<std::string>& options,
 		("statistics", po::value<bool> ()->default_value (false))
 		("source-directory", po::value<std::string> ()->default_value ("."),
 			"Source directory")
-			("input", po::value<std::string> ())
+		("input", po::value<std::string> ())
 		("target-directory", po::value<std::string> ());
 
 	po::positional_options_description posBuild;
