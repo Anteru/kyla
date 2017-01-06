@@ -537,6 +537,7 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 					boost::format ("Creating file %1%") % targetPath);
 
 				auto file = CreateFile (path_ / targetPath);
+				file->SetSize (contents.GetSize ());
 				file->Write (contents);
 			}
 
