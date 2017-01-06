@@ -69,6 +69,7 @@ CREATE TABLE fs_files (
 	FOREIGN KEY(FeatureId) REFERENCES features(Id));
 
 CREATE INDEX fs_files_feature_id_idx ON fs_files (FeatureId ASC);
+CREATE INDEX fs_files_content_id_idx ON fs_files (ContentId ASC);
 
 -- Content is stored in packages -- in a loose repository,
 -- each content goes into its own package
