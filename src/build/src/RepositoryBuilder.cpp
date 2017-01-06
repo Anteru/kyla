@@ -1073,7 +1073,7 @@ private:
 	void CreateFileContents (BuildContext& ctx)
 	{
 		for (auto& file : files_) {
-			const auto filePath = ctx.sourceDirectory / file->source;
+			const auto filePath = file->source.is_absolute () ? file->source : ctx.sourceDirectory / file->source;
 			const auto hash = ComputeSHA256 (filePath);
 
 			auto it = fileContentMap_.find (hash);
