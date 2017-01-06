@@ -406,6 +406,37 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 
 	progress.SetStageTarget (requiredContentObjects.size ());
 
+	// Create directories
+	{
+		auto getTargetFilesQuery = db_.Prepare (
+			"SELECT Path FROM source.fs_files "
+			"WHERE source.fs_files.ContentId = (SELECT Id FROM source.fs_contents WHERE source.fs_contents.Hash = ?)");
+
+		std::set<Path> paths;
+
+		for (const auto& hash : requiredContentObjects) {
+			getTargetFilesQuery.BindArguments (hash);
+
+			while (getTargetFilesQuery.Step ()) {
+				const Path targetPath{ getTargetFilesQuery.GetText (0) };
+
+				paths.insert (path_ / targetPath.parent_path ());
+			}
+
+			getTargetFilesQuery.Reset ();
+		}
+
+		for (const auto& path : paths) {
+			boost::filesystem::create_directories (path);
+		}
+	}
+
+	static const int64 TransactionDataSize = 4 << 20;
+
+	auto transaction = db_.BeginTransaction ();
+	int64 currentTransactionDeployedSize = 0;
+	int64 currentTransactionSize = 0;
+
 	// Fetch the missing ones now and store in the right places
 	source.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
 		const ArrayRef<>& contents,
@@ -443,7 +474,6 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 			}
 		}
 
-		auto transaction = db_.BeginTransaction ();
 		log.Debug ("Configure", boost::format ("Received content object '%1%'") % hashString);
 
 		int64 ContentId = -1;
@@ -482,8 +512,6 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 
 			progress.SetAction (getTargetFilesQuery.GetText (0));
 
-			boost::filesystem::create_directories (path_ / targetPath.parent_path ());
-
 			if (hasStagingFile) {
 				if (isFirstFile) {
 					log.Debug ("Configure", 
@@ -519,9 +547,22 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 			log.Debug ("Configure", boost::format ("Wrote file %1%") % targetPath);
 		}
 
-		transaction.Commit ();
+		currentTransactionDeployedSize += contents.GetSize ();
+		currentTransactionSize++;
+
+		if (currentTransactionDeployedSize > TransactionDataSize) {
+			log.Debug ("Configure", boost::format ("Committing transaction with %1% operations") % currentTransactionSize);
+			transaction.Commit ();
+			transaction = db_.BeginTransaction ();
+			currentTransactionDeployedSize = 0;
+			currentTransactionSize = 0;
+		}
+
 		++progress;
 	});
+
+	log.Debug ("Configure", boost::format ("Committing transaction with %1% operations") % currentTransactionSize);
+	transaction.Commit ();
 }
 
 ///////////////////////////////////////////////////////////////////////////////
