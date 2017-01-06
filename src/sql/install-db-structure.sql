@@ -90,7 +90,9 @@ CREATE TABLE fs_chunks (
 	-- Source size - a chunk may be smaller than the whole content object
 	SourceSize INTEGER NOT NULL,
 	FOREIGN KEY(ContentId) REFERENCES fs_contents(Id),
-	FOREIGN KEY(PackageId) REFERENCES fs_packages(Id));
+	FOREIGN KEY(PackageId) REFERENCES fs_packages(Id),
+	-- Any given content can be stored once in a package
+	UNIQUE(ContentId, PackageId, SourceOffset));
 
 CREATE INDEX fs_chunks_content_id_idx ON fs_chunks (ContentId ASC);
 CREATE INDEX fs_chunks_package_id_idx ON fs_chunks (PackageId ASC);

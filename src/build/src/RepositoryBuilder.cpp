@@ -590,6 +590,8 @@ struct Package : public RepositoryObjectBase<RepositoryObjectType::FileStorage_P
 			uniqueFileContents.push_back (file->GetFileContents ());
 		}
 
+		std::sort (uniqueFileContents.begin (), uniqueFileContents.end ());
+
 		uniqueFileContents.erase (
 			std::unique (uniqueFileContents.begin (), uniqueFileContents.end ()),
 			uniqueFileContents.end ());
