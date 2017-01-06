@@ -50,7 +50,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'kyla'
-copyright = '2015-2016, Matthäus G. Chajdas'
+copyright = '2015-2017, Matthäus G. Chajdas'
 author = 'Matthäus G. Chajdas'
 
 # The version info for the project you're documenting, acts as replacement for

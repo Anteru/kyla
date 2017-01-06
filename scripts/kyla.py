@@ -14,6 +14,20 @@ import os
 import uuid
 import xml.dom.minidom
 
+import pathlib
+
+def WalkDirectory(directory, filter):
+    with os.scandir (directory) as it:
+        for entry in it:
+            if filter is not None:
+                if not filter (entry):
+                    continue
+
+            if entry.is_dir ():
+                yield from WalkDirectory (entry, filter)
+            elif entry.is_file ():
+                yield entry
+
 def _IdString (s):
 	if isinstance (s, uuid.UUID):
 		return str (s).upper ()
@@ -22,73 +36,123 @@ def _IdString (s):
 
 from enum import Enum
 
-class PackageType(Enum):
-	Loose = 0
-	Packed = 1
+class RepositoryObject:
+	def __init__ (self):
+		self.__id = uuid.uuid4 ()
+		self.__references = []
 
-class FileRepositoryBuilder:
-	def __init__ (self, packageType = PackageType.Packed):
-		self._propertyNode = etree.Element ('Properties')
-		self._root = etree.Element ('FileRepository')
-		self._package = etree.SubElement (self._root, 'Package')
-		self._fileSets = []
-		self._packageType = packageType
+	def GetId (self):
+		return self.__id
 
-	def SetPackageType(self, packageType):
-		self._packageType = packageType
+	def AddReference (self, repositoryObject):
+		self.__references.append (repositoryObject.GetId ())
 
-	class FileSetBuilder:
-		def __init__ (self, fileSetId = None):
-			if fileSetId is None:
-				fileSetId = uuid.uuid4 ()
+	def GetReferences (self):
+		return self.__references
 
-			self.__element = etree.Element ('FileSet')
-			self.__element.set ('Id', _IdString (fileSetId))
-			self.__id = fileSetId
+class Feature(RepositoryObject):
+	def __init__ (self):
+		super().__init__()
+		self.__dependencies = []
+	
+	def AddDependency (self, otherFeature):
+		assert isinstance (otherFeature, feature)
+		self.__dependencies.append (feature)
 
-		def GetId (self):
-			return self.__id
+	def ToXml (self):
+		n = etree.Element ('Feature')
+		n.set ('Id', str (self.GetId ()))
 
-		def SetSourcePackage (self, sourcePackage):
-			self.__element.set = ('SourcePackage', sourcePackage)
+		for reference in self.GetReferences ():
+			r = etree.SubElement (n, 'Reference')
+			r.set ('Id', str (reference))
 
-		def AddFilesFromDirectory (self, baseDirectory, prefix=''):
-			for directory, _, entry in os.walk (baseDirectory):
-				directory = directory [len (baseDirectory) + 1:]
-				if entry:
-					for e in entry:
-						fileElement = etree.SubElement (self.__element, 'File')
-						fileElement.set ('Source', os.path.join (prefix, directory, e))
+		for dependency in self.__dependencies:
+			r = etree.SubElement (n, 'Dependency')
+			r.set ('Id', str (dependency))
 
-		def AddFile (self, filename, prefix=''):
-			fileElement = etree.SubElement (self.__element, 'File')
-			fileElement.set ('Source', os.path.join (prefix, filename))
+		return n
 
-		def Get(self):
-			return self.__element
+class FilePackage (RepositoryObject):
+	def __init__ (self, name):
+		super().__init__()
+		self.__name = name
 
-	def AddFileSet (self, name = None, fileSetId = None):
-		if fileSetId is None:
-			fileSetId = uuid.uuid4 ()
+	def ToXml (self):
+		n = etree.Element ('Package')
+		n.set ('Name', self.__name)
 
-		fb = self.FileSetBuilder (name, fileSetId)
-		self._fileSets.append (fb)
-		return fb
+		for reference in self.GetReferences ():
+			r = etree.SubElement (n, 'Reference')
+			r.set ('Id', str (reference))
+		
+		return n
+
+class FileGroup(RepositoryObject):
+	def __init__(self):
+		super().__init__()
+		self.__files = []
+	
+	def AddDirectory (self, sourceDirectory, outputDirectory, filter=None):
+		for file in WalkDirectory (sourceDirectory, filter):
+			p = pathlib.Path (file.path)
+			self.__files.append ((
+				file.path, 
+				outputDirectory / p.relative_to (sourceDirectory),))
+
+	def ToXml (self):
+		n = etree.Element ('Group')
+		n.set ('Id', str (self.GetId ()))
+
+		for file in self.__files:
+			f = etree.SubElement (n, 'File')
+			f.set ('Source', str (file [0]))
+			f.set ('Target', str (file [1]))
+		
+		return n
+
+class RepositoryBuilder:
+	def __init__ (self):
+		self.__root = etree.Element ('Repository')
+		self.__features = []
+		self.__fileGroups = []
+		self.__filePackages = []
+
+	def AddFeature (self):
+		f = Feature ()
+		self.__features.append (f)
+		return f
+
+	def AddFileGroup (self):
+		g = FileGroup ()
+		self.__fileGroups.append (g)
+		return g
+
+	def AddFilePackage (self, name):
+		p = FilePackage (name)
+		self.__filePackages.append (p)
+		return p
 
 	def Finalize (self, prettyPrint = True):
 		'''Generate the installer XML and return as a string. The output is
 		already preprocessed.'''
-		self._root.append (self._propertyNode)
 
-		typeElement = etree.SubElement (self._package, 'Type')
-		typeElement.text = self._packageType.name
+		features = etree.SubElement (self.__root, 'Features')
+		for feature in self.__features:
+			features.append (feature.ToXml ())
 
-		fileSets = etree.SubElement (self._root, 'FileSets')
-		for fs in self._fileSets:
-			fileSets.append (fs.Get ())
+		files = etree.SubElement (self.__root, 'Files')
+		for fileGroup in self.__fileGroups:
+			files.append (fileGroup.ToXml ())
+
+		if self.__filePackages:
+			packagesNode = etree.SubElement (files, 'Packages')
+			
+			for filePackage in self.__filePackages:
+				packagesNode.append (filePackage.ToXml ())
 
 		decl = '<?xml version="1.0" encoding="UTF-8"?>'
-		result = decl + etree.tostring (self._root, encoding='utf-8').decode ('utf-8')
+		result = decl + etree.tostring (self.__root, encoding='utf-8').decode ('utf-8')
 
 		if prettyPrint:
 			d = xml.dom.minidom.parseString (result)
