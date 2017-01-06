@@ -3,7 +3,7 @@ PROJECT(KylaCLI)
 SET(SOURCES
 	src/main.cpp)
 
-FIND_PACKAGE(Boost 1.55.0 REQUIRED QUIET COMPONENTS program_options filesystem system)
+FIND_PACKAGE(Boost 1.63 REQUIRED QUIET COMPONENTS program_options filesystem system)
 
 ADD_EXECUTABLE(kcl ${SOURCES} ${HEADERS})
 TARGET_LINK_LIBRARIES(kcl
