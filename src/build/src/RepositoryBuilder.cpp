@@ -1246,8 +1246,8 @@ void BuildRepository (const KylaBuildSettings* settings)
 		dbFile.string ().c_str ());
 
 	db.Execute (install_db_structure);
-	db.Execute ("PRAGMA journal_mode=WAL;");
-	db.Execute ("PRAGMA synchronous=NORMAL;");
+	db.Execute ("PRAGMA journal_mode=MEMORY;");
+	db.Execute ("PRAGMA synchronous=OFF;");
 
 	pugi::xml_document doc;
 	if (!doc.load_file (inputFile)) {
@@ -1279,9 +1279,10 @@ void BuildRepository (const KylaBuildSettings* settings)
 	BuildStatistics statistics;
 
 	db.Execute ("PRAGMA journal_mode=DELETE;");
+	db.Execute ("PRAGMA synchronous=FULL;");
 	// Necessary to get good index statistics
-	db.Execute ("ANALYZE");
-	db.Execute ("VACUUM");
+	db.Execute ("ANALYZE;");
+	db.Execute ("VACUUM;");
 
 	db.Close ();
 
