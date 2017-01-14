@@ -525,7 +525,7 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 				} else {
 					log.Debug ("Configure",
 						boost::format ("Copying file %1% to %2%")
-						% stagingFilePath % targetPath);
+						% lastFilePath % targetPath);
 
 					assert (!lastFilePath.empty ());
 					boost::filesystem::copy_file (lastFilePath,
