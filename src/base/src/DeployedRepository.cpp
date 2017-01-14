@@ -437,6 +437,22 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 	int64 currentTransactionDeployedSize = 0;
 	int64 currentTransactionSize = 0;
 
+	auto insertFileQuery = db_.Prepare (
+		"INSERT INTO main.fs_files (Path, ContentId, FeatureId) "
+		"SELECT ?, ?, main.features.Id FROM source.fs_files "
+		"INNER JOIN source.features ON source.features.Id = source.fs_files.FeatureId "
+		"INNER JOIN features ON source.features.Uuid = main.features.Uuid "
+		"WHERE source.fs_files.path = ?"
+	);
+
+	auto insertContentObjectQuery = db_.Prepare (
+		"INSERT INTO fs_contents (Hash, Size) "
+		"VALUES (?, ?);");
+
+	auto getTargetFilesQuery = db_.Prepare (
+		"SELECT Path FROM source.fs_files "
+		"WHERE source.fs_files.ContentId = (SELECT Id FROM source.fs_contents WHERE source.fs_contents.Hash = ?)");
+
 	// Fetch the missing ones now and store in the right places
 	source.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
 		const ArrayRef<>& contents,
@@ -451,14 +467,14 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 			
 			if (offset == 0) {
 				log.Debug ("Configure",
-					boost::format ("Created staging file %1%")
+					boost::format ("Creating staging file %1%")
 					% stagingFilePath);
 
 				file = CreateFile (stagingFilePath);
 				file->SetSize (totalSize);
 			} else {
 				log.Debug ("Configure",
-					boost::format ("Appending to staging file %1%")
+					boost::format ("Writing into staging file %1%")
 					% stagingFilePath);
 
 				file = OpenFile (stagingFilePath, FileOpenMode::Write);
@@ -478,30 +494,15 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 
 		int64 ContentId = -1;
 		{
-			auto insertContentObjectQuery = db_.Prepare (
-				"INSERT INTO fs_contents (Hash, Size) "
-				"VALUES (?, ?);");
-
 			insertContentObjectQuery.BindArguments (hash, totalSize);
 			insertContentObjectQuery.Step ();
 			insertContentObjectQuery.Reset ();
 
 			ContentId = db_.GetLastRowId ();
 
-			log.Debug ("Configure", boost::format ("Stored content object '%1%' with id %2%") % hashString % ContentId);
+			log.Debug ("Configure", 
+				boost::format ("Persisted content object '%1%', id %2%") % hashString % ContentId);
 		}
-
-		auto insertFileQuery = db_.Prepare (
-			"INSERT INTO main.fs_files (Path, ContentId, FeatureId) "
-			"SELECT ?, ?, main.features.Id FROM source.fs_files "
-			"INNER JOIN source.features ON source.features.Id = source.fs_files.FeatureId "
-			"INNER JOIN features ON source.features.Uuid = main.features.Uuid "
-			"WHERE source.fs_files.path = ?"
-		);
-
-		auto getTargetFilesQuery = db_.Prepare (
-			"SELECT Path FROM source.fs_files "
-			"WHERE source.fs_files.ContentId = (SELECT Id FROM source.fs_contents WHERE source.fs_contents.Hash = ?)");
 
 		getTargetFilesQuery.BindArguments (hash);
 
@@ -537,7 +538,6 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 					boost::format ("Creating file %1%") % targetPath);
 
 				auto file = CreateFile (path_ / targetPath);
-				file->SetSize (contents.GetSize ());
 				file->Write (contents);
 			}
 
@@ -547,6 +547,8 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 
 			log.Debug ("Configure", boost::format ("Wrote file %1%") % targetPath);
 		}
+
+		getTargetFilesQuery.Reset ();
 
 		currentTransactionDeployedSize += contents.GetSize ();
 		currentTransactionSize++;
