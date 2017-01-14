@@ -1074,9 +1074,13 @@ private:
 
 	void CreateFileContents (BuildContext& ctx)
 	{
+		static const int BufferSize = 16 << 20; /* 16 MiB */
+		std::unique_ptr<byte[]> buffer{ new byte[BufferSize] };
+
 		for (auto& file : files_) {
 			const auto filePath = file->source.is_absolute () ? file->source : ctx.sourceDirectory / file->source;
-			const auto hash = ComputeSHA256 (filePath);
+			const auto hash = ComputeSHA256 (filePath, 
+				MutableArrayRef<byte> {buffer.get (), BufferSize});
 
 			auto it = fileContentMap_.find (hash);
 			if (it == fileContentMap_.end ()) {
