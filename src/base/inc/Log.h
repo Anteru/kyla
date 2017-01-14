@@ -13,6 +13,9 @@ details.
 #include <functional>
 #include <string>
 #include <boost/format.hpp>
+#include <chrono>
+
+#include "Types.h"
 
 namespace kyla {
 enum class LogLevel
@@ -26,7 +29,7 @@ enum class LogLevel
 class Log
 {
 public:
-	using LogCallback = std::function<void (LogLevel logLevel, const char* source, const char* message)>;
+	using LogCallback = std::function<void (LogLevel logLevel, const char* source, const char* message, const int64 timestamp)>;
 
 	Log (const LogCallback& callback);
 
@@ -62,7 +65,8 @@ public:
 	}
 
 private:
-	std::function<void (LogLevel logLevel, const char* source, const char* message)> callback_;
+	LogCallback callback_;
+	std::chrono::steady_clock::time_point startTime_;
 };
 }
 

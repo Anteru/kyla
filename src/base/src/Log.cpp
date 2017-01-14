@@ -14,6 +14,7 @@ namespace kyla {
 ///////////////////////////////////////////////////////////////////////////////
 Log::Log (const LogCallback& callback)
 	: callback_ (callback)
+	, startTime_ (std::chrono::steady_clock::now ())
 {
 }
 
@@ -27,7 +28,8 @@ void Log::SetCallback (const LogCallback& callback)
 void Log::Debug (const char* source, const std::string& message)
 {
 	if (callback_) {
-		callback_ (LogLevel::Debug, source, message.c_str ());
+		auto duration = std::chrono::steady_clock::now () - startTime_;
+		callback_ (LogLevel::Debug, source, message.c_str (), duration.count ());
 	}
 }
 
@@ -35,7 +37,8 @@ void Log::Debug (const char* source, const std::string& message)
 void Log::Info (const char* source, const std::string& message)
 {
 	if (callback_) {
-		callback_ (LogLevel::Info, source, message.c_str ());
+		auto duration = std::chrono::steady_clock::now () - startTime_;
+		callback_ (LogLevel::Info, source, message.c_str (), duration.count ());
 	}
 }
 
@@ -43,7 +46,8 @@ void Log::Info (const char* source, const std::string& message)
 void Log::Warning (const char* source, const std::string& message)
 {
 	if (callback_) {
-		callback_ (LogLevel::Warning, source, message.c_str ());
+		auto duration = std::chrono::steady_clock::now () - startTime_;
+		callback_ (LogLevel::Warning, source, message.c_str (), duration.count ());
 	}
 }
 
@@ -51,7 +55,8 @@ void Log::Warning (const char* source, const std::string& message)
 void Log::Error (const char* source, const std::string& message)
 {
 	if (callback_) {
-		callback_ (LogLevel::Error, source, message.c_str ());
+		auto duration = std::chrono::steady_clock::now () - startTime_;
+		callback_ (LogLevel::Error, source, message.c_str (), duration.count ());
 	}
 }
 }

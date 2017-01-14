@@ -16,6 +16,9 @@ details.
 #include <iomanip>
 #include "Uuid.h"
 
+#include <chrono>
+#include <iomanip>
+
 ///////////////////////////////////////////////////////////////////////////////
 const char* kylaGetErrorString (const int r)
 {
@@ -35,8 +38,23 @@ namespace po = boost::program_options;
 
 ///////////////////////////////////////////////////////////////////////////////
 void StdoutLog (const char* source, const kylaLogSeverity severity,
-	const char* message, void*)
+	const char* message, const int64_t timestamp, void*)
 {
+	std::chrono::nanoseconds timeSinceStart{ timestamp };
+	const auto hours = std::chrono::duration_cast<std::chrono::hours> (timeSinceStart);
+	timeSinceStart -= hours;
+	const auto minutes = std::chrono::duration_cast<std::chrono::minutes> (timeSinceStart);
+	timeSinceStart -= minutes;
+	const auto seconds = std::chrono::duration_cast<std::chrono::seconds> (timeSinceStart);
+	timeSinceStart -= seconds;
+	const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds> (timeSinceStart);
+	
+	std::cout << std::setw (2) << std::setfill ('0') << hours.count ()
+		<< ':' << std::setw (2) << std::setfill ('0') << minutes.count ()
+		<< ':' << std::setw (2) << std::setfill ('0') << seconds.count ()
+		<< '.' << std::setw (3) << std::setfill ('0') << milliseconds.count ()
+		<< " | ";
+
 	switch (severity) {
 	case kylaLogSeverity_Debug: std::cout	<< "Debug:   "; break;
 	case kylaLogSeverity_Info: std::cout	<< "Info:    "; break;

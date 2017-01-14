@@ -100,7 +100,7 @@ struct KylaInstallerInternal
 	std::unique_ptr<kyla::Progress> progress;
 
 	KylaInstallerInternal ()
-		: log (new kyla::Log ([](kyla::LogLevel, const char*, const char*) -> void {
+		: log (new kyla::Log ([](kyla::LogLevel, const char*, const char*, kyla::int64) -> void {
 	}))
 		, progress (new kyla::Progress ([](const float totalProgress,
 			const char* stageName, const char* action) -> void {
@@ -664,7 +664,7 @@ int kylaSetLogCallback_2_0 (KylaInstaller* installer, KylaLogCallback logCallbac
 	auto internal = GetInternalInstaller (installer);
 
 	internal->log->SetCallback (
-		[=](kyla::LogLevel level, const char* source, const char* message) -> void {
+		[=](kyla::LogLevel level, const char* source, const char* message, const kyla::int64 timestamp) -> void {
 		kylaLogSeverity severity;
 		switch (level) {
 		case kyla::LogLevel::Debug:
@@ -683,7 +683,7 @@ int kylaSetLogCallback_2_0 (KylaInstaller* installer, KylaLogCallback logCallbac
 			severity = kylaLogSeverity_Debug; break;
 		}
 
-		logCallback (source, severity, message, callbackContext);
+		logCallback (source, severity, message, timestamp, callbackContext);
 	});
 
 	return kylaResult_Ok;
