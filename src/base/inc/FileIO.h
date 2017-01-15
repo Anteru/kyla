@@ -108,11 +108,21 @@ enum class FileOpenMode
 	ReadWrite
 };
 
+enum class FileAccessHints
+{
+	None,
+	SequentialScan
+};
+
 std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode);
+std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode,
+	FileAccessHints hints);
 std::unique_ptr<File> CreateFile (const char* path);
 
 
 std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode);
+std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode,
+	FileAccessHints hints);
 std::unique_ptr<File> CreateFile (const Path& path);
 
 Path GetTemporaryFilename ();

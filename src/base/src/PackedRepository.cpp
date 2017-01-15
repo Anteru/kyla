@@ -42,12 +42,20 @@ public:
 
 	bool Read (const int64 offset, const MutableArrayRef<>& buffer) override
 	{
-		file_->Seek (offset);
-		return file_->Read (buffer) == buffer.GetSize ();
+		if (offset != currentOffset_) {
+			file_->Seek (offset);
+			currentOffset_ = offset;
+		}
+
+		auto bytesRead = file_->Read (buffer);
+		currentOffset_ += bytesRead;
+
+		return bytesRead == buffer.GetSize ();
 	}
 
 private:
 	std::unique_ptr<File> file_;
+	int64 currentOffset_ = 0;
 };
 }
 
@@ -55,7 +63,7 @@ private:
 std::unique_ptr<PackedRepositoryBase::PackageFile> PackedRepository::OpenPackage (const std::string& packageName) const
 {
 	return std::unique_ptr<PackageFile> { new LocalPackageFile{
-		OpenFile (path_ / packageName, FileOpenMode::Read)
+		OpenFile (path_ / packageName, FileOpenMode::Read, FileAccessHints::SequentialScan)
 	}};
 }
 

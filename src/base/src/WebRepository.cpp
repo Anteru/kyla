@@ -60,8 +60,12 @@ struct WebRepository::Impl
 			InternetCloseHandle (handle_);
 		}
 
-		int64 Read (const MutableArrayRef<>& buffer)
+		int64 Read (const int64 offset, const MutableArrayRef<>& buffer)
 		{
+			if (currentOffset_ != offset) {
+				Seek (offset);
+			}
+
 			int64 readTotal = 0;
 			DWORD read = 0;
 
@@ -78,18 +82,23 @@ struct WebRepository::Impl
 				}
 			}
 
+			currentOffset_ = offset + readTotal;
+
 			return readTotal;
 		}
 
+	private:
 		void Seek (int64 offset)
 		{
-			///@TODO(minor) Optimize this to not seek unless needed
 			LONG upperBits = offset >> 32;
 			InternetSetFilePointer (handle_, offset & 0xFFFFFFFF,
 				&upperBits, FILE_BEGIN, NULL);
+
+			currentOffset_ = offset;
 		}
 
 		HINTERNET handle_;
+		int64 currentOffset_ = 0;
 	};
 
 	std::unique_ptr<File> Open (const std::string& file)
@@ -144,14 +153,16 @@ WebRepository::WebRepository (const std::string& path)
 		auto dbLocalFile = CreateFile (dbPath_);
 		std::vector<byte> buffer;
 		buffer.resize (1 << 20); // 1 MiB
+		int64 readOffset = 0;
 
 		for (;;) {
-			const auto bytesRead = dbWebFile->Read (buffer);
+			const auto bytesRead = dbWebFile->Read (readOffset, buffer);
 
 			if (bytesRead == 0) {
 				break;
 			}
 
+			readOffset += bytesRead;
 			dbLocalFile->Write (ArrayRef<byte> {buffer}.Slice (0, bytesRead));
 		}
 	}
@@ -183,8 +194,7 @@ namespace {
 
 		bool Read (const int64 offset, const MutableArrayRef<>& buffer) override
 		{
-			file_->Seek (offset);
-			return file_->Read (buffer) == buffer.GetSize ();
+			return file_->Read (offset, buffer) == buffer.GetSize ();
 		}
 
 	private:

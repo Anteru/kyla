@@ -150,8 +150,15 @@ std::unique_ptr<File> CreateFile (const Path& path)
 	return CreateFile (path.c_str ());
 }
 
-////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode)
+{
+	return OpenFile (path, openMode, FileAccessHints::None);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode,
+	FileAccessHints)
 {
 	int mode;
 	switch (openMode) {
@@ -172,8 +179,15 @@ std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode)
 	return std::unique_ptr<File> (new LinuxFile (fd, openMode == FileOpenMode::Read));
 }
 
-////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode)
+{
+	return OpenFile (path, openMode, FileAccessHints::None);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode,
+	FileAccessHints)
 {
 	return OpenFile (path.c_str (), openMode);
 }
@@ -386,13 +400,35 @@ std::unique_ptr<File> CreateFile (const char* path)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+DWORD ConvertFileAccessHints (const FileAccessHints hints)
+{
+	switch (hints) {
+	case FileAccessHints::None: 
+		return 0;
+
+	case FileAccessHints::SequentialScan:
+		return FILE_FLAG_SEQUENTIAL_SCAN;
+
+	default:
+		return 0;
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode)
+{
+	return OpenFile (path, openMode, FileAccessHints::None);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode,
+	FileAccessHints hints)
 {
 	const int mode = ConvertOpenMode (openMode);
 	const int shareMode = openMode == FileOpenMode::Read ? FILE_SHARE_READ : 0;
 
 	auto fd = ::CreateFileA (path, mode,
-		shareMode, nullptr, OPEN_EXISTING, 0, 0);
+		shareMode, nullptr, OPEN_EXISTING, ConvertFileAccessHints (hints), 0);
 
 	if (fd == INVALID_HANDLE_VALUE) {
 		throw std::exception ("Could not open file");
@@ -417,11 +453,18 @@ std::unique_ptr<File> CreateFile (const Path& path)
 ///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode)
 {
+	return OpenFile (path, openMode, FileAccessHints::None);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode,
+	FileAccessHints hints)
+{
 	const int mode = ConvertOpenMode (openMode);
 	const int shareMode = openMode == FileOpenMode::Read ? FILE_SHARE_READ : 0;
 
 	auto fd = ::CreateFileW (path.c_str (), mode,
-		shareMode, nullptr, OPEN_EXISTING, 0, 0);
+		shareMode, nullptr, OPEN_EXISTING, ConvertFileAccessHints (hints), 0);
 
 	if (fd == INVALID_HANDLE_VALUE) {
 		throw std::exception ("Could not open file");
