@@ -388,7 +388,7 @@ int QueryFeature (const std::vector<std::string>& options,
 		installer->SetLogCallback (installer, StdoutLog, nullptr);
 	}
 
-	KylaTargetRepository source;
+	KylaSourceRepository source;
 	KYLA_CHECKED_CALL (installer->OpenSourceRepository (installer, vm["source"].as<std::string> ().c_str (),
 		kylaRepositoryOption_ReadOnly, &source));
 
@@ -429,6 +429,88 @@ int QueryFeature (const std::vector<std::string>& options,
 			featureId, kylaFeatureProperty_Size, &resultSize, &result);
 
 		std::cout << result << std::endl;
+	}
+
+	installer->CloseRepository (installer, source);
+	KYLA_CHECKED_CALL (kylaDestroyInstaller (installer));
+
+	return kylaResult_Ok;
+}
+
+///////////////////////////////////////////////////////////////////////////////
+int QueryFeatureTree (const std::vector<std::string>& options,
+	po::variables_map& vm)
+{
+	po::options_description build_desc ("query-feature-tree options");
+	build_desc.add_options ()
+		("property", po::value<std::string> ())
+		("source", po::value<std::string> ())
+		("feature-tree-node-id", po::value<int> ()->default_value (-1));
+
+	po::positional_options_description posBuild;
+	posBuild
+		.add ("property", 1)
+		.add ("source", 1)
+		.add ("feature-tree-node-id", 1);
+
+	try {
+		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
+	} catch (const std::exception& e) {
+		std::cerr << e.what () << std::endl;
+		return 1;
+	}
+
+	if (vm["source"].empty ()) {
+		std::cerr << "No repository specified" << std::endl;
+		return 1;
+	}
+
+	KylaInstaller* installer = nullptr;
+	kylaCreateInstaller (KYLA_API_VERSION_2_0, &installer);
+
+	assert (installer);
+
+	if (vm["log"].as<bool> ()) {
+		installer->SetLogCallback (installer, StdoutLog, nullptr);
+	}
+
+	KylaSourceRepository source;
+	KYLA_CHECKED_CALL (installer->OpenSourceRepository (installer, vm["source"].as<std::string> ().c_str (),
+		kylaRepositoryOption_ReadOnly, &source));
+
+	const auto property = vm["property"].as<std::string> ();
+	
+	std::vector<const KylaFeatureTreeNode*> nodes;
+	{
+		size_t resultSize;
+		KYLA_CHECKED_CALL (installer->QueryFeatureTreeProperty (installer, source,
+			kylaFeatureTreeProperty_Nodes, nullptr,
+			&resultSize, nullptr));
+		nodes.resize (resultSize / sizeof (const KylaFeatureTreeNode*));
+		KYLA_CHECKED_CALL (installer->QueryFeatureTreeProperty (installer, source,
+			kylaFeatureTreeProperty_Nodes, nullptr,
+			&resultSize, nodes.data ()));
+	}
+
+	if (property == "nodes") {
+		for (size_t i = 0; i < nodes.size (); ++i) {
+			std::cout << "[" << std::setw (3) << i << "] " << nodes[i]->name << " (parent: " << (nodes[i]->parent ? nodes[i]->parent->name : "<none>") << ")\n";
+		}
+	} else if (property == "features") {
+		auto id = vm["feature-tree-node-id"].as<int> ();
+
+		size_t resultSize;
+		KYLA_CHECKED_CALL (installer->QueryFeatureTreeProperty (installer, source,
+			kylaFeatureTreeProperty_NodeFeatures, nodes[id],
+			&resultSize, nullptr));
+		std::vector<KylaUuid> featureIds;
+		featureIds.resize (resultSize / sizeof (KylaUuid));
+		KYLA_CHECKED_CALL (installer->QueryFeatureTreeProperty (installer, source,
+			kylaFeatureTreeProperty_NodeFeatures, nodes[id],
+			&resultSize, featureIds.data ()));
+		for (const auto& feature : featureIds) {
+			std::cout << ToString (kyla::Uuid{ feature.bytes }) << std::endl;
+		}
 	}
 
 	installer->CloseRepository (installer, source);
@@ -578,6 +660,8 @@ int main (int argc, char* argv [])
 			return QueryRepository (options, vm);
 		} else if (cmd == "query-feature") {
 			return QueryFeature (options, vm);
+		} else if (cmd == "query-feature-tree") {
+			return QueryFeatureTree (options, vm);
 		} else if (cmd == "install" || cmd == "configure") {
 			return ConfigureOrInstall (cmd, options, vm);
 		} else {

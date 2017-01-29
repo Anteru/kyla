@@ -131,6 +131,32 @@ enum class RepairResult
 	Restored
 };
 
+struct FeatureTreeNode
+{
+	FeatureTreeNode* parent = nullptr;
+	
+	std::string name;
+	std::string description;
+
+	Uuid* featureIds;
+	int featureIdCount;
+};
+
+class FeatureTree final
+{
+public:
+	std::vector<std::unique_ptr<FeatureTreeNode>> nodes;
+
+	Uuid* SetFeatureIds (const ArrayRef<Uuid>& ids)
+	{
+		featureIds_.assign (ids.begin (), ids.end ());
+		return featureIds_.data ();
+	}
+
+private:
+	std::vector<Uuid> featureIds_;
+};
+
 struct Repository
 {
 	Repository () = default;
@@ -177,6 +203,8 @@ struct Repository
 
 	std::vector<Dependency> GetFeatureDependencies (const Uuid& featureId);
 
+	FeatureTree GetFeatureTree ();
+
 	Sql::Database& GetDatabase ();
 
 	bool IsEncrypted ();
@@ -200,6 +228,7 @@ private:
 	virtual std::string GetDecryptionKeyImpl () const = 0;
 	virtual Sql::Database& GetDatabaseImpl () = 0;
 	virtual std::vector<Dependency> GetFeatureDependenciesImpl (const Uuid& featureId) = 0;
+	virtual FeatureTree GetFeatureTreeImpl () = 0;
 };
 
 std::unique_ptr<Repository> OpenRepository (const char* path,

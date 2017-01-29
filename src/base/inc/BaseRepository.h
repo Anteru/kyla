@@ -35,6 +35,8 @@ private:
 		ExecutionContext& context) override;
 	std::vector<Dependency> GetFeatureDependenciesImpl (const Uuid& featureId) override;
 
+	FeatureTree GetFeatureTreeImpl () override;
+
 protected:
 	std::string key_;
 };

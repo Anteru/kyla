@@ -78,6 +78,13 @@ typedef struct KylaRepositoryImpl* KylaSourceRepository;
 typedef struct KylaRepositoryImpl* KylaTargetRepository;
 typedef struct KylaRepositoryImpl* KylaRepository;
 
+struct KylaFeatureTreeNode
+{
+	const struct KylaFeatureTreeNode* parent;
+	const char* name;
+	const char* description;
+};
+
 enum kylaRepositoryOption
 {
 	/**
@@ -170,6 +177,23 @@ enum kylaFeatureProperty
 	kylaFeatureProperty_Dependencies = 2
 };
 
+enum kylaFeatureTreeProperty
+{
+	/**
+	Returns all nodes in the feature tree.
+
+	The result is a list of kylaFeatureTreeNode instances
+	*/
+	kylaFeatureTreeProperty_Nodes = 1,
+
+	/**
+	Returns all features associated with a feature tree node.
+
+	The result is a list of tightly packed KylaUuid instances
+	*/
+	kylaFeatureTreeProperty_NodeFeatures = 2
+};
+
 struct KylaInstaller
 {
 	/**
@@ -245,7 +269,6 @@ struct KylaInstaller
 		size_t* resultSize,
 		void* result);
 
-
 	/**
 	Set a repository property.
 
@@ -277,6 +300,17 @@ struct KylaInstaller
 		int propertyId,
 		size_t* resultSize,
 		void* result);
+
+	/**
+	Query the feature tree.
+
+	@since 2.0
+	*/
+	int (*QueryFeatureTreeProperty)(KylaInstaller* installer,
+		KylaSourceRepository repository,
+		int propertyId,
+		const void* object,
+		size_t* resultSize, void* result);
 
 	/**
 	Execute an action on the target repository.

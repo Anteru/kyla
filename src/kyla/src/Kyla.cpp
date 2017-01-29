@@ -15,6 +15,8 @@ details.
 
 #include "Log.h"
 
+#include <unordered_map>
+
 #define KYLA_C_API_BEGIN() try {
 #define KYLA_C_API_END() } catch (const kyla::RuntimeException& e) {    	  \
 		if (installer) {													  \
@@ -32,6 +34,13 @@ details.
 			return kylaResult_Error;										  \
 	}
 
+namespace {
+struct KylaFeatureTreeNodeInternal : public KylaFeatureTreeNode
+{
+	kyla::FeatureTreeNode* node = nullptr;
+};
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 struct KylaRepositoryImpl
 {
@@ -44,6 +53,12 @@ struct KylaRepositoryImpl
 
 	kyla::Path path;
 	int options = 0;
+
+	// This is lazily loaded for repositories, and required to link
+	// to the C API feature tree - the data is stored in the feature
+	// tree, the C data structure corresponds to the featureTreeNodes
+	std::unique_ptr<kyla::FeatureTree> featureTree;
+	std::vector<std::unique_ptr<KylaFeatureTreeNodeInternal>> featureTreeNodes;
 };
 
 namespace {
@@ -84,7 +99,13 @@ struct KylaInstaller_2_0
 		struct KylaUuid id,
 		int propertyId,
 		size_t* resultSize,
-		void* result);
+		void* result);	
+	
+	int (*QueryFeatureTreeProperty)(KylaInstaller* installer,
+		KylaSourceRepository repository,
+		int propertyId,
+		const void* object,
+		size_t* resultSize, void* result);
 
 	int (*Execute)(KylaInstaller* installer, kylaAction action,
 		KylaTargetRepository target, KylaSourceRepository source,
@@ -737,6 +758,94 @@ int kylaSetValidationCallback_2_0 (KylaInstaller* installer,
 
 	KYLA_C_API_END ()
 };
+
+///////////////////////////////////////////////////////////////////////////////
+int kylaQueryFeatureTreeProperty_2_0 (KylaInstaller* installer,
+	KylaSourceRepository repository,
+	int propertyId,
+	const void* object,
+	size_t* resultSize, void* result)
+{
+	KYLA_C_API_BEGIN ()
+
+	if (installer == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if (repository == nullptr) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	if (repository->repositoryType != KylaRepositoryImpl::RepositoryType::Source) {
+		return kylaResult_ErrorInvalidArgument;
+	}
+
+	auto internal = GetInternalInstaller (installer);
+
+	if (!repository->featureTree) {
+		repository->featureTree = std::make_unique<kyla::FeatureTree> (repository->p->GetFeatureTree ());
+
+		std::unordered_map<kyla::FeatureTreeNode*, size_t> nodeToIndex;
+
+		// Create the C API feature tree
+		for (auto& node : repository->featureTree->nodes) {
+			KylaFeatureTreeNodeInternal kftNode = {};
+			kftNode.description = node->description.data ();
+			kftNode.name = node->name.data ();
+			kftNode.node = node.get ();
+
+			nodeToIndex[node.get ()] = repository->featureTreeNodes.size ();
+			repository->featureTreeNodes.emplace_back (
+				std::make_unique<KylaFeatureTreeNodeInternal> (kftNode));
+		}
+
+		// second pass to link parents
+		for (auto& node : repository->featureTree->nodes) {
+			if (node->parent) {
+				repository->featureTreeNodes[nodeToIndex.find (node.get ())->second]->parent =
+					repository->featureTreeNodes[nodeToIndex.find (node->parent)->second].get ();
+			}
+		}
+	}
+
+	switch (propertyId) {
+	case kylaFeatureTreeProperty_Nodes:
+	{
+		std::vector<KylaFeatureTreeNode*> pointers;
+		for (auto& node : repository->featureTreeNodes) {
+			pointers.push_back (node.get ());
+		}
+
+		return KylaGet (pointers, resultSize, result, *internal->log,
+			"kylaQueryFeatureTreeProperty");
+	}
+
+	case kylaFeatureTreeProperty_NodeFeatures:
+	{
+		if (object == nullptr) {
+			return kylaResult_ErrorInvalidArgument;
+		}
+
+		auto node = static_cast<const KylaFeatureTreeNodeInternal*> (object);
+		auto internalNode = node->node;
+
+		std::vector<KylaUuid> uuids;
+		uuids.reserve (internalNode->featureIdCount);
+
+		for (int i = 0; i < internalNode->featureIdCount; ++i) {
+			KylaUuid uuid;
+			::memcpy (uuid.bytes, internalNode->featureIds[i].GetData (), 16);
+			uuids.push_back (uuid);
+		}
+
+		return KylaGet (uuids, resultSize, result, *internal->log, "kylaQueryFeatureTreeProperty");
+	}
+	}
+
+	return kylaResult_Ok;
+
+	KYLA_C_API_END ()
+}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -778,6 +887,7 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** pInstaller)
 		installer->SetLogCallback = kylaSetLogCallback_2_0;
 		installer->SetProgressCallback = kylaSetProgressCallback_2_0;
 		installer->SetValidationCallback = kylaSetValidationCallback_2_0;
+		installer->QueryFeatureTreeProperty = kylaQueryFeatureTreeProperty_2_0;
 		
 		*reinterpret_cast<void**>(pInstaller) = installer;
 

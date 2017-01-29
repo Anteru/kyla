@@ -79,6 +79,12 @@ Repository::GetFeatureDependencies (const Uuid& featureId)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+FeatureTree Repository::GetFeatureTree ()
+{
+	return GetFeatureTreeImpl ();
+}
+
+///////////////////////////////////////////////////////////////////////////////
 std::unique_ptr<Repository> OpenRepository (const char* path,
 	const bool allowWrite)
 {
