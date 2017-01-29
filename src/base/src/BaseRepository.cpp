@@ -114,7 +114,7 @@ FeatureTree BaseRepository::GetFeatureTreeImpl ()
 
 	// We need two steps, first we populate all nodes, then we link them
 	auto getNodesQuery = GetDatabase ().Prepare ("SELECT Id, Name, Description "
-		"FROM ui_feature_tree_nodes;");
+		"FROM ui_feature_tree_nodes ORDER BY Id;");
 
 	while (getNodesQuery.Step ()) {
 		auto node = std::make_unique<FeatureTreeNode> ();

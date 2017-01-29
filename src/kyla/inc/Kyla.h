@@ -182,14 +182,16 @@ enum kylaFeatureTreeProperty
 	/**
 	Returns all nodes in the feature tree.
 
-	The result is a list of kylaFeatureTreeNode instances
+	The result is an array of kylaFeatureTreeNode pointers. The list order
+	is guaranteed to stay the same for one source repository.
 	*/
 	kylaFeatureTreeProperty_Nodes = 1,
 
 	/**
 	Returns all features associated with a feature tree node.
 
-	The result is a list of tightly packed KylaUuid instances
+	The result is a list of tightly packed KylaUuid instances. The feature
+	tree node must be passed in as the object into the query function.
 	*/
 	kylaFeatureTreeProperty_NodeFeatures = 2
 };
@@ -273,7 +275,10 @@ struct KylaInstaller
 	Set a repository property.
 
 	The propertyId must be one of enumeration values from
-	kylaRepositoryProperty.
+	kylaRepositoryProperty. If resultSize is provided, the size of the result
+	is written into it. If result is provided, the result is written into it.
+	If result is not null, resultSize must be set to the size of the buffer
+	result points to.
 
 	@since 2.0
 	*/
@@ -302,7 +307,13 @@ struct KylaInstaller
 		void* result);
 
 	/**
-	Query the feature tree.
+	Query the feature tree.	
+	
+	The propertyId must be one of enumeration values from
+	kylaFeatureTreeProperty. If resultSize is provided, the size of the result
+	is written into it. If result is provided, the result is written into it.
+	If result is not null, resultSize must be set to the size of the buffer
+	result points to.
 
 	@since 2.0
 	*/
