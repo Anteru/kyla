@@ -16,7 +16,16 @@ CREATE TABLE feature_dependencies (
 	FOREIGN KEY(TargetId) REFERENCES features(Id)
 );
 
-CREATE  VIEW feature_dependencies_with_uuid AS
+CREATE VIEW feature_fs_contents_size AS 
+	SELECT 
+		features.Uuid, 
+		SUM(Size) AS Size
+	FROM fs_contents 
+		JOIN fs_files ON fs_contents.Id=fs_files.ContentID 
+		JOIN features ON fs_files.FeatureId=features.Id
+	GROUP BY features.Id;
+
+CREATE VIEW feature_dependencies_with_uuid AS
 	SELECT
 		source_features.Uuid AS SourceUuid,
 		target_features.Uuid AS TargetUuid,

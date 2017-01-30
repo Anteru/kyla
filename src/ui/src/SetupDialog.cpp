@@ -198,7 +198,7 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 
 		if (totalSize > 0) {
 			ui->requiredDiskSpaceValue->setText (tr("Required disk space: %1")
-				.arg (FormatMemorySize (totalSize, 3, 0.1f)));
+				.arg (FormatMemorySize (totalSize, 4, 0.1f)));
 		} else {
 			ui->requiredDiskSpaceValue->setText (tr ("No features selected"));
 		}

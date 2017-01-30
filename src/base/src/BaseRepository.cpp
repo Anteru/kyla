@@ -63,11 +63,7 @@ std::string BaseRepository::GetDecryptionKeyImpl () const
 int64_t BaseRepository::GetFeatureSizeImpl (const Uuid& id)
 {
 	static const char* querySql =
-		"SELECT SUM(fs_contents.size) "
-		"FROM file_sets "
-		"INNER JOIN fs_files ON features.Id = fs_files.FeatureId "
-		"INNER JOIN fs_contents ON fs_contents.Id = files.ContentId "
-		"WHERE features.Uuid = ?";
+		"SELECT Size FROM feature_fs_contents_size WHERE Uuid=?;";
 
 	auto query = GetDatabase ().Prepare (querySql);
 	query.BindArguments (id);
