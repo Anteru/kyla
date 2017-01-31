@@ -101,7 +101,7 @@ struct KylaInstaller_2_0
 		size_t* resultSize,
 		void* result);	
 	
-	int (*QueryFeatureTreeProperty)(KylaInstaller* installer,
+	int (*GetFeatureTreeProperty)(KylaInstaller* installer,
 		KylaSourceRepository repository,
 		int propertyId,
 		const void* object,
@@ -760,7 +760,7 @@ int kylaSetValidationCallback_2_0 (KylaInstaller* installer,
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaQueryFeatureTreeProperty_2_0 (KylaInstaller* installer,
+int kylaGetFeatureTreeProperty_2_0 (KylaInstaller* installer,
 	KylaSourceRepository repository,
 	int propertyId,
 	const void* object,
@@ -817,7 +817,7 @@ int kylaQueryFeatureTreeProperty_2_0 (KylaInstaller* installer,
 		}
 
 		return KylaGet (pointers, resultSize, result, *internal->log,
-			"kylaQueryFeatureTreeProperty");
+			"kylaGetFeatureTreeProperty");
 	}
 
 	case kylaFeatureTreeProperty_NodeFeatures:
@@ -838,7 +838,7 @@ int kylaQueryFeatureTreeProperty_2_0 (KylaInstaller* installer,
 			uuids.push_back (uuid);
 		}
 
-		return KylaGet (uuids, resultSize, result, *internal->log, "kylaQueryFeatureTreeProperty");
+		return KylaGet (uuids, resultSize, result, *internal->log, "kylaGetFeatureTreeProperty");
 	}
 	}
 
@@ -887,7 +887,7 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** pInstaller)
 		installer->SetLogCallback = kylaSetLogCallback_2_0;
 		installer->SetProgressCallback = kylaSetProgressCallback_2_0;
 		installer->SetValidationCallback = kylaSetValidationCallback_2_0;
-		installer->QueryFeatureTreeProperty = kylaQueryFeatureTreeProperty_2_0;
+		installer->GetFeatureTreeProperty = kylaGetFeatureTreeProperty_2_0;
 		
 		*reinterpret_cast<void**>(pInstaller) = installer;
 

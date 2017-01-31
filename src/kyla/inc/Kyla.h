@@ -307,7 +307,7 @@ struct KylaInstaller
 		void* result);
 
 	/**
-	Query the feature tree.	
+	Get a feature tree property.	
 	
 	The propertyId must be one of enumeration values from
 	kylaFeatureTreeProperty. If resultSize is provided, the size of the result
@@ -317,7 +317,7 @@ struct KylaInstaller
 
 	@since 2.0
 	*/
-	int (*QueryFeatureTreeProperty)(KylaInstaller* installer,
+	int (*GetFeatureTreeProperty)(KylaInstaller* installer,
 		KylaSourceRepository repository,
 		int propertyId,
 		const void* object,

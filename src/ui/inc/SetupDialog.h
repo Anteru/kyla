@@ -15,6 +15,8 @@ details.
 
 #include "SetupContext.h"
 
+class QTreeWidgetItem;
+
 namespace Ui {
 class SetupDialog;
 }
@@ -63,6 +65,7 @@ private:
 	Ui::SetupDialog *ui;
 	SetupContext* context_;
 	InstallThread* installThread_ = nullptr;
+	std::vector<QTreeWidgetItem*> featureTreeItems_;
 };
 
 #endif // STARTDIALOG_H

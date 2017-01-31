@@ -14,19 +14,21 @@ details.
 #include <QMessageBox>
 
 #include <vector>
+#include <unordered_map>
 
 namespace {
 ///////////////////////////////////////////////////////////////////////////////
-class FeatureListItem : public QListWidgetItem
+class FeatureTreeItem : public QTreeWidgetItem
 {
 public:
-	FeatureListItem (const KylaUuid id, const std::int64_t size, const char* description)
-	: QListWidgetItem (description)
-	, id_ (id)
+	FeatureTreeItem (const std::vector<KylaUuid>& ids, 
+		const std::int64_t size, const char* description)
+		: QTreeWidgetItem (QStringList{ description })
+	, ids_ (ids)
 	, size_ (size)
 	{
 		this->setFlags (Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-		this->setCheckState (Qt::Unchecked);
+		this->setCheckState (0, Qt::Unchecked);
 	}
 
 	std::int64_t GetSize () const
@@ -34,13 +36,13 @@ public:
 		return size_;
 	}
 
-	const KylaUuid& GetId () const
+	const std::vector<KylaUuid>& GetIds () const
 	{
-		return id_;
+		return ids_;
 	}
 
 private:
-	KylaUuid id_;
+	std::vector<KylaUuid> ids_;
 	std::int64_t size_;
 };
 
@@ -184,14 +186,13 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 		*/
 	});
 
-	connect (ui->featureSelection, &QListWidget::itemChanged,
+	connect (ui->featureSelection, &QTreeWidget::itemChanged,
 		[=]() -> void {
 		std::int64_t totalSize = 0;
+		for (auto& treeItem : featureTreeItems_) {
+			auto item = static_cast<FeatureTreeItem*> (treeItem);
 
-		for (int i = 0; i < ui->featureSelection->count (); ++i) {
-			auto item = static_cast<FeatureListItem*> (ui->featureSelection->item (i));
-
-			if (item->checkState () == Qt::Checked) {
+			if (item->checkState (0) == Qt::Checked) {
 				totalSize += item->GetSize ();
 			}
 		}
@@ -208,26 +209,73 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 	installer->GetRepositoryProperty (installer, sourceRepository,
 		kylaRepositoryProperty_AvailableFeatures, &resultSize, nullptr);
 
-	std::vector<KylaUuid> features;
-	features.resize (resultSize / sizeof (KylaUuid));
-	installer->GetRepositoryProperty (installer, sourceRepository,
-		kylaRepositoryProperty_AvailableFeatures, &resultSize, features.data ());
-
-	for (const auto& feature : features) {
-		std::int64_t featureSize = 0;
-		std::size_t featureResultSize = sizeof (featureSize);
-
-		installer->GetFeatureProperty (installer, sourceRepository,
-			feature, kylaFeatureProperty_Size,
-			&featureResultSize, &featureSize);
-
-		auto item = new FeatureListItem (feature,
-			featureSize, "<missing name>");
-		ui->featureSelection->addItem (item);
-		item->setCheckState (Qt::Checked);
+	std::vector<const KylaFeatureTreeNode*> nodes;
+	{
+		size_t resultSize;
+		installer->GetFeatureTreeProperty (installer, sourceRepository,
+			kylaFeatureTreeProperty_Nodes, nullptr,
+			&resultSize, nullptr);
+		nodes.resize (resultSize / sizeof (const KylaFeatureTreeNode*));
+		installer->GetFeatureTreeProperty (installer, sourceRepository,
+			kylaFeatureTreeProperty_Nodes, nullptr,
+			&resultSize, nodes.data ());
 	}
 
-	ui->featureSelection->sortItems ();
+	// We convert the feature tree into tree nodes in two passes - first,
+	// we create the nodes, then, we link them to their parents
+	// Every node which ends up without a parent is then added to the widget
+	// Adding works the reverse way (we add to the parent), so we maintain
+	// a list mapping of KylaFeatureTreeNode* -> internal Node* pointers
+
+	featureTreeItems_.clear ();
+
+	std::unordered_map<const KylaFeatureTreeNode*, FeatureTreeItem*> treeToItem;
+
+	for (const auto& node : nodes) {
+		std::vector<KylaUuid> featureIds;
+		{
+			size_t resultSize;
+			installer->GetFeatureTreeProperty (installer, sourceRepository,
+				kylaFeatureTreeProperty_NodeFeatures, node,
+				&resultSize, nullptr);
+			featureIds.resize (resultSize / sizeof (KylaUuid));
+			installer->GetFeatureTreeProperty (installer, sourceRepository,
+				kylaFeatureTreeProperty_NodeFeatures, node,
+				&resultSize, featureIds.data ());
+		}
+
+		int64_t size = 0;
+
+		for (const auto& featureId : featureIds) {
+			size_t resultSize = sizeof (std::int64_t);
+			std::int64_t featureSize = 0;
+
+			installer->GetFeatureProperty (installer, sourceRepository,
+				featureId, kylaFeatureProperty_Size, &resultSize, &featureSize);
+
+			size += featureSize;
+		}
+
+		auto item = new FeatureTreeItem (featureIds, size, node->name);
+		featureTreeItems_.push_back (item);
+		treeToItem[node] = item;
+	}
+
+	QList<QTreeWidgetItem*> roots;
+
+	for (const auto& node : nodes) {
+		if (node->parent) {
+			treeToItem.find (node->parent)->second->addChild (
+				treeToItem.find (node)->second
+			);
+		} else {
+			roots.push_back (treeToItem.find (node)->second);
+		}
+	}
+
+	for (auto& root : roots) {
+		ui->featureSelection->addTopLevelItems (roots);
+	}
 
 	connect (ui->startInstallationButton, &QPushButton::clicked,
 		[=] () -> void {
@@ -279,11 +327,12 @@ std::vector<KylaUuid> SetupDialog::GetSelectedFeatures () const
 {
 	std::vector<KylaUuid> result;
 
-	for (int i = 0; i < ui->featureSelection->count (); ++i) {
-		auto item = static_cast<FeatureListItem*> (ui->featureSelection->item (i));
+	for (auto treeItem : featureTreeItems_) {
+		auto item = static_cast<FeatureTreeItem*> (treeItem);
 
-		if (item->checkState () == Qt::Checked) {
-			result.push_back (item->GetId ());
+		if (item->checkState (0) == Qt::Checked) {
+			result.insert (result.end (), 
+				item->GetIds ().begin (), item->GetIds().end());
 		}
 	}
 
