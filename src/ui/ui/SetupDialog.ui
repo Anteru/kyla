@@ -13,38 +13,51 @@
   <property name="windowTitle">
    <string>Setup</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout_5">
+  <layout class="QVBoxLayout" name="verticalLayout_4">
    <item>
     <layout class="QVBoxLayout" name="verticalLayout">
      <item>
       <widget class="QLabel" name="selectFeaturesLabel">
        <property name="text">
-        <string>Selected features</string>
+        <string>Select features to install</string>
        </property>
       </widget>
      </item>
      <item>
-      <widget class="QTreeWidget" name="featureSelection">
-       <attribute name="headerVisible">
-        <bool>false</bool>
-       </attribute>
-       <column>
-        <property name="text">
-         <string notr="true">1</string>
-        </property>
-       </column>
-      </widget>
-     </item>
-     <item>
-      <layout class="QHBoxLayout" name="horizontalLayout_3">
+      <layout class="QHBoxLayout" name="horizontalLayout_3" stretch="4,1">
        <item>
-        <widget class="QLabel" name="requiredDiskSpaceValue">
+        <widget class="QTreeWidget" name="featureSelection">
+         <attribute name="headerVisible">
+          <bool>false</bool>
+         </attribute>
+         <column>
+          <property name="text">
+           <string notr="true">1</string>
+          </property>
+         </column>
+        </widget>
+       </item>
+       <item>
+        <widget class="QLabel" name="featureDescription">
          <property name="text">
-          <string>No features selected</string>
+          <string>Select a feature to read its description.</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
          </property>
         </widget>
        </item>
       </layout>
+     </item>
+     <item>
+      <widget class="QLabel" name="requiredDiskSpaceValue">
+       <property name="text">
+        <string>No features selected</string>
+       </property>
+      </widget>
      </item>
     </layout>
    </item>

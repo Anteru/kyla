@@ -22,10 +22,11 @@ class FeatureTreeItem : public QTreeWidgetItem
 {
 public:
 	FeatureTreeItem (const std::vector<KylaUuid>& ids, 
-		const std::int64_t size, const char* description)
-		: QTreeWidgetItem (QStringList{ description })
+		const std::int64_t size, const char* name, const char* description)
+		: QTreeWidgetItem (QStringList{ name })
 	, ids_ (ids)
 	, size_ (size)
+	, description_ (description)
 	{
 		this->setFlags (Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
 		this->setCheckState (0, Qt::Unchecked);
@@ -41,9 +42,15 @@ public:
 		return ids_;
 	}
 
+	const QString& GetDescription () const
+	{
+		return description_;
+	}
+
 private:
 	std::vector<KylaUuid> ids_;
 	std::int64_t size_;
+	QString description_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -205,6 +212,16 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 		}
 	});
 
+	connect (ui->featureSelection, &QTreeWidget::currentItemChanged,
+		[=](QTreeWidgetItem* newItem, QTreeWidgetItem*) -> void {
+		if (newItem) {
+			auto item = static_cast<const FeatureTreeItem*> (newItem);
+			if (!item->GetDescription ().isEmpty ()) {
+				ui->featureDescription->setText (item->GetDescription ());
+			}
+		}
+	});
+
 	std::size_t resultSize = 0;
 	installer->GetRepositoryProperty (installer, sourceRepository,
 		kylaRepositoryProperty_AvailableFeatures, &resultSize, nullptr);
@@ -256,7 +273,7 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 			size += featureSize;
 		}
 
-		auto item = new FeatureTreeItem (featureIds, size, node->name);
+		auto item = new FeatureTreeItem (featureIds, size, node->name, node->description);
 		featureTreeItems_.push_back (item);
 		treeToItem[node] = item;
 	}

@@ -785,10 +785,10 @@ int kylaGetFeatureTreeProperty_2_0 (KylaInstaller* installer,
 	if (!repository->featureTree) {
 		repository->featureTree = std::make_unique<kyla::FeatureTree> (repository->p->GetFeatureTree ());
 
+		// Maps from the internal nodes to the C API nodes
 		std::unordered_map<kyla::FeatureTreeNode*, size_t> nodeToIndex;
 
-		// Create the C API feature tree
-		for (auto& node : repository->featureTree->nodes) {
+		for (const auto& node : repository->featureTree->nodes) {
 			KylaFeatureTreeNodeInternal kftNode = {};
 			kftNode.description = node->description.data ();
 			kftNode.name = node->name.data ();

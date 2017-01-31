@@ -162,8 +162,8 @@ class RepositoryBuilder:
 		self.__filePackages.append (p)
 		return p
 
-	def AddFeatureTreeNode (self, name):
-		n = FeatureTreeNode (name)
+	def AddFeatureTreeNode (self, name, description=None):
+		n = FeatureTreeNode (name, description)
 		self.__featureTreeNodes.append (n)
 		return n
 
