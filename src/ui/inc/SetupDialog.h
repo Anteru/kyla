@@ -13,9 +13,9 @@ details.
 #include <QDialog>
 #include <QThread>
 
-#include "SetupContext.h"
+#include <memory>
 
-class QTreeWidgetItem;
+#include "SetupContext.h"
 
 namespace Ui {
 class SetupDialog;
@@ -62,10 +62,18 @@ public slots:
 	void InstallationFinished (const bool success);
 
 private:
+	void UpdateRequiredDiskSpace ();
+
 	Ui::SetupDialog *ui;
 	SetupContext* context_;
 	InstallThread* installThread_ = nullptr;
-	std::vector<QTreeWidgetItem*> featureTreeItems_;
+	std::int64_t requiredDiskSpace_ = 0;
+
+public:
+	class FeatureTreeNode;
+
+private:
+	std::vector<std::unique_ptr<FeatureTreeNode>> featureTreeNodes_;
 };
 
 #endif // STARTDIALOG_H

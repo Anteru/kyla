@@ -16,42 +16,16 @@ details.
 #include <vector>
 #include <unordered_map>
 
+#include <QGridLayout>
+#include <QCheckBox>
+
+#include <functional>
+
+#include <QTreeView>
+#include <QTreeWidget>
+
 namespace {
-///////////////////////////////////////////////////////////////////////////////
-class FeatureTreeItem : public QTreeWidgetItem
-{
-public:
-	FeatureTreeItem (const std::vector<KylaUuid>& ids, 
-		const std::int64_t size, const char* name, const char* description)
-		: QTreeWidgetItem (QStringList{ name })
-	, ids_ (ids)
-	, size_ (size)
-	, description_ (description)
-	{
-		this->setFlags (Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-		this->setCheckState (0, Qt::Unchecked);
-	}
-
-	std::int64_t GetSize () const
-	{
-		return size_;
-	}
-
-	const std::vector<KylaUuid>& GetIds () const
-	{
-		return ids_;
-	}
-
-	const QString& GetDescription () const
-	{
-		return description_;
-	}
-
-private:
-	std::vector<KylaUuid> ids_;
-	std::int64_t size_;
-	QString description_;
-};
+using FeatureSelectionChangedCallback = std::function<void (const SetupDialog::FeatureTreeNode* item)>;
 
 ///////////////////////////////////////////////////////////////////////////////
 QString FormatMemorySize (const std::int64_t size, const int precision, const float slack)
@@ -84,6 +58,183 @@ QString FormatMemorySize (const std::int64_t size, const int precision, const fl
 		.arg (scale [unit].suffix);
 }
 }
+
+///////////////////////////////////////////////////////////////////////////////
+class SetupDialog::FeatureTreeNode
+{
+public:
+	FeatureTreeNode (const std::vector<KylaUuid>& ids,
+		const std::int64_t size,
+		const char* name, const char* description,
+		FeatureSelectionChangedCallback featureSelectionCallback)
+		: ids_ (ids)
+		, size_ (size)
+		, name_ (name)
+		, description_ (description)
+		, featureSelectionCallback_ (featureSelectionCallback)
+	{
+	}
+
+	QWidget* CreateWidget ()
+	{
+		auto widget = new QWidget;
+		auto layout = new QGridLayout;
+
+		installCheckBox_ = new QCheckBox;
+		layout->addWidget (installCheckBox_, 0, 0, Qt::AlignHCenter);
+		installCheckBox_->setChecked (selected_);
+
+		connect (installCheckBox_, &QCheckBox::stateChanged,
+			[&](int state) -> void {
+			selected_ = (state == Qt::Checked);
+			featureSelectionCallback_ (this);
+		});
+
+		auto mainLabel = new QLabel;
+		auto font = mainLabel->font ();
+		font.setPointSize (font.pointSize () * 1.4);
+		font.setBold (true);
+		mainLabel->setFont (font);
+		mainLabel->setText (name_);
+		mainLabel->setAlignment (Qt::AlignLeft);
+		layout->addWidget (mainLabel, 0, 1);
+
+		auto descriptionLabel = new QLabel;
+		descriptionLabel->setText (description_);
+		descriptionLabel->setWordWrap (true);
+		descriptionLabel->setAlignment (Qt::AlignLeft);
+		descriptionLabel->setSizePolicy (QSizePolicy::MinimumExpanding, QSizePolicy::Maximum);
+		layout->addWidget (descriptionLabel, 1, 1);
+
+		// If we got children, they'll be part of the "detail area"
+		if (!children_.empty ()) {
+			auto treeWidget = new QTreeWidget;
+			treeWidget->setHeaderHidden (true);
+			treeWidget->setRootIsDecorated (false);
+			treeWidget->setFrameShape (QFrame::NoFrame);
+
+			int totalHeight = 0;
+
+			for (auto& child : children_) {
+				auto item = child->CreateTreeWidgetItem ();
+				treeWidget->addTopLevelItem (item);
+				totalHeight += treeWidget->visualItemRect (item).height ();
+			}
+
+			int marginTop, marginBottom;
+			treeWidget->getContentsMargins (nullptr, &marginTop, nullptr, &marginBottom);
+			treeWidget->setContentsMargins (0, marginTop, 0, marginBottom);
+			totalHeight += marginTop;
+			totalHeight += marginBottom;
+			totalHeight += 8;
+			treeWidget->setMaximumHeight (totalHeight);
+
+			selectedSubfeatures_ = static_cast<int> (children_.size ());
+			totalSubfeatures_ = CountChildren (this);
+
+			connect (treeWidget, &QTreeWidget::itemChanged,
+				[&](QTreeWidgetItem* item, int) -> void {
+				auto featureTreeNode = reinterpret_cast<FeatureTreeNode*> (
+					item->data (0, Qt::UserRole).value<std::intptr_t> ());
+
+				featureTreeNode->selected_ = item->checkState (0) == Qt::Checked;
+				featureSelectionCallback_ (featureTreeNode);
+
+				if (item->checkState (0) == Qt::Checked) {
+					++selectedSubfeatures_;
+				} else {
+					--selectedSubfeatures_;
+				}
+
+				selectedSubfeaturesLabel_->setText (QString ("%1 of %2 subfeature(s) selected").arg (selectedSubfeatures_).arg (totalSubfeatures_));
+			});
+
+			treeWidget->setSizePolicy (QSizePolicy::MinimumExpanding, QSizePolicy::Maximum);
+			
+			selectedSubfeaturesLabel_ = new QLabel;
+			selectedSubfeaturesLabel_->setText (QString ("%1 of %2 subfeature(s) selected").arg (selectedSubfeatures_).arg (totalSubfeatures_));
+
+			layout->addWidget (selectedSubfeaturesLabel_, 2, 1);
+
+			layout->addWidget (treeWidget, 3, 1);
+		}
+
+		layout->setColumnStretch (1, 1);
+
+		widget->setSizePolicy (QSizePolicy::MinimumExpanding, 
+			QSizePolicy::Maximum);
+
+		widget->setLayout (layout);
+
+		return widget;
+	}
+
+private:
+	int CountChildren (FeatureTreeNode* node)
+	{
+		int result = static_cast<int> (node->children_.size ());
+		for (auto& child : node->children_) {
+			result += CountChildren (child);
+		}
+		return result;
+	}
+
+	QTreeWidgetItem* CreateTreeWidgetItem ()
+	{
+		auto result = new QTreeWidgetItem{ QStringList{ name_ } };
+		result->setFlags (Qt::ItemIsUserCheckable | Qt::ItemIsEnabled);
+		result->setCheckState (0, Qt::Checked);
+		QVariant value;
+		value.setValue (reinterpret_cast<std::intptr_t> (this));
+		result->setData (0, Qt::UserRole, value);
+
+		for (auto& child : children_) {
+			result->addChild (child->CreateTreeWidgetItem ());
+		}
+
+		return result;
+	}
+
+public:
+	void AddChild (FeatureTreeNode* child)
+	{
+		children_.push_back (child);
+		child->parent_ = this;
+	}
+
+	std::int64_t GetSize () const
+	{
+		return size_;
+	}
+
+	const std::vector<KylaUuid>& GetIds () const
+	{
+		return ids_;
+	}
+
+	const QString& GetDescription () const
+	{
+		return description_;
+	}
+
+	bool IsChecked () const
+	{
+		return selected_;
+	}
+
+private:
+	std::vector<KylaUuid> ids_;
+	std::int64_t size_;
+	QString name_, description_;
+	QCheckBox* installCheckBox_;
+	FeatureTreeNode* parent_ = nullptr;
+	std::vector<FeatureTreeNode*> children_;
+	bool selected_ = true;
+	FeatureSelectionChangedCallback featureSelectionCallback_;
+	int selectedSubfeatures_ = -1;
+	int totalSubfeatures_ = -1;
+	QLabel* selectedSubfeaturesLabel_ = nullptr;
+};
 
 ///////////////////////////////////////////////////////////////////////////////
 void InstallThread::run ()
@@ -154,6 +305,8 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 {
 	ui->setupUi(this);
 
+	ui->applicationName->setText (context->setupInfo["applicationName"].toString ());
+
 	connect(ui->selectDirectoryButton, &QPushButton::clicked,
 		[=]() -> void {
 		QFileDialog fd{this};
@@ -181,7 +334,6 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 	if (! isEncrypted) {
 		ui->passwordEdit->hide ();
 		ui->passwordLabel->hide ();
-		ui->passwordSplitter->hide ();
 	}
 	
 	connect (ui->passwordEdit, &QLineEdit::textChanged,
@@ -191,35 +343,6 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 		/*
 		///@TODO(minor) Handle encryption
 		*/
-	});
-
-	connect (ui->featureSelection, &QTreeWidget::itemChanged,
-		[=]() -> void {
-		std::int64_t totalSize = 0;
-		for (auto& treeItem : featureTreeItems_) {
-			auto item = static_cast<FeatureTreeItem*> (treeItem);
-
-			if (item->checkState (0) == Qt::Checked) {
-				totalSize += item->GetSize ();
-			}
-		}
-
-		if (totalSize > 0) {
-			ui->requiredDiskSpaceValue->setText (tr("Required disk space: %1")
-				.arg (FormatMemorySize (totalSize, 4, 0.1f)));
-		} else {
-			ui->requiredDiskSpaceValue->setText (tr ("No features selected"));
-		}
-	});
-
-	connect (ui->featureSelection, &QTreeWidget::currentItemChanged,
-		[=](QTreeWidgetItem* newItem, QTreeWidgetItem*) -> void {
-		if (newItem) {
-			auto item = static_cast<const FeatureTreeItem*> (newItem);
-			if (!item->GetDescription ().isEmpty ()) {
-				ui->featureDescription->setText (item->GetDescription ());
-			}
-		}
 	});
 
 	std::size_t resultSize = 0;
@@ -244,9 +367,29 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 	// Adding works the reverse way (we add to the parent), so we maintain
 	// a list mapping of KylaFeatureTreeNode* -> internal Node* pointers
 
-	featureTreeItems_.clear ();
+	featureTreeNodes_.clear ();
 
-	std::unordered_map<const KylaFeatureTreeNode*, FeatureTreeItem*> treeToItem;
+	std::unordered_map<const KylaFeatureTreeNode*, FeatureTreeNode*> treeToItem;
+
+	FeatureSelectionChangedCallback callback = [&](const FeatureTreeNode* item) -> void {
+		if (item->IsChecked ()) {
+			requiredDiskSpace_ += item->GetSize ();
+		} else {
+			requiredDiskSpace_ -= item->GetSize ();
+		}
+
+		UpdateRequiredDiskSpace ();
+
+		bool anyEnabled = false;
+		for (auto& featureTreeNode : featureTreeNodes_) {
+			if (featureTreeNode->IsChecked ()) {
+				anyEnabled = true;
+				break;
+			}
+		}
+
+		ui->startInstallationButton->setEnabled (anyEnabled);
+	};
 
 	for (const auto& node : nodes) {
 		std::vector<KylaUuid> featureIds;
@@ -273,26 +416,36 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 			size += featureSize;
 		}
 
-		auto item = new FeatureTreeItem (featureIds, size, node->name, node->description);
-		featureTreeItems_.push_back (item);
-		treeToItem[node] = item;
+		requiredDiskSpace_ += size;
+
+		auto ftNode = std::make_unique<FeatureTreeNode> (featureIds, size, node->name, node->description,
+			callback);
+		treeToItem[node] = ftNode.get ();
+		featureTreeNodes_.emplace_back (std::move (ftNode));
 	}
 
-	QList<QTreeWidgetItem*> roots;
+	UpdateRequiredDiskSpace ();
+
+	QList<FeatureTreeNode*> roots;
 
 	for (const auto& node : nodes) {
 		if (node->parent) {
-			treeToItem.find (node->parent)->second->addChild (
-				treeToItem.find (node)->second
-			);
+			treeToItem.find (node->parent)->second->AddChild (
+				treeToItem.find (node)->second);
 		} else {
 			roots.push_back (treeToItem.find (node)->second);
 		}
 	}
 
+	auto featuresLayout = new QVBoxLayout;
+	featuresLayout->setMargin (0);
+
 	for (auto& root : roots) {
-		ui->featureSelection->addTopLevelItems (roots);
+		featuresLayout->addWidget (root->CreateWidget ());
 	}
+
+	featuresLayout->setSpacing (0);
+	ui->featuresAreaContent->setLayout (featuresLayout);
 
 	connect (ui->startInstallationButton, &QPushButton::clicked,
 		[=] () -> void {
@@ -304,6 +457,17 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 			this, &SetupDialog::InstallationFinished);
 		installThread_->start ();
 	});
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void SetupDialog::UpdateRequiredDiskSpace ()
+{
+	if (requiredDiskSpace_ > 0) {
+		ui->requiredDiskSpaceValue->setText (tr ("Required disk space: %1")
+			.arg (FormatMemorySize (requiredDiskSpace_, 4, 0.1f)));
+	} else {
+		ui->requiredDiskSpaceValue->setText (tr ("No features selected"));
+	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -344,12 +508,10 @@ std::vector<KylaUuid> SetupDialog::GetSelectedFeatures () const
 {
 	std::vector<KylaUuid> result;
 
-	for (auto treeItem : featureTreeItems_) {
-		auto item = static_cast<FeatureTreeItem*> (treeItem);
-
-		if (item->checkState (0) == Qt::Checked) {
+	for (auto& featureNode : featureTreeNodes_) {
+		if (featureNode->IsChecked ()) {
 			result.insert (result.end (), 
-				item->GetIds ().begin (), item->GetIds().end());
+				featureNode->GetIds ().begin (), featureNode->GetIds().end());
 		}
 	}
 

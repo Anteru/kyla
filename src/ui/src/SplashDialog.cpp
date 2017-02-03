@@ -31,12 +31,12 @@ SplashDialog::SplashDialog (SetupContext* context, const QString& appName,
 	const auto setupInfoDocument = QJsonDocument::fromJson (
 		setupInfoFile.readAll ());
 
-	auto setupInfo = setupInfoDocument.object ();
+	context->setupInfo = setupInfoDocument.object ();
 
-	ui->productNameLabel->setText (setupInfo ["applicationName"].toString ());
+	ui->productNameLabel->setText (context->setupInfo ["applicationName"].toString ());
 
 	openSourceRepositoryThread_ = new OpenSourceRepositoryThread (context,
-		setupInfo ["repository"].toString ());
+		context->setupInfo ["repository"].toString ());
 
 	connect (openSourceRepositoryThread_, &OpenSourceRepositoryThread::RepositoryOpened,
 		this, &SplashDialog::OnRepositoryOpened);

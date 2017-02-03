@@ -14,6 +14,8 @@ details.
 #include <Kyla.h>
 #include <QThread>
 
+#include <QJsonObject>
+
 class SetupContext : public QObject
 {
 	Q_OBJECT
@@ -24,6 +26,8 @@ public:
 
 	KylaInstaller* installer = nullptr;
 	KylaSourceRepository sourceRepository = nullptr;
+
+	QJsonObject setupInfo;
 
 private:
 	QLibrary* kylaLib_ = nullptr;
