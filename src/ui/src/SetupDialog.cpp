@@ -24,6 +24,8 @@ details.
 #include <QTreeView>
 #include <QTreeWidget>
 
+#include <QDebug>
+
 namespace {
 using FeatureSelectionChangedCallback = std::function<void (const SetupDialog::FeatureTreeNode* item)>;
 
@@ -105,29 +107,20 @@ public:
 		descriptionLabel->setAlignment (Qt::AlignLeft);
 		descriptionLabel->setSizePolicy (QSizePolicy::MinimumExpanding, QSizePolicy::Maximum);
 		layout->addWidget (descriptionLabel, 1, 1);
-
+		
 		// If we got children, they'll be part of the "detail area"
 		if (!children_.empty ()) {
 			auto treeWidget = new QTreeWidget;
 			treeWidget->setHeaderHidden (true);
 			treeWidget->setRootIsDecorated (false);
 			treeWidget->setFrameShape (QFrame::NoFrame);
+			treeWidget->setSizeAdjustPolicy (QAbstractScrollArea::SizeAdjustPolicy::AdjustToContentsOnFirstShow);
 
 			int totalHeight = 0;
-
 			for (auto& child : children_) {
 				auto item = child->CreateTreeWidgetItem ();
 				treeWidget->addTopLevelItem (item);
-				totalHeight += treeWidget->visualItemRect (item).height ();
 			}
-
-			int marginTop, marginBottom;
-			treeWidget->getContentsMargins (nullptr, &marginTop, nullptr, &marginBottom);
-			treeWidget->setContentsMargins (0, marginTop, 0, marginBottom);
-			totalHeight += marginTop;
-			totalHeight += marginBottom;
-			totalHeight += 8;
-			treeWidget->setMaximumHeight (totalHeight);
 
 			selectedSubfeatures_ = static_cast<int> (children_.size ());
 			totalSubfeatures_ = CountChildren (this);
@@ -146,30 +139,32 @@ public:
 					--selectedSubfeatures_;
 				}
 
-				selectedSubfeaturesLabel_->setText (QString ("%1 of %2 subfeature(s) selected").arg (selectedSubfeatures_).arg (totalSubfeatures_));
+				UpdateSelectedSubfeaturesLabel ();
 			});
-
-			treeWidget->setSizePolicy (QSizePolicy::MinimumExpanding, QSizePolicy::Maximum);
 			
 			selectedSubfeaturesLabel_ = new QLabel;
-			selectedSubfeaturesLabel_->setText (QString ("%1 of %2 subfeature(s) selected").arg (selectedSubfeatures_).arg (totalSubfeatures_));
+			UpdateSelectedSubfeaturesLabel ();
+			selectedSubfeaturesLabel_->setSizePolicy (QSizePolicy::MinimumExpanding, QSizePolicy::Maximum);
 
 			layout->addWidget (selectedSubfeaturesLabel_, 2, 1);
-
 			layout->addWidget (treeWidget, 3, 1);
+
+			treeWidget_ = treeWidget;
 		}
 
 		layout->setColumnStretch (1, 1);
-
-		widget->setSizePolicy (QSizePolicy::MinimumExpanding, 
-			QSizePolicy::Maximum);
-
 		widget->setLayout (layout);
 
 		return widget;
 	}
 
 private:
+	void UpdateSelectedSubfeaturesLabel ()
+	{
+		selectedSubfeaturesLabel_->setText (QString ("%1 of %2 subfeature(s) selected")
+			.arg (selectedSubfeatures_).arg (totalSubfeatures_));
+	}
+
 	int CountChildren (FeatureTreeNode* node)
 	{
 		int result = static_cast<int> (node->children_.size ());
@@ -222,6 +217,14 @@ public:
 		return selected_;
 	}
 
+	void FixupWidgetSize ()
+	{
+		if (treeWidget_) {
+			treeWidget_->setMaximumHeight (treeWidget_->height ());
+			treeWidget_->setSizeAdjustPolicy (QAbstractScrollArea::SizeAdjustPolicy::AdjustIgnored);
+		}
+	}
+	
 private:
 	std::vector<KylaUuid> ids_;
 	std::int64_t size_;
@@ -234,6 +237,8 @@ private:
 	int selectedSubfeatures_ = -1;
 	int totalSubfeatures_ = -1;
 	QLabel* selectedSubfeaturesLabel_ = nullptr;
+
+	QTreeWidget* treeWidget_ = nullptr;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -298,29 +303,29 @@ void InstallThread::run ()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-SetupDialog::SetupDialog(SetupContext* context, QWidget *parent) 
-	: QDialog(parent)
-	, ui(new Ui::SetupDialog)
+SetupDialog::SetupDialog (SetupContext* context, QWidget *parent)
+	: QDialog (parent)
+	, ui (new Ui::SetupDialog)
 	, context_ (context)
 {
-	ui->setupUi(this);
+	ui->setupUi (this);
 
 	ui->applicationName->setText (context->setupInfo["applicationName"].toString ());
 
-	connect(ui->selectDirectoryButton, &QPushButton::clicked,
+	connect (ui->selectDirectoryButton, &QPushButton::clicked,
 		[=]() -> void {
-		QFileDialog fd{this};
-		fd.setOption(QFileDialog::ShowDirsOnly);
-		fd.setFileMode(QFileDialog::Directory);
-		if (fd.exec()) {
-			this->ui->targetDirectoryEdit->setText(fd.selectedFiles().first());
+		QFileDialog fd{ this };
+		fd.setOption (QFileDialog::ShowDirsOnly);
+		fd.setFileMode (QFileDialog::Directory);
+		if (fd.exec ()) {
+			this->ui->targetDirectoryEdit->setText (fd.selectedFiles ().first ());
 		}
 	});
 
-	connect(ui->targetDirectoryEdit, &QLineEdit::textChanged,
-			[=] () -> void {
-			ui->startInstallationButton->setEnabled(
-				! ui->targetDirectoryEdit->text ().isEmpty());
+	connect (ui->targetDirectoryEdit, &QLineEdit::textChanged,
+		[=]() -> void {
+		ui->startInstallationButton->setEnabled (
+			!ui->targetDirectoryEdit->text ().isEmpty ());
 	});
 
 	auto installer = context_->installer;
@@ -331,11 +336,11 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 	installer->GetRepositoryProperty (installer, sourceRepository,
 		kylaRepositoryProperty_IsEncrypted, &isEncryptedSize, &isEncrypted);
 
-	if (! isEncrypted) {
+	if (!isEncrypted) {
 		ui->passwordEdit->hide ();
 		ui->passwordLabel->hide ();
 	}
-	
+
 	connect (ui->passwordEdit, &QLineEdit::textChanged,
 		[=]() -> void {
 		std::string key = ui->passwordEdit->text ().toStdString ();
@@ -439,22 +444,52 @@ SetupDialog::SetupDialog(SetupContext* context, QWidget *parent)
 
 	auto featuresLayout = new QVBoxLayout;
 	featuresLayout->setMargin (0);
+	featuresLayout->setSpacing (0);
 
 	for (auto& root : roots) {
 		featuresLayout->addWidget (root->CreateWidget ());
 	}
 
-	featuresLayout->setSpacing (0);
+	featuresLayout->addSpacerItem (new QSpacerItem{ 0, 0, QSizePolicy::Expanding, QSizePolicy::Expanding });
+	
 	ui->featuresAreaContent->setLayout (featuresLayout);
+
+	this->show ();
+
+	for (auto& root : roots) {
+		root->FixupWidgetSize ();
+	}
+	
+	{
+		auto policy = ui->installationProgressLabel->sizePolicy ();
+		policy.setRetainSizeWhenHidden (true);
+		ui->installationProgressLabel->setSizePolicy (policy);
+		ui->installationProgressLabel->hide ();
+	}
+
+	{
+		auto policy = ui->progressBar->sizePolicy ();
+		policy.setRetainSizeWhenHidden (true);
+		ui->progressBar->setSizePolicy (policy);
+		ui->progressBar->hide ();
+	}
 
 	connect (ui->startInstallationButton, &QPushButton::clicked,
 		[=] () -> void {
 		ui->startInstallationButton->setEnabled (false);
+		ui->featuresAreaContent->setEnabled (false);
+		ui->selectDirectoryButton->setEnabled (false);
+		ui->targetDirectoryEdit->setReadOnly (true);
+
 		installThread_ = new InstallThread (this);
 		connect (installThread_, &InstallThread::ProgressChanged,
 			this, &SetupDialog::UpdateProgress);
 		connect (installThread_, &InstallThread::InstallationFinished,
 			this, &SetupDialog::InstallationFinished);
+
+		ui->progressBar->show ();
+		ui->installationProgressLabel->show ();
+
 		installThread_->start ();
 	});
 }
@@ -474,7 +509,6 @@ void SetupDialog::UpdateRequiredDiskSpace ()
 void SetupDialog::UpdateProgress (const int progress, const char* message,
 	const char* detail)
 {
-	ui->installationProgressLabel->setText (QString ("%1: %2").arg (message).arg (detail));
 	ui->progressBar->setValue (progress);
 }
 
