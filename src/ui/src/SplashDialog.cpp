@@ -62,7 +62,7 @@ void SplashDialog::OnRepositoryOpened (const bool success)
 	} else {
 		hide ();
 
-		SetupDialog setupDialog (context_, this);
+		SetupDialog setupDialog (context_);
 		setupDialog.exec ();
 	}
 }
