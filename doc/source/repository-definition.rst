@@ -8,73 +8,42 @@ Installer repositories are compiled by using ``kcl build``. This requires an Xml
 .. code-block:: xml
 
     <?xml version="1.0" ?>
-    <FileRepository>
-    	<Package>
-    		<Type>Packed</Type>
-    	</Package>
-    	<FileSets>
-    		<FileSet Id="5d195f63-f424-431f-b7c5-8d57cd32f57b">
-    			<File Source="application.exe" />
-    		</FileSet>
-    		<FileSet Id="c8bed51b-cbba-4699-953a-834930704d89">
-    			<File Source="plugin1.dll" />
-        		<File Source="plugin2.dll" />
-    		</FileSet>
-    	</FileSets>
-    </FileRepository>
+    <Repository>
+      <Features>
+        <Feature Id="7f9e0d24-1c82-49d3-86f9-47c0a7c984d5">
+          <Reference Id="c9a41343-bc90-4871-84bd-27f04aac4794"/>
+        </Feature>
+      </Features> 
+      <Files>
+        <Group Id="c9a41343-bc90-4871-84bd-27f04aac4794">
+          <File Source="A:\full\path\file.exe" Target="bin/file.exe"/>
+        </Group>
+        <Packages>
+          <Package Name="bin">
+            <Reference Id="c9a41343-bc90-4871-84bd-27f04aac4794"/>
+          </Package>
+        </Packages>
+      </Files>
+      <UI>
+        <FeatureTree>
+          <Node Description="Binary files." Name="Binaries">
+            <Reference Id="7f9e0d24-1c82-49d3-86f9-47c0a7c984d5"/>
+          </Node>
+        </FeatureTree>
+      </UI>
+    </Repository>
 
 Reference
 ---------
 
-* ``FileRepository`` is the root node and must be present in every repository definition.
-* ``Package`` within ``FileRepository`` provides meta-information about the package. It may contain two elements:
+The repository stores various objects which can be referenced. In general, anything which has an ``Id`` attribute can be referenced, and all references are done by adding a ``Reference`` node. Objects can be grouped by using a ``Group`` node, this makes it possible to reference many objects using a single ``Reference``.
 
-  * ``Type`` to specify the package type. The type must be either ``Packed`` and ``Loose``.
-  * ``ChunkSize`` if the package type is ``Packed``. This determines the chunk size at which objects are stored (specified in bytes). The default size is 4 MiB.
-  * ``Encryption`` if the package is to be encrypted. The ``Encryption`` must contain one element:
+* ``Repository`` is the top level node and must be always present.
+* ``Features`` contains the feature list. A feature must reference another object in the repository, and must not reference another feature.
+* ``Files`` describes all file objects and the storage layout.
+  
+  If present, ``Packages`` is used to group files into packages. A ``Package`` must have a name and it must reference an object from the ``Files`` tree. Files which are not explicitly packaged are automatically placed into a ``main`` package.
 
-    * ``Key`` - the key to be used to encrypt the data.
+* ``UI`` contains UI related data. This data is only present in source packages and never deployed, but it's used to create the installation UI.
 
-* ``FileSets`` describes all file sets stored in this package.
-
-  * ``FileSet`` describes the files stored within a file set. The file sets must be disjoint - that means every file path must be unique inside the repository, and must be only assigned to one file set. Each file set id must be unique within one file repository.
-
-    A file set must contain an ``Id`` attribute which must be a valid `Uuid <https://en.wikipedia.org/wiki/Universally_unique_identifier>`_. The id is used during the installation to uniquely identify a file set.
-
-    A file set must contain one or more ``File`` elements. A ``File`` element must have the ``Source`` attribute set and it must point to an existing file. Optionally, the ``Target`` attribute can be specified to store a file at a different location. This can be used to have a single source file deployed to two different folders, for instance. If no ``Target`` is present, the default is to use the ``Source`` path.
-
-    A file set may contain an optional ``SourcePackageId`` attribute which references a source package defined in this repository definition. More on this below.
-
-There's also a couple of optional elements:
-
-* ``SourcePackages`` within ``FileRepository``. This can be used only for ``Packed`` repository. In this case, file sets can be assigned to source packages as following:
-
-  .. code-block:: xml
-
-    <SourcePackages>
-      <SourcePackage Name="binaries" Id="BinariesPackage">
-      <SourcePackage Name="plugins" Id="PluginsPackage">
-    </SourcePackages>
-    <FileSet SourcePackageId="BinariesPackage" Id="5d195f63-f424-431f-b7c5-8d57cd32f57b">
-      <!-- as above -->
-    </FileSet>
-    <FileSet SourcePackageId="PluginsPackage" Id="c8bed51b-cbba-4699-953a-834930704d89">
-      <!-- as above -->
-    </FileSet>
-
-  In this case, all files from one file set will end up in a single package. If no source packages are defined, or no package is assigned to a file set, they will be put into the ``main`` package. The ``main`` package will be autogenerated if it's not present in the list of packages.
-
-  A ``SourcePackage`` must contain the following attributes:
-
-  * ``Name`` - a valid file name which will be used for the package file
-  * ``Id`` - a unique id within the repository. This is referenced from a file set using ``SourcePackageId``
-
-  Optionally, all content objects in a source package can be compressed. The compression algorithm can be set using the optional ``Compression`` attribute. Valid compression algorithms are: ``Uncompressed``, ``Zip``, ``Brotli``, ``Zstd``.
-
-  .. note::
-
-      If two files with the same contents are in separate file sets and separate source packages, the contents of the files will be duplicated.
-
-  .. note::
-
-      ``Zip`` compression does not turn a source package into a ZIP archive - the package format is always kyla specific.
+  The ``FeatureTree`` defines the feature grouping. At least one ``Node`` must be present, and every node must reference at least one ``Feature``. Nodes can be arbitrarily nested.

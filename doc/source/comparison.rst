@@ -9,9 +9,9 @@ The `Nullsoft Scriptable Install System <http://nsis.sourceforge.net/Main_Page>`
 The main differences are:
 
 * kyla has native support for updating and updates only the required files - NSIS does not have built-in support for this.
-* NSIS is not designed for integration - it takes care of dialogs, for example - while kyla is
-* NSIS does not support repairing or changing installations
-* NSIS supports only Windows (the generated installers only support Windows) [#nsis_win]_
+* NSIS is not designed for integration - it takes care of dialogs, for example - while kyla is.
+* NSIS does not support repairing or changing installations.
+* NSIS supports only Windows (the generated installers only support Windows) [#nsis_win]_.
 
 InnoSetup
 ---------
@@ -21,19 +21,19 @@ InnoSetup
 The main differences are:
 
 * kyla has native support for updating and updates only the required files - InnoSetup can update, but it is not aware which files have changed and which haven't.
-* InnoSetup is not designed for integration - it takes care of dialogs, for example - while kyla is
-* InnoSetup does not support repairing or changing installations
-* InnoSetup supports only Windows
+* InnoSetup is not designed for integration - it takes care of dialogs, for example - while kyla is.
+* InnoSetup does not support repairing or changing installations.
+* InnoSetup supports only Windows.
 
 Windows Installer
 -----------------
 
 `Windows Installer <msdn.microsoft.com/en-us/library/cc185688%28VS.85%29.aspx>`_ is also a fully fledged runtime for installations which is bundled with Windows. It is comparable with kyla as it also uses a database, but there are again many differences:
 
-* kyla can install directly from web, while the Windows Installer will download a package first before it starts installing [#wi_web]_
-* Windows Installer supports only Windows
+* kyla can install directly from web, while the Windows Installer will download a package first before it starts installing [#wi_web]_.
 * Windows Installer does not support modern compression algorithms. Only cabinet files are supported.
-* Windows Installer cannot split a file when creating an installation media - very large files will result in very large packages. [#wix_media]_
+* Windows Installer cannot split a file when creating an installation media - very large files will result in very large packages. [#wix_media]_.
+* Windows Installer supports only Windows.
 
 .. rubric:: Footnotes
 

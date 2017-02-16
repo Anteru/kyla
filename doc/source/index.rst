@@ -5,8 +5,6 @@ Contents:
 
 .. toctree::
 
-    tutorial
-    concepts
     repository-definition
     repository-types
     comparison
@@ -22,7 +20,7 @@ kyla is a file content management system. It handles file contents, similar to a
 * kyla is reliable: It uses the `SQLite <https://sqlite.org>`_ storage engine for durability - one of the most robust databases in the world.
 * kyla supports *feature-based* installations: Only parts of the application can be deployed.
 * kyla supports configure -- i.e. adding/removing features, as well as updating from one version to another. In fact, you can configure from one product to another and kyla will only update changed files.
-* kyla supports various installation sources out of the box: Web deployment, installation packages, and loose files. kyla can also use an existing installation as a source.
+* kyla supports web deployment & installation packages out of the box. Additionally, kyla can also use an existing installation as a source.
 * kyla provides repair and validation for installations and source packages alike.
 * kyla works on file contents, not paths. No data is duplicated, and only content that changed is used. If you have a 10.000 file installation, and only one file changes between revisions, the update will only change this one file.
 

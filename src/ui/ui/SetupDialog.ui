@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>883</width>
-    <height>609</height>
+    <width>640</width>
+    <height>480</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -211,7 +211,7 @@ QWidget#featuresAreaContent &gt; QWidget {
           <rect>
            <x>0</x>
            <y>0</y>
-           <width>883</width>
+           <width>640</width>
            <height>16</height>
           </rect>
          </property>

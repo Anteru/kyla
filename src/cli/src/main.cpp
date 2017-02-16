@@ -486,6 +486,7 @@ int QueryFeatureTree (const std::vector<std::string>& options,
 		KYLA_CHECKED_CALL (installer->GetFeatureTreeProperty (installer, source,
 			kylaFeatureTreeProperty_Nodes, nullptr,
 			&resultSize, nullptr));
+
 		nodes.resize (resultSize / sizeof (const KylaFeatureTreeNode*));
 		KYLA_CHECKED_CALL (installer->GetFeatureTreeProperty (installer, source,
 			kylaFeatureTreeProperty_Nodes, nullptr,
@@ -503,11 +504,13 @@ int QueryFeatureTree (const std::vector<std::string>& options,
 		KYLA_CHECKED_CALL (installer->GetFeatureTreeProperty (installer, source,
 			kylaFeatureTreeProperty_NodeFeatures, nodes[id],
 			&resultSize, nullptr));
+
 		std::vector<KylaUuid> featureIds;
 		featureIds.resize (resultSize / sizeof (KylaUuid));
 		KYLA_CHECKED_CALL (installer->GetFeatureTreeProperty (installer, source,
 			kylaFeatureTreeProperty_NodeFeatures, nodes[id],
 			&resultSize, featureIds.data ()));
+
 		for (const auto& feature : featureIds) {
 			std::cout << ToString (kyla::Uuid{ feature.bytes }) << std::endl;
 		}
