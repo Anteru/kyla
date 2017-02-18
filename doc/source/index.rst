@@ -4,6 +4,7 @@ Welcome to kyla's documentation!
 Contents:
 
 .. toctree::
+    :maxdepth: 1
 
     repository-definition
     repository-types
@@ -14,15 +15,15 @@ Contents:
 Introduction
 ------------
 
-kyla is a file content management system. It handles file contents, similar to an installer, and can be used for deploying builds, patching and installation management. The main features are:
+kyla is an installation system designed to deploy large amounts data. The main features are:
 
-* kyla is fast: Files are only read sequentially, data is read or written only once if possible.
-* kyla is reliable: It uses the `SQLite <https://sqlite.org>`_ storage engine for durability - one of the most robust databases in the world.
-* kyla supports *feature-based* installations: Only parts of the application can be deployed.
-* kyla supports configure -- i.e. adding/removing features, as well as updating from one version to another. In fact, you can configure from one product to another and kyla will only update changed files.
-* kyla supports web deployment & installation packages out of the box. Additionally, kyla can also use an existing installation as a source.
-* kyla provides repair and validation for installations and source packages alike.
-* kyla works on file contents, not paths. No data is duplicated, and only content that changed is used. If you have a 10.000 file installation, and only one file changes between revisions, the update will only change this one file.
+* Speed: kyla uses fast compression algorithms, reads and writes files sequentially, and only fetches the data it absolutely needs.
+* Scalability: Tens of thousands of files can be deployed easily. kyla also has first-class support for large binary files, splitting them up as necessary to provide streaming installations.
+* Web-first: kyla can install directly from the internet, fetches only the minimum amount of data required, and installs during download to maximize bandwidth usage and minimize installation time.
+* Feature-based installation: Deploy only subsets of your application, and support configure functionality.
+* Upgrades, downgrades, configure: kyla can upgrade/downgrade your installation to another version and will only fetch changed contents. Upgrades, downgrads and configurations are handled through the same function.
+* Library design: kyla is designed to be embedded into your frontend. It provides an easy-to-use C API and can be statically or dynamically linked.
+* Reliability: It uses the `SQLite <https://sqlite.org>`_ storage engine for all metadata storage - one of the most robust databases in the world. Installations can be validated and repaired if they ever get corrupted.
 
 .. note::
 
@@ -37,5 +38,3 @@ kyla consists of three separate parts:
 * ``kui``, the kyla UI. This is a small UI which can perform an installation, up/downgrades, and configure operations.
 * ``pykyla``, the kyla utility library. A Python module which facilitates the repository description creation.
 * ``libkyla``, the core library which contains all processing logic. ``libkyla`` provides a C API for clients for integration.
-
-For a quick start, check out the :doc:`tutorial`. For a deeper introduction, head over to the :doc:`concepts`.
