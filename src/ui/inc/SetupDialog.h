@@ -49,7 +49,7 @@ class SetupDialog : public QDialog
 	Q_OBJECT
 
 public:
-	explicit SetupDialog(SetupContext* context, QWidget *parent = 0);
+	explicit SetupDialog(SetupContext* context);
 	~SetupDialog();
 	
 	std::vector<KylaUuid> GetSelectedFeatures () const;

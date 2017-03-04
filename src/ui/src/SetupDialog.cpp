@@ -303,9 +303,8 @@ void InstallThread::run ()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-SetupDialog::SetupDialog (SetupContext* context, QWidget *parent)
-	: QDialog (parent)
-	, ui (new Ui::SetupDialog)
+SetupDialog::SetupDialog (SetupContext* context)
+	: ui (new Ui::SetupDialog)
 	, context_ (context)
 {
 	ui->setupUi (this);

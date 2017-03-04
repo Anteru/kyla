@@ -13,6 +13,7 @@ details.
 #include <QLibrary>
 #include <Kyla.h>
 #include <QThread>
+#include <QObject>
 
 #include <QJsonObject>
 

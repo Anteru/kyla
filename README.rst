@@ -22,8 +22,3 @@ Optional build requirements:
 * `Qt 5.6 <https://www.qt.io/>`_ or later for the UI
 
 The build system using `CMake <https://cmake.org/>`_.
-
-Building the tutorial
-^^^^^^^^^^^^^^^^^^^^^
-
-The tutorial files described in the documentation can be invoked by calling ``samples/glfw/create.py``.

@@ -115,12 +115,7 @@ struct WebRepository::Impl
 #elif KYLA_PLATFORM_LINUX
 	struct File
 	{
-		int64 Read (const MutableArrayRef<>& buffer)
-		{
-			throw RuntimeException ("NOT IMPLEMENTED", KYLA_FILE_LINE);
-		}
-
-		void Seek (int64 offset)
+		int64 Read (const int64 offset, const MutableArrayRef<>& buffer)
 		{
 			throw RuntimeException ("NOT IMPLEMENTED", KYLA_FILE_LINE);
 		}
