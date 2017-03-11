@@ -110,7 +110,7 @@ public:
 		return db_.GetLastRowId ();
 	}
 
-	void StoreFeatureDependency (const Uuid& source, const Uuid& target, 
+	void StoreFeatureDependency (const Uuid& source, const Uuid& target,
 		const char* relation)
 	{
 		featureDependencyInsertStatement_.BindArguments (
@@ -329,7 +329,7 @@ public:
 	{
 		return uuid_;
 	}
-	
+
 private:
 	std::vector<RepositoryObject*> children_;
 	Uuid uuid_;
@@ -381,8 +381,8 @@ struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 		uuid_ = Uuid::Parse (featureNode.attribute ("Id").as_string ());
 
 		for (auto refNode : featureNode.children ("Reference")) {
-			references_.push_back (Reference{ 
-				Uuid::Parse (refNode.attribute ("Id").as_string ()) 
+			references_.push_back (Reference{
+				Uuid::Parse (refNode.attribute ("Id").as_string ())
 			});
 		};
 
@@ -392,7 +392,7 @@ struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 			});
 		}
 	}
-	
+
 	void Store (BuildDatabase& db)
 	{
 		assert (persistentId_ == -1);
@@ -862,7 +862,7 @@ public:
 		}
 
 		std::vector<byte> readBuffer, writeBuffer;
-				
+
 		for (const auto& content : package.GetUniqueContents ()) {
 			const auto contentId = content->GetPersistentId ();
 			///@TODO(minor) Support per-file compression algorithms
@@ -923,7 +923,7 @@ public:
 						contentId, packageId,
 						startOffset, endOffset - startOffset,
 						readOffset,
-						bytesRead);					
+						bytesRead);
 
 					// Store the hash
 					db.StoreChunkHash (
@@ -966,7 +966,7 @@ public:
 	{
 		PopulateFiles (filesNode, ctx);
 		PopulatePackages (filesNode, ctx);
-		
+
 		auto encryptionNode = filesNode.select_node ("/Packages/Encryption");
 
 		if (encryptionNode) {
@@ -1079,7 +1079,7 @@ private:
 
 		for (auto& file : files_) {
 			const auto filePath = file->source.is_absolute () ? file->source : ctx.sourceDirectory / file->source;
-			const auto hash = ComputeSHA256 (filePath, 
+			const auto hash = ComputeSHA256 (filePath,
 				MutableArrayRef<byte> {buffer.get (), BufferSize});
 
 			auto it = fileContentMap_.find (hash);
@@ -1257,12 +1257,12 @@ void BuildRepository (const KylaBuildSettings* settings)
 
 	Repository repository;
 	std::unique_ptr<BuildContext> ctx (new BuildContext {
-		settings->sourceDirectory, 
-		settings->targetDirectory, 
+		settings->sourceDirectory,
+		settings->targetDirectory,
 		db
 	});
 	repository.CreateFeatures (doc, *ctx);
-	
+
 	const auto hashStartTime = std::chrono::high_resolution_clock::now ();
 	///@TODO(minor) Hash files
 	repository.CreateFileStorage (doc, *ctx);
