@@ -1,6 +1,6 @@
 /**
 [LICENSE BEGIN]
-kyla Copyright (C) 2016 Matthäus G. Chajdas
+kyla Copyright (C) 2015-2017 Matthäus G. Chajdas
 
 This file is distributed under the BSD 2-clause license. See LICENSE for
 details.

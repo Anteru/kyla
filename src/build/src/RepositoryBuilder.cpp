@@ -1264,7 +1264,6 @@ void BuildRepository (const KylaBuildSettings* settings)
 	repository.CreateFeatures (doc, *ctx);
 
 	const auto hashStartTime = std::chrono::high_resolution_clock::now ();
-	///@TODO(minor) Hash files
 	repository.CreateFileStorage (doc, *ctx);
 	const auto hashTime = std::chrono::high_resolution_clock::now () -
 		hashStartTime;
@@ -1281,8 +1280,8 @@ void BuildRepository (const KylaBuildSettings* settings)
 	db.Execute ("PRAGMA journal_mode=DELETE;");
 	db.Execute ("PRAGMA synchronous=FULL;");
 	// Necessary to get good index statistics
-	db.Execute ("ANALYZE;");
 	db.Execute ("VACUUM;");
+	db.Execute ("PRAGMA optimize;");
 
 	db.Close ();
 
