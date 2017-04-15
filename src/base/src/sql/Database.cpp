@@ -56,6 +56,8 @@ public:
 		other.db_ = nullptr;
 	}
 
+	void CheckIntegrity ();
+
 	void Open (const char *name, const OpenMode mode)
 	{
 		int sqliteOpenMode = 0;
@@ -554,8 +556,15 @@ TemporaryTable::TemporaryTable (Database::Impl* impl, const char* name)
 ////////////////////////////////////////////////////////////////////////////////
 TemporaryTable::~TemporaryTable ()
 {
+	Drop ();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void TemporaryTable::Drop ()
+{
 	if (impl_) {
 		impl_->Execute ((boost::format ("DROP TABLE %1%;") % name_).str ().c_str ());
+		impl_ = nullptr;
 	}
 }
 
@@ -625,4 +634,39 @@ Database::~Database ()
 {
 }
 }
+
+}
+#if KYLA_PLATFORM_WINDOWS
+#include <Windows.h>
+
+#endif
+
+namespace kyla {
+namespace Sql {
+namespace {
+int CheckIntegrityCallback (void*, int count, char** string, char**)
+{
+	for (int i = 0; i < count; ++i) {
+#if KYLA_PLATFORM_WINDOWS
+		OutputDebugStringA (string [i]);
+#endif
+	}
+
+	return SQLITE_OK;
+}
+
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void Database::Impl::CheckIntegrity ()
+{
+	sqlite3_exec (db_, "PRAGMA integrity_check;", &CheckIntegrityCallback, nullptr, nullptr);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+void Database::CheckIntegrity ()
+{
+	impl_->CheckIntegrity ();
+}
+} 
 }

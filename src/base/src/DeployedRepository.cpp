@@ -375,8 +375,7 @@ void DeployedRepository::RemoveChangedFiles (Log& log)
 
 ///////////////////////////////////////////////////////////////////////////////
 /**
-Get new content objects, but only for those files, for which we don't
-have a content object already.
+Get new content objects we don't have in this repository yet.
 */
 void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 	ProgressHelper& progress)

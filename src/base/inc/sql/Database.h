@@ -75,6 +75,8 @@ public:
 	TemporaryTable CreateTemporaryTable (const char* name,
 		const char* columnDefinition);
 
+	void CheckIntegrity ();
+
 public:
 	struct Impl;
 
@@ -178,6 +180,8 @@ class TemporaryTable final
 public:
 	TemporaryTable (Database::Impl* impl, const char* name);
 	~TemporaryTable ();
+
+	void Drop ();
 
 	TemporaryTable (const TemporaryTable&) = delete;
 	TemporaryTable& operator=(const TemporaryTable&) = delete;
