@@ -138,55 +138,44 @@ private:
 };
 
 ////////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<File> CreateFile (const char* path)
+std::unique_ptr<File> CreateFile (const char* path, FileAccess access)
 {
+	///@TODO(minor) Handle access
 	auto fd = open (path, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR);
 	return std::unique_ptr<File> (new LinuxFile (fd, false /* read write */));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<File> CreateFile (const Path& path)
+std::unique_ptr<File> CreateFile (const Path& path, FileAccess access)
 {
-	return CreateFile (path.c_str ());
-}
-
-///////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode)
-{
-	return OpenFile (path, openMode, FileAccessHints::None);
+	return CreateFile (path.c_str (), access);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode,
+std::unique_ptr<File> OpenFile (const char* path, FileAccess openMode,
 	FileAccessHints)
 {
 	int mode;
 	switch (openMode) {
-	case FileOpenMode::Read:
+	case FileAccess::Read:
 		mode = O_RDONLY;
 		break;
 
-	case FileOpenMode::Write:
+	case FileAccess::Write:
 		mode = O_WRONLY;
 		break;
 
-	case FileOpenMode::ReadWrite:
+	case FileAccess::ReadWrite:
 		mode = O_RDWR;
 		break;
 	}
 
 	auto fd = open (path, mode, S_IRUSR | S_IWUSR);
-	return std::unique_ptr<File> (new LinuxFile (fd, openMode == FileOpenMode::Read));
-}
-
-///////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode)
-{
-	return OpenFile (path, openMode, FileAccessHints::None);
+	return std::unique_ptr<File> (new LinuxFile (fd, openMode == FileAccess::Read));
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode,
+std::unique_ptr<File> OpenFile (const Path& path, FileAccess openMode,
 	FileAccessHints)
 {
 	return OpenFile (path.c_str (), openMode);
@@ -370,16 +359,16 @@ private:
 };
 
 ///////////////////////////////////////////////////////////////////////////////
-int ConvertOpenMode (const FileOpenMode openMode)
+int ConvertFileAccess (const FileAccess openMode)
 {
 	switch (openMode) {
-	case FileOpenMode::Read:
+	case FileAccess::Read:
 		return GENERIC_READ;
 
-	case FileOpenMode::Write:
+	case FileAccess::Write:
 		return GENERIC_WRITE;
 
-	case FileOpenMode::ReadWrite:
+	case FileAccess::ReadWrite:
 		return GENERIC_READ | GENERIC_WRITE;
 	}
 
@@ -387,16 +376,17 @@ int ConvertOpenMode (const FileOpenMode openMode)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<File> CreateFile (const char* path)
+std::unique_ptr<File> CreateFile (const char* path, FileAccess access)
 {
-	auto fd = ::CreateFileA (path, GENERIC_READ | GENERIC_WRITE,
+	const auto mode = ConvertFileAccess (access);
+	auto fd = ::CreateFileA (path, mode,
 		0, nullptr, CREATE_ALWAYS, 0, 0);
 
 	if (fd == INVALID_HANDLE_VALUE) {
 		throw std::exception ("Could not create file");
 	}
 
-	return std::unique_ptr<File> (new WindowsFile (fd, GENERIC_READ | GENERIC_WRITE));
+	return std::unique_ptr<File> (new WindowsFile (fd, mode));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -415,17 +405,11 @@ DWORD ConvertFileAccessHints (const FileAccessHints hints)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode)
-{
-	return OpenFile (path, openMode, FileAccessHints::None);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode,
+std::unique_ptr<File> OpenFile (const char* path, FileAccess openMode,
 	FileAccessHints hints)
 {
-	const int mode = ConvertOpenMode (openMode);
-	const int shareMode = openMode == FileOpenMode::Read ? FILE_SHARE_READ : 0;
+	const int mode = ConvertFileAccess (openMode);
+	const int shareMode = openMode == FileAccess::Read ? FILE_SHARE_READ : 0;
 
 	auto fd = ::CreateFileA (path, mode,
 		shareMode, nullptr, OPEN_EXISTING, ConvertFileAccessHints (hints), 0);
@@ -438,30 +422,25 @@ std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<File> CreateFile (const Path& path)
+std::unique_ptr<File> CreateFile (const Path& path, FileAccess access)
 {
-	auto fd = ::CreateFileW (path.c_str (), GENERIC_READ | GENERIC_WRITE,
+	const auto mode = ConvertFileAccess (access);
+	auto fd = ::CreateFileW (path.c_str (), mode,
 		0, nullptr, CREATE_ALWAYS, 0, 0);
 
 	if (fd == INVALID_HANDLE_VALUE) {
 		throw std::exception ("Could not create file");
 	}
 
-	return std::unique_ptr<File> (new WindowsFile (fd, GENERIC_READ | GENERIC_WRITE));
+	return std::unique_ptr<File> (new WindowsFile (fd, mode));
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode)
-{
-	return OpenFile (path, openMode, FileAccessHints::None);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode,
+std::unique_ptr<File> OpenFile (const Path& path, FileAccess openMode,
 	FileAccessHints hints)
 {
-	const int mode = ConvertOpenMode (openMode);
-	const int shareMode = openMode == FileOpenMode::Read ? FILE_SHARE_READ : 0;
+	const int mode = ConvertFileAccess (openMode);
+	const int shareMode = openMode == FileAccess::Read ? FILE_SHARE_READ : 0;
 
 	auto fd = ::CreateFileW (path.c_str (), mode,
 		shareMode, nullptr, OPEN_EXISTING, ConvertFileAccessHints (hints), 0);
@@ -475,6 +454,30 @@ std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode,
 #else
 #error Unsupported platform
 #endif
+
+///////////////////////////////////////////////////////////////////////////////
+std::unique_ptr<File> CreateFile (const char* path)
+{
+	return CreateFile (path, FileAccess::ReadWrite);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::unique_ptr<File> CreateFile (const Path& path)
+{
+	return CreateFile (path, FileAccess::ReadWrite);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::unique_ptr<File> OpenFile (const char* path, FileAccess openMode)
+{
+	return OpenFile (path, openMode, FileAccessHints::None);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::unique_ptr<File> OpenFile (const Path& path, FileAccess openMode)
+{
+	return OpenFile (path, openMode, FileAccessHints::None);
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 Path GetTemporaryFilename ()

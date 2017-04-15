@@ -37,7 +37,7 @@ SHA256Digest ComputeSHA256 (const boost::filesystem::path& p)
 SHA256Digest ComputeSHA256(const boost::filesystem::path& p,
 	const MutableArrayRef<>& fileReadBuffer)
 {
-	auto input = kyla::OpenFile (p.string ().c_str (), kyla::FileOpenMode::Read);
+	auto input = kyla::OpenFile (p.string ().c_str (), kyla::FileAccess::Read);
 
 	SHA256StreamHasher hasher;
 	hasher.Initialize ();

@@ -101,7 +101,7 @@ struct FileStat
 FileStat Stat (const Path& path);
 FileStat Stat (const char* path);
 
-enum class FileOpenMode
+enum class FileAccess
 {
 	Read,
 	Write,
@@ -114,16 +114,18 @@ enum class FileAccessHints
 	SequentialScan
 };
 
-std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode);
-std::unique_ptr<File> OpenFile (const char* path, FileOpenMode openMode,
+std::unique_ptr<File> OpenFile (const char* path, FileAccess access);
+std::unique_ptr<File> OpenFile (const char* path, FileAccess access,
 	FileAccessHints hints);
+
+std::unique_ptr<File> OpenFile (const Path& path, FileAccess access);
+std::unique_ptr<File> OpenFile (const Path& path, FileAccess access,
+	FileAccessHints hints);
+
 std::unique_ptr<File> CreateFile (const char* path);
-
-
-std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode);
-std::unique_ptr<File> OpenFile (const Path& path, FileOpenMode openMode,
-	FileAccessHints hints);
+std::unique_ptr<File> CreateFile (const char* path, FileAccess access);
 std::unique_ptr<File> CreateFile (const Path& path);
+std::unique_ptr<File> CreateFile (const Path& path, FileAccess access);
 
 Path GetTemporaryFilename ();
 }

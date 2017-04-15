@@ -159,7 +159,7 @@ void DeployedRepository::RepairImpl (Repository& source,
 					file = CreateFile (it->second);
 					file->SetSize (contents.GetSize ());
 				} else {
-					file = OpenFile (it->second, FileOpenMode::Write);
+					file = OpenFile (it->second, FileAccess::Write);
 				}
 
 				byte* pointer = static_cast<byte*> (file->Map ());
@@ -188,7 +188,7 @@ void DeployedRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& re
 
 		const auto filePath = path_ / Path{ query.GetText (0) };
 
-		auto file = OpenFile (filePath, FileOpenMode::Read);
+		auto file = OpenFile (filePath, FileAccess::Read);
 		auto pointer = file->Map ();
 
 		const ArrayRef<> fileContents{ pointer, file->GetSize () };
@@ -439,10 +439,10 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 
 	auto insertFileQuery = db_.Prepare (
 		"INSERT INTO main.fs_files (Path, ContentId, FeatureId) "
-		"SELECT ?, ?, main.features.Id FROM source.fs_files "
+		"SELECT ?1, ?2, main.features.Id FROM source.fs_files "
 		"INNER JOIN source.features ON source.features.Id = source.fs_files.FeatureId "
 		"INNER JOIN features ON source.features.Uuid = main.features.Uuid "
-		"WHERE source.fs_files.path = ?"
+		"WHERE source.fs_files.path = ?1"
 	);
 
 	auto insertContentObjectQuery = db_.Prepare (
@@ -453,6 +453,11 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 		"SELECT Path FROM source.fs_files "
 		"WHERE source.fs_files.ContentId = (SELECT Id FROM source.fs_contents WHERE source.fs_contents.Hash = ?)");
 
+	std::unique_ptr<File> stagingFile;
+#ifndef NDEBUG
+	SHA256Digest stagingFileHash;
+#endif
+
 	// Fetch the missing ones now and store in the right places
 	source.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
 		const ArrayRef<>& contents,
@@ -460,64 +465,83 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 		const int64 totalSize) -> void {
 		const auto hashString = ToString (hash);
 
-		bool hasStagingFile = false;
 		const auto stagingFilePath = path_ / (hashString + ".kytmp");
 		if ((offset != 0) || (contents.GetSize () != totalSize)) {
-			std::unique_ptr<File> file;
-			
 			if (offset == 0) {
 				log.Debug ("Configure",
 					boost::format ("Creating staging file %1%")
 					% stagingFilePath);
 
-				file = CreateFile (stagingFilePath);
-				file->SetSize (totalSize);
+				stagingFile = CreateFile (stagingFilePath);
+				stagingFile->SetSize (totalSize);
+
+#ifndef NDEBUG
+				stagingFileHash = hash;
+#endif
 			} else {
 				log.Debug ("Configure",
 					boost::format ("Writing into staging file %1%")
 					% stagingFilePath);
 
-				file = OpenFile (stagingFilePath, FileOpenMode::Write);
+#ifndef NDEBUG
+				// If we're staging a file, we have only one file handle
+				// open. So we need this to remain the same until we're done
+				assert (stagingFile);
+				assert (hash == stagingFileHash);
+#endif
 			}
 
-			file->Seek (offset);
-			file->Write (contents);
+			stagingFile->Seek (offset);
+			stagingFile->Write (contents);
 
 			if ((offset + contents.GetSize ()) != totalSize) {
 				return;
-			} else {
-				hasStagingFile = true;
 			}
 		}
 
 		log.Debug ("Configure", boost::format ("Received content object '%1%'") % hashString);
 
-		int64 ContentId = -1;
+		int64 contentId = -1;
 		{
 			insertContentObjectQuery.BindArguments (hash, totalSize);
 			insertContentObjectQuery.Step ();
 			insertContentObjectQuery.Reset ();
 
-			ContentId = db_.GetLastRowId ();
+			contentId = db_.GetLastRowId ();
 
 			log.Debug ("Configure", 
-				boost::format ("Persisted content object '%1%', id %2%") % hashString % ContentId);
+				boost::format ("Persisted content object '%1%', id %2%") % hashString % contentId);
 		}
 
 		getTargetFilesQuery.BindArguments (hash);
 
-		bool isFirstFile = true;
-		Path lastFilePath;
-		while (getTargetFilesQuery.Step ()) {
-			const Path targetPath{ getTargetFilesQuery.GetText (0) };
+		auto insertFile = [&](const Path& targetPath, const int64 ContentId) -> void {
+			insertFileQuery.BindArguments (targetPath.string (), ContentId);
+			insertFileQuery.Step ();
+			insertFileQuery.Reset ();
+		};
 
-			progress.SetAction (getTargetFilesQuery.GetText (0));
+		/**
+		In the first case, we have the contents in a staging file. We need to rename
+		the staging file, then copy it to all other files with the same contents
 
-			if (hasStagingFile) {
+		In the second case, we have the contents in memory. Just write them to all
+		destination files.
+		*/
+		if (stagingFile) {
+			stagingFile.reset ();
+
+			bool isFirstFile = true;
+			Path lastFilePath;
+			
+			while (getTargetFilesQuery.Step ()) {
+				const Path targetPath{ getTargetFilesQuery.GetText (0) };
+
+				progress.SetAction (getTargetFilesQuery.GetText (0));
 				if (isFirstFile) {
-					log.Debug ("Configure", 
-						boost::format ("Renaming staging file %1% to %2%") 
-							% stagingFilePath % targetPath);
+					log.Debug ("Configure",
+						boost::format ("Renaming staging file %1% to %2%")
+						% stagingFilePath % targetPath);
 
 					boost::filesystem::rename (stagingFilePath,
 						path_ / targetPath);
@@ -532,20 +556,26 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 						path_ / targetPath);
 				}
 
+				insertFile (targetPath, contentId);
+
 				lastFilePath = path_ / targetPath;
-			} else {
-				log.Debug ("Configure", 
+			}
+		} else {
+			while (getTargetFilesQuery.Step ()) {
+				const Path targetPath{ getTargetFilesQuery.GetText (0) };
+
+				progress.SetAction (getTargetFilesQuery.GetText (0));
+
+				log.Debug ("Configure",
 					boost::format ("Creating file %1%") % targetPath);
 
-				auto file = CreateFile (path_ / targetPath);
+				auto file = CreateFile (path_ / targetPath, FileAccess::Write);
 				file->Write (contents);
+			
+				insertFile (targetPath, contentId);
+
+				log.Debug ("Configure", boost::format ("Wrote file %1%") % targetPath);
 			}
-
-			insertFileQuery.BindArguments (targetPath.string (), ContentId, targetPath.string ());
-			insertFileQuery.Step ();
-			insertFileQuery.Reset ();
-
-			log.Debug ("Configure", boost::format ("Wrote file %1%") % targetPath);
 		}
 
 		getTargetFilesQuery.Reset ();
@@ -599,10 +629,10 @@ void DeployedRepository::CopyExistingFiles (Log& log)
 
 	auto insertFileQuery = db_.Prepare (
 		"INSERT INTO main.fs_files (Path, ContentId, FeatureId) "
-		"SELECT ?, ?, main.features.Id FROM source.fs_files "
+		"SELECT ?1, ?2, main.features.Id FROM source.fs_files "
 		"INNER JOIN source.features ON source.features.Id = source.fs_files.FeatureId "
 		"INNER JOIN features ON source.features.Uuid = main.features.Uuid "
-		"WHERE source.fs_files.path = ?"
+		"WHERE source.fs_files.path = ?1"
 	);
 
 	while (diffQuery.Step ()) {
@@ -619,7 +649,7 @@ void DeployedRepository::CopyExistingFiles (Log& log)
 		boost::filesystem::copy_file (path_ / exemplarPath, path_ / path);
 
 		insertFileQuery.BindArguments (path.string (),
-			exemplarQuery.GetInt64 (1), path.string ());
+			exemplarQuery.GetInt64 (1));
 
 		exemplarQuery.Reset ();
 

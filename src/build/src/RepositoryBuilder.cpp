@@ -867,7 +867,7 @@ public:
 			const auto contentId = content->GetPersistentId ();
 			///@TODO(minor) Support per-file compression algorithms
 
-			auto inputFile = OpenFile (content->sourceFile, FileOpenMode::Read);
+			auto inputFile = OpenFile (content->sourceFile, FileAccess::Read);
 			const auto inputFileSize = inputFile->GetSize ();
 
 			assert (inputFileSize == content->size);

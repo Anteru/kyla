@@ -63,7 +63,7 @@ private:
 std::unique_ptr<PackedRepositoryBase::PackageFile> PackedRepository::OpenPackage (const std::string& packageName) const
 {
 	return std::unique_ptr<PackageFile> { new LocalPackageFile{
-		OpenFile (path_ / packageName, FileOpenMode::Read, FileAccessHints::SequentialScan)
+		OpenFile (path_ / packageName, FileAccess::Read, FileAccessHints::SequentialScan)
 	}};
 }
 
