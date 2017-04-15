@@ -105,7 +105,11 @@ private:
 	float GetInStageProgress () const
 	{
 		assert (current_ <= currentStageTarget_);
-		return static_cast<float> (current_) / static_cast<float> (currentStageTarget_);
+		if (currentStageTarget_ != 0) {
+			return static_cast<float> (current_) / static_cast<float> (currentStageTarget_);
+		} else {
+			return 0;
+		}
 	}
 
 	float GetTotalProgress () const
