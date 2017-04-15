@@ -15,6 +15,11 @@ details.
 
 #include <memory>
 
+#if KYLA_PLATFORM_WINDOWS
+#include <QWinTaskbarButton>
+#include <QWinTaskbarProgress>
+#endif
+
 #include "SetupContext.h"
 
 namespace Ui {
@@ -63,6 +68,7 @@ public slots:
 
 private:
 	void UpdateRequiredDiskSpace ();
+	void StartProgress ();
 
 	Ui::SetupDialog *ui;
 	SetupContext* context_;
@@ -74,6 +80,13 @@ public:
 
 private:
 	std::vector<std::unique_ptr<FeatureTreeNode>> featureTreeNodes_;
+
+#if KYLA_PLATFORM_WINDOWS
+	void showEvent (QShowEvent*);
+
+	QWinTaskbarButton* taskbarButton_ = nullptr;
+	QWinTaskbarProgress* taskbarProgress_ = nullptr;
+#endif
 };
 
 #endif // STARTDIALOG_H

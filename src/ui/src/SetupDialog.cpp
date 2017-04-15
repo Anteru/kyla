@@ -27,7 +27,7 @@ details.
 #include <QDebug>
 
 namespace {
-using FeatureSelectionChangedCallback = std::function<void (const SetupDialog::FeatureTreeNode* item)>;
+using FeatureSelectionChangedCallback = std::function<void (const SetupDialog::FeatureTreeNode* const item)>;
 
 ///////////////////////////////////////////////////////////////////////////////
 QString FormatMemorySize (const std::int64_t size, const int precision, const float slack)
@@ -92,21 +92,8 @@ public:
 			featureSelectionCallback_ (this);
 		});
 
-		auto mainLabel = new QLabel;
-		auto font = mainLabel->font ();
-		font.setPointSize (font.pointSize () * 1.4);
-		font.setBold (true);
-		mainLabel->setFont (font);
-		mainLabel->setText (name_);
-		mainLabel->setAlignment (Qt::AlignLeft);
-		layout->addWidget (mainLabel, 0, 1);
-
-		auto descriptionLabel = new QLabel;
-		descriptionLabel->setText (description_);
-		descriptionLabel->setWordWrap (true);
-		descriptionLabel->setAlignment (Qt::AlignLeft);
-		descriptionLabel->setSizePolicy (QSizePolicy::MinimumExpanding, QSizePolicy::Maximum);
-		layout->addWidget (descriptionLabel, 1, 1);
+		layout->addWidget (CreateMainLabel (name_), 0, 1);
+		layout->addWidget (CreateDescriptionLabel (description_), 1, 1);
 		
 		// If we got children, they'll be part of the "detail area"
 		if (!children_.empty ()) {
@@ -130,7 +117,7 @@ public:
 				auto featureTreeNode = reinterpret_cast<FeatureTreeNode*> (
 					item->data (0, Qt::UserRole).value<std::intptr_t> ());
 
-				featureTreeNode->selected_ = item->checkState (0) == Qt::Checked;
+				featureTreeNode->selected_ = (item->checkState (0) == Qt::Checked);
 				featureSelectionCallback_ (featureTreeNode);
 
 				if (item->checkState (0) == Qt::Checked) {
@@ -159,6 +146,30 @@ public:
 	}
 
 private:
+	static QLabel* CreateMainLabel (const QString& text)
+	{
+		auto mainLabel = new QLabel;
+		auto font = mainLabel->font ();
+		font.setPointSize (font.pointSize () * 1.4);
+		font.setBold (true);
+		mainLabel->setFont (font);
+		mainLabel->setText (text);
+		mainLabel->setAlignment (Qt::AlignLeft);
+
+		return mainLabel;
+	}
+
+	static QLabel* CreateDescriptionLabel (const QString& text)
+	{
+		auto descriptionLabel = new QLabel;
+		descriptionLabel->setText (text);
+		descriptionLabel->setWordWrap (true);
+		descriptionLabel->setAlignment (Qt::AlignLeft);
+		descriptionLabel->setSizePolicy (QSizePolicy::MinimumExpanding, QSizePolicy::Maximum);
+
+		return descriptionLabel;
+	}
+
 	void UpdateSelectedSubfeaturesLabel ()
 	{
 		selectedSubfeaturesLabel_->setText (QString ("%1 of %2 subfeature(s) selected")
@@ -486,8 +497,7 @@ SetupDialog::SetupDialog (SetupContext* context)
 		connect (installThread_, &InstallThread::InstallationFinished,
 			this, &SetupDialog::InstallationFinished);
 
-		ui->progressBar->show ();
-		ui->installationProgressLabel->show ();
+		StartProgress ();
 
 		installThread_->start ();
 	});
@@ -504,11 +514,40 @@ void SetupDialog::UpdateRequiredDiskSpace ()
 	}
 }
 
+void SetupDialog::StartProgress ()
+{
+	ui->progressBar->show ();
+	ui->installationProgressLabel->show ();
+
+#if KYLA_PLATFORM_WINDOWS
+	if (taskbarProgress_) {
+		taskbarProgress_->show ();
+	}
+#endif
+}
+
+///////////////////////////////////////////////////////////////////////////////
+void SetupDialog::showEvent (QShowEvent *)
+{
+#if KYLA_PLATFORM_WINDOWS
+	taskbarButton_ = new QWinTaskbarButton (this);
+	taskbarButton_->setWindow (this->windowHandle ());
+
+	taskbarProgress_ = taskbarButton_->progress ();
+#endif
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 void SetupDialog::UpdateProgress (const int progress, const char* message,
 	const char* detail)
 {
 	ui->progressBar->setValue (progress);
+
+#if KYLA_PLATFORM_WINDOWS
+	if (taskbarProgress_) {
+		taskbarProgress_->setValue (progress);
+	}
+#endif
 }
 
 ///////////////////////////////////////////////////////////////////////////////
