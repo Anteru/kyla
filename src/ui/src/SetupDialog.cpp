@@ -526,16 +526,16 @@ void SetupDialog::StartProgress ()
 #endif
 }
 
+#if KYLA_PLATFORM_WINDOWS
 ///////////////////////////////////////////////////////////////////////////////
 void SetupDialog::showEvent (QShowEvent *)
 {
-#if KYLA_PLATFORM_WINDOWS
 	taskbarButton_ = new QWinTaskbarButton (this);
 	taskbarButton_->setWindow (this->windowHandle ());
 
 	taskbarProgress_ = taskbarButton_->progress ();
-#endif
 }
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////
 void SetupDialog::UpdateProgress (const int progress, const char* message,
