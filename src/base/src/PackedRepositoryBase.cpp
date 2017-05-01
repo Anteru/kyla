@@ -122,6 +122,108 @@ void PackedRepositoryBase::SetDecryptionKeyImpl (const std::string& key)
 	key_ = key;
 }
 
+namespace {
+struct RequestData
+{
+	PackedRepositoryBase::PackageFile* packageFile = nullptr;
+	
+	// Inside the package file
+	int64 packageOffset = -1;
+	int64 packageSize = -1;
+
+	int64 sourceSize = -1;
+	int64 sourceOffset = -1;
+
+	int64 totalSize = -1;
+
+	bool hasChunkHash = false;
+	SHA256Digest chunkHash;
+
+	CompressionAlgorithm compressionAlgorithm = CompressionAlgorithm::Uncompressed;
+	int64 compressionInputSize = 0;
+	int64 compressionOutputSize = 0;
+
+	PackedRepositoryBase::Decryptor* decryptor = nullptr;
+	AES256IvSalt ivSalt;
+	int64 encryptionInputSize = 0;
+	int64 encryptionOutputSize = 0;
+
+	SHA256Digest contentHash;
+
+	Repository::GetContentObjectCallback callback;
+};
+
+struct ReadRequest
+{
+	std::unique_ptr<RequestData> requestData;
+
+	ReadRequest () = default;
+
+	ReadRequest (ReadRequest&& other)
+		: requestData (std::move (other.requestData))
+	{
+	}
+
+	ReadRequest& operator= (ReadRequest&& other)
+	{
+		requestData = std::move (other.requestData);
+	}
+};
+
+struct ProcessRequest
+{
+	std::unique_ptr<RequestData> requestData;
+
+	std::vector<byte> inputBuffer;
+
+	ProcessRequest () = default;
+
+	ProcessRequest (ProcessRequest&& other)
+		: requestData (std::move (other.requestData))
+		, inputBuffer (std::move (other.inputBuffer))
+	{
+	}
+
+	ProcessRequest& operator==(ProcessRequest&& other)
+	{
+		requestData = std::move (other.requestData);
+		inputBuffer = std::move (other.inputBuffer);
+	}
+};
+
+struct OutputRequest
+{
+	std::unique_ptr<RequestData> requestData;
+	std::vector<byte> data;
+
+	OutputRequest () = default;
+
+	OutputRequest (OutputRequest&& other)
+		: requestData (std::move (other.requestData))
+		, data (std::move (data))
+	{
+	}
+
+	OutputRequest& operator== (OutputRequest&& other)
+	{
+		requestData = std::move (other.requestData);
+		data = std::move (other.data);
+	}
+};
+
+class ReadThread
+{
+private:
+	std::deque<ReadRequest> pendingRequests_;
+};
+
+class ProcessingThread
+{
+private:
+	std::deque<ProcessRequest> pendingRequests_;
+};
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 	const Repository::GetContentObjectCallback& getCallback)
@@ -185,20 +287,19 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 
 		contentObjectsInPackageQuery.BindArguments (id);
 
-		std::string currentCompressorId;
-		std::unique_ptr<BlockCompressor> compressor;
-
 		while (contentObjectsInPackageQuery.Step ()) {
-			const auto packageOffset = contentObjectsInPackageQuery.GetInt64 (0);
-			const auto packageSize = contentObjectsInPackageQuery.GetInt64 (1);
-			const auto sourceOffset = contentObjectsInPackageQuery.GetInt64 (2);
-			const auto totalSize = contentObjectsInPackageQuery.GetInt64 (4);
-			const auto sourceSize = contentObjectsInPackageQuery.GetInt64 (5);
+			std::unique_ptr<RequestData> requestData{ new RequestData };
 
-			readBuffer.resize (packageSize);
-			packageFile->Read (packageOffset, readBuffer);
+			requestData->packageOffset = contentObjectsInPackageQuery.GetInt64 (0);
+			requestData->packageSize = contentObjectsInPackageQuery.GetInt64 (1);
+			requestData->sourceOffset = contentObjectsInPackageQuery.GetInt64 (2);
+			contentObjectsInPackageQuery.GetBlob (3, requestData->contentHash);
+			requestData->totalSize = contentObjectsInPackageQuery.GetInt64 (4);
+			requestData->sourceSize = contentObjectsInPackageQuery.GetInt64 (5);
 
-			// If encrypted, we need to decrypt first
+			requestData->callback = getCallback;
+
+			// Encryption handling
 			if (contentObjectsInPackageQuery.GetText (10)) {
 				if (!decryptor_) {
 					throw RuntimeException ("PackedRepository",
@@ -206,50 +307,103 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 						KYLA_FILE_LINE);
 				}
 
-				//@TODO(minor) Check algorithm
-				writeBuffer.resize (contentObjectsInPackageQuery.GetInt64 (12));
-				
-				decryptor_->Decrypt (readBuffer, writeBuffer,
-					UnpackAES256IvSalt (
-						contentObjectsInPackageQuery.GetBlob (10)));
-				std::swap (readBuffer, writeBuffer);
+				requestData->decryptor = decryptor_.get ();
+				requestData->encryptionOutputSize = contentObjectsInPackageQuery.GetInt64 (12);
+				requestData->ivSalt = UnpackAES256IvSalt (contentObjectsInPackageQuery.GetBlob (10));
 			}
 
-			SHA256Digest hash;
-			contentObjectsInPackageQuery.GetBlob (3, hash);
-
+			// Hash handling
 			if (contentObjectsInPackageQuery.GetColumnType (13) != Sql::Type::Null) {
-				SHA256Digest storageDigest;
-				contentObjectsInPackageQuery.GetBlob (13, storageDigest);
-				if (ComputeSHA256 (readBuffer) != storageDigest) {
-					throw RuntimeException ("PackedRepository",
-						str (boost::format ("Source data for chunk '%1%' is corrupted") %
-							ToString (hash)),
-						KYLA_FILE_LINE);
-				}
+				requestData->hasChunkHash = true;
+				contentObjectsInPackageQuery.GetBlob (13, requestData->chunkHash);
 			} else {
-				assert (sourceSize == 0);
+				assert (requestData->sourceSize == 0);
 			}
 
+			// Compression handling
 			if (contentObjectsInPackageQuery.GetText (6)) {
-				const auto compression = contentObjectsInPackageQuery.GetText (6);
-				const auto uncompressedSize = contentObjectsInPackageQuery.GetInt64 (7);
-				const auto compressedSize = contentObjectsInPackageQuery.GetInt64 (8);
+				requestData->compressionAlgorithm = CompressionAlgorithmFromId (contentObjectsInPackageQuery.GetText (6));
+				requestData->compressionOutputSize = contentObjectsInPackageQuery.GetInt64 (7);
+				requestData->compressionInputSize = contentObjectsInPackageQuery.GetInt64 (8);
+			}
 
-				if (compression != currentCompressorId) {
-					// we assume the compressors change infrequently
-					compressor = CreateBlockCompressor (
-						CompressionAlgorithmFromId (compression)
-					);
+			requestData->packageFile = packageFile.get ();
+
+			std::unique_ptr<ReadRequest> readRequest{ new ReadRequest };
+			readRequest->requestData = std::move (requestData);
+
+			std::unique_ptr<ProcessRequest> processRequest;
+
+			// Process a read request into a process request
+			{
+				processRequest.reset (new ProcessRequest);
+				processRequest->requestData = std::move (readRequest->requestData);
+
+				auto& rd = processRequest->requestData;
+
+				readRequest.reset ();
+
+				processRequest->inputBuffer.resize (rd->packageSize);
+
+				rd->packageFile->Read (rd->packageOffset, processRequest->inputBuffer);
+			}
+
+			std::unique_ptr<OutputRequest> outputRequest;
+
+			// Process a chunk
+			{
+				outputRequest.reset (new OutputRequest);
+
+				auto& rd = processRequest->requestData;
+
+				auto& inputBuffer = processRequest->inputBuffer;
+				std::vector<byte> outputBuffer;
+
+				// Encryption
+				if (rd->decryptor) {
+					outputBuffer.resize (rd->encryptionOutputSize);
+					decryptor_->Decrypt (inputBuffer, outputBuffer,
+						rd->ivSalt);
+					std::swap (inputBuffer, outputBuffer);
 				}
 
-				writeBuffer.resize (uncompressedSize);
-				compressor->Decompress (readBuffer, writeBuffer);
+				// Hash check
+				if (rd->hasChunkHash) {
+					if (ComputeSHA256 (inputBuffer) != rd->chunkHash) {
+						throw RuntimeException ("PackedRepository",
+							str (boost::format ("Source data for chunk '%1%' is corrupted") %
+								ToString (rd->chunkHash)),
+							KYLA_FILE_LINE);
+					}
+				}
 
-				getCallback (hash, writeBuffer, sourceOffset,
-					totalSize);
-			} else {
-				getCallback (hash, readBuffer, sourceOffset, totalSize);
+				// Decompression
+				if (rd->compressionAlgorithm != CompressionAlgorithm::Uncompressed) {
+					auto decompressor = CreateBlockCompressor (rd->compressionAlgorithm);
+
+					assert (rd->compressionInputSize == static_cast<int64> (inputBuffer.size ()));
+
+					outputBuffer.resize (rd->compressionOutputSize);
+
+					decompressor->Decompress (inputBuffer, outputBuffer);
+				} else {
+					std::swap (inputBuffer, outputBuffer);
+				}
+
+				outputRequest->data = std::move (outputBuffer);
+				outputRequest->requestData = std::move (processRequest->requestData);
+
+				processRequest.reset ();
+			}
+
+			// Handle output request
+			{
+				auto& rd = outputRequest->requestData;
+
+				outputRequest->requestData->callback (rd->contentHash, outputRequest->data,
+					rd->sourceOffset, rd->totalSize);
+
+				outputRequest.reset ();
 			}
 		}
 

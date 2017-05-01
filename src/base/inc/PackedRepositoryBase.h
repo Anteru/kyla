@@ -29,6 +29,8 @@ public:
 		virtual bool Read (const int64 offset, const MutableArrayRef<>& buffer) = 0;
 	};
 
+	struct Decryptor;
+
 private:
 	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
 		const GetContentObjectCallback& getCallback) override;
@@ -43,7 +45,6 @@ private:
 protected:
 	void SetDecryptionKeyImpl (const std::string& key) override;
 
-	struct Decryptor;
 	std::unique_ptr<Decryptor> decryptor_;
 };
 } // namespace kyla
