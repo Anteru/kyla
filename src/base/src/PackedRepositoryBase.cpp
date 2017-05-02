@@ -24,6 +24,11 @@ details.
 #include <unordered_map>
 #include <set>
 
+#include <deque>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+
 #include <openssl/evp.h>
 
 namespace kyla {
@@ -167,6 +172,7 @@ struct ReadRequest
 	ReadRequest& operator= (ReadRequest&& other)
 	{
 		requestData = std::move (other.requestData);
+		return *this;
 	}
 };
 
@@ -188,6 +194,7 @@ struct ProcessRequest
 	{
 		requestData = std::move (other.requestData);
 		inputBuffer = std::move (other.inputBuffer);
+		return *this;
 	}
 };
 
@@ -200,7 +207,7 @@ struct OutputRequest
 
 	OutputRequest (OutputRequest&& other)
 		: requestData (std::move (other.requestData))
-		, data (std::move (data))
+		, data (std::move (other.data))
 	{
 	}
 
@@ -208,19 +215,16 @@ struct OutputRequest
 	{
 		requestData = std::move (other.requestData);
 		data = std::move (other.data);
+		return *this;
 	}
 };
 
 class ReadThread
 {
-private:
-	std::deque<ReadRequest> pendingRequests_;
 };
 
 class ProcessingThread
 {
-private:
-	std::deque<ProcessRequest> pendingRequests_;
 };
 }
 
@@ -276,8 +280,15 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 		"WHERE ContentHash IN (SELECT Hash FROM requested_fs_contents) "
 		"    AND PackageId = ? ");
 
-	std::vector<byte> writeBuffer;
-	std::vector<byte> readBuffer;
+	std::mutex processRequestQueueMutex;
+	std::mutex outputRequestQueueMutex;
+
+	std::condition_variable processRequestQueueConditionVariable;
+	std::condition_variable outputRequestQueueConditionVariable;
+
+	std::vector<ReadRequest> readRequests;
+	std::deque<ProcessRequest> processRequests;
+	std::deque<OutputRequest> outputRequests;
 
 	while (findSourcePackagesQuery.Step ()) {
 		const auto filename = findSourcePackagesQuery.GetText (0);
@@ -329,34 +340,55 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 
 			requestData->packageFile = packageFile.get ();
 
-			std::unique_ptr<ReadRequest> readRequest{ new ReadRequest };
-			readRequest->requestData = std::move (requestData);
+			ReadRequest readRequest;
+			readRequest.requestData = std::move (requestData);
 
-			std::unique_ptr<ProcessRequest> processRequest;
+			readRequests.emplace_back (std::move (readRequest));
+		}
+		
+		std::thread readThread{ [&] () -> void {
+			for (auto& readRequest : readRequests) {
+				auto& rd = readRequest.requestData;
 
-			// Process a read request into a process request
-			{
-				processRequest.reset (new ProcessRequest);
-				processRequest->requestData = std::move (readRequest->requestData);
+				ProcessRequest processRequest;
+				processRequest.inputBuffer.resize (rd->packageSize);
 
-				auto& rd = processRequest->requestData;
+				rd->packageFile->Read (rd->packageOffset, processRequest.inputBuffer);
+				processRequest.requestData = std::move (readRequest.requestData);
 
-				readRequest.reset ();
-
-				processRequest->inputBuffer.resize (rd->packageSize);
-
-				rd->packageFile->Read (rd->packageOffset, processRequest->inputBuffer);
+				std::unique_lock<std::mutex> lock{ processRequestQueueMutex };
+				processRequests.emplace_back (std::move (processRequest));
+				processRequestQueueConditionVariable.notify_one ();
 			}
 
-			std::unique_ptr<OutputRequest> outputRequest;
+			std::unique_lock<std::mutex> lock{ processRequestQueueMutex };
+			processRequests.emplace_back (ProcessRequest{});
+			processRequestQueueConditionVariable.notify_one ();
+		}
+		};
 
-			// Process a chunk
-			{
-				outputRequest.reset (new OutputRequest);
+		std::thread processThread{ [&] () -> void {
+			for (;;) {
+				std::unique_lock<std::mutex> lock{ processRequestQueueMutex };
 
-				auto& rd = processRequest->requestData;
+				while (processRequests.empty ()) {
+					processRequestQueueConditionVariable.wait (lock);
+				}
 
-				auto& inputBuffer = processRequest->inputBuffer;
+				auto processRequest = std::move (processRequests.front ());
+				processRequests.pop_front ();
+
+				if (!processRequest.requestData) {
+					break;
+				}
+
+				lock.unlock ();
+
+				OutputRequest outputRequest;
+
+				auto& rd = processRequest.requestData;
+
+				auto& inputBuffer = processRequest.inputBuffer;
 				std::vector<byte> outputBuffer;
 
 				// Encryption
@@ -390,22 +422,48 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 					std::swap (inputBuffer, outputBuffer);
 				}
 
-				outputRequest->data = std::move (outputBuffer);
-				outputRequest->requestData = std::move (processRequest->requestData);
+				outputRequest.data = std::move (outputBuffer);
+				outputRequest.requestData = std::move (processRequest.requestData);
 
-				processRequest.reset ();
+				std::unique_lock<std::mutex> outputLock{ outputRequestQueueMutex };
+				outputRequests.emplace_back (std::move (outputRequest));
+				outputRequestQueueConditionVariable.notify_one ();
 			}
 
-			// Handle output request
-			{
-				auto& rd = outputRequest->requestData;
+			std::unique_lock<std::mutex> outputLock{ outputRequestQueueMutex };
+			outputRequests.emplace_back (OutputRequest{});
+			outputRequestQueueConditionVariable.notify_one ();
+		} 
+		};
 
-				outputRequest->requestData->callback (rd->contentHash, outputRequest->data,
+		std::thread outputThread{ [&] () -> void {
+			for (;;) {
+				std::unique_lock<std::mutex> lock{ outputRequestQueueMutex };
+
+				while (outputRequests.empty ()) {
+					outputRequestQueueConditionVariable.wait (lock);
+				}
+
+				auto outputRequest = std::move (outputRequests.front ());
+				outputRequests.pop_front ();
+
+				if (!outputRequest.requestData) {
+					break;
+				}
+
+				lock.unlock ();
+
+				auto& rd = outputRequest.requestData;
+
+				outputRequest.requestData->callback (rd->contentHash, outputRequest.data,
 					rd->sourceOffset, rd->totalSize);
-
-				outputRequest.reset ();
 			}
-		}
+		} 
+		};
+
+		readThread.join ();
+		processThread.join ();
+		outputThread.join ();
 
 		contentObjectsInPackageQuery.Reset ();
 	}
