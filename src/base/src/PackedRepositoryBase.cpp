@@ -219,12 +219,207 @@ struct OutputRequest
 	}
 };
 
-class ReadThread
+template <typename T>
+class ProducerConsumerQueue
 {
+public:
+	void Insert (T&& t)
+	{
+		std::unique_lock<std::mutex> lock{ mutex_ };
+
+		queue_.emplace_back (std::move (t));
+		
+		lock.unlock ();
+		conditionVariable_.notify_one ();
+	}
+
+	T Get ()
+	{
+		std::unique_lock<std::mutex> lock{ mutex_ };
+
+		while (queue_.empty ()) {
+			conditionVariable_.wait (lock);
+		}
+
+		auto t = std::move (queue_.front ());
+		queue_.pop_front ();
+		
+		lock.unlock ();
+
+		return std::move (t);
+	}
+
+private:
+	std::mutex mutex_;
+	std::condition_variable conditionVariable_;
+	std::deque<T> queue_;
 };
 
-class ProcessingThread
+class ReadThread
 {
+public:
+	ReadThread (std::vector<ReadRequest>&& readRequests,
+		ProducerConsumerQueue<ProcessRequest>& processRequestQueue)
+		: queue_ (processRequestQueue)
+		, readRequests_ (std::move (readRequests))
+	{
+	}
+
+	void Run ()
+	{
+		std::thread readThread{ [&] () -> void {
+			for (auto& readRequest : readRequests_) {
+				auto& rd = readRequest.requestData;
+
+				ProcessRequest processRequest;
+				processRequest.inputBuffer.resize (rd->packageSize);
+
+				rd->packageFile->Read (rd->packageOffset, processRequest.inputBuffer);
+				processRequest.requestData = std::move (readRequest.requestData);
+
+				queue_.Insert (std::move (processRequest));
+			}
+
+			queue_.Insert (std::move (ProcessRequest{}));
+		}
+		};
+
+		thread_ = std::move (readThread);
+	}
+
+	void Join ()
+	{
+		thread_.join ();
+	}
+
+private:
+	ProducerConsumerQueue<ProcessRequest>& queue_;
+	std::vector<ReadRequest> readRequests_;
+	std::thread thread_;
+};
+
+class ProcessThread
+{
+public:
+	ProcessThread (ProducerConsumerQueue<ProcessRequest>& processRequestQueue,
+		ProducerConsumerQueue<OutputRequest>& outputRequestQueue,
+		PackedRepositoryBase::Decryptor* decryptor)
+	: inputQueue_ (processRequestQueue)
+	, outputQueue_ (outputRequestQueue)
+	, decryptor_ (decryptor)
+	{
+	}
+
+	void Run ()
+	{
+		std::thread processThread{ [&] () -> void {
+			for (;;) {
+				auto processRequest = inputQueue_.Get ();
+
+				if (!processRequest.requestData) {
+					break;
+				}
+
+				OutputRequest outputRequest;
+
+				auto& rd = processRequest.requestData;
+
+				auto& inputBuffer = processRequest.inputBuffer;
+				std::vector<byte> outputBuffer;
+
+				// Encryption
+				if (rd->decryptor) {
+					outputBuffer.resize (rd->encryptionOutputSize);
+					decryptor_->Decrypt (inputBuffer, outputBuffer,
+						rd->ivSalt);
+					std::swap (inputBuffer, outputBuffer);
+				}
+
+				// Hash check
+				if (rd->hasChunkHash) {
+					if (ComputeSHA256 (inputBuffer) != rd->chunkHash) {
+						throw RuntimeException ("PackedRepository",
+							str (boost::format ("Source data for chunk '%1%' is corrupted") %
+								ToString (rd->chunkHash)),
+							KYLA_FILE_LINE);
+					}
+				}
+
+				// Decompression
+				if (rd->compressionAlgorithm != CompressionAlgorithm::Uncompressed) {
+					auto decompressor = CreateBlockCompressor (rd->compressionAlgorithm);
+
+					assert (rd->compressionInputSize == static_cast<int64> (inputBuffer.size ()));
+
+					outputBuffer.resize (rd->compressionOutputSize);
+
+					decompressor->Decompress (inputBuffer, outputBuffer);
+				} else {
+					std::swap (inputBuffer, outputBuffer);
+				}
+
+				outputRequest.data = std::move (outputBuffer);
+				outputRequest.requestData = std::move (processRequest.requestData);
+
+				outputQueue_.Insert (std::move (outputRequest));
+			}
+
+			outputQueue_.Insert (OutputRequest{});
+		}
+		};
+
+		thread_ = std::move (processThread);
+	}
+
+	void Join ()
+	{
+		thread_.join ();
+	}
+
+private:
+	ProducerConsumerQueue<ProcessRequest>& inputQueue_;
+	ProducerConsumerQueue<OutputRequest>& outputQueue_;
+	PackedRepositoryBase::Decryptor* decryptor_ = nullptr;
+	std::thread thread_;
+};
+
+class OutputThread
+{
+public:
+	OutputThread (ProducerConsumerQueue<OutputRequest>& outputRequestQueue)
+		: queue_ (outputRequestQueue)
+	{
+	}
+
+	void Run ()
+	{
+		std::thread outputThread{ [&] () -> void {
+			for (;;) {
+				auto outputRequest = queue_.Get ();
+
+				if (!outputRequest.requestData) {
+					break;
+				}
+
+				auto& rd = outputRequest.requestData;
+
+				outputRequest.requestData->callback (rd->contentHash, outputRequest.data,
+					rd->sourceOffset, rd->totalSize);
+			}
+		}
+		};
+
+		thread_ = std::move (outputThread);
+	}
+
+	void Join ()
+	{
+		thread_.join ();
+	}
+
+private:
+	ProducerConsumerQueue<OutputRequest>& queue_;
+	std::thread thread_;
 };
 }
 
@@ -280,17 +475,11 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 		"WHERE ContentHash IN (SELECT Hash FROM requested_fs_contents) "
 		"    AND PackageId = ? ");
 
-	std::mutex processRequestQueueMutex;
-	std::mutex outputRequestQueueMutex;
-
-	std::condition_variable processRequestQueueConditionVariable;
-	std::condition_variable outputRequestQueueConditionVariable;
-
-	std::vector<ReadRequest> readRequests;
-	std::deque<ProcessRequest> processRequests;
-	std::deque<OutputRequest> outputRequests;
-
 	while (findSourcePackagesQuery.Step ()) {
+		ProducerConsumerQueue<ProcessRequest> processRequestQueue;
+		ProducerConsumerQueue<OutputRequest> outputRequestQueue;
+		std::vector<ReadRequest> readRequests;
+
 		const auto filename = findSourcePackagesQuery.GetText (0);
 		const auto id = findSourcePackagesQuery.GetInt64 (1);
 
@@ -345,125 +534,18 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 
 			readRequests.emplace_back (std::move (readRequest));
 		}
-		
-		std::thread readThread{ [&] () -> void {
-			for (auto& readRequest : readRequests) {
-				auto& rd = readRequest.requestData;
 
-				ProcessRequest processRequest;
-				processRequest.inputBuffer.resize (rd->packageSize);
+		ReadThread readThread{ std::move (readRequests), processRequestQueue };
+		ProcessThread processThread{ processRequestQueue, outputRequestQueue, decryptor_.get () };
+		OutputThread outputThread{ outputRequestQueue };
 
-				rd->packageFile->Read (rd->packageOffset, processRequest.inputBuffer);
-				processRequest.requestData = std::move (readRequest.requestData);
+		readThread.Run ();
+		processThread.Run ();
+		outputThread.Run ();
 
-				std::unique_lock<std::mutex> lock{ processRequestQueueMutex };
-				processRequests.emplace_back (std::move (processRequest));
-				processRequestQueueConditionVariable.notify_one ();
-			}
-
-			std::unique_lock<std::mutex> lock{ processRequestQueueMutex };
-			processRequests.emplace_back (ProcessRequest{});
-			processRequestQueueConditionVariable.notify_one ();
-		}
-		};
-
-		std::thread processThread{ [&] () -> void {
-			for (;;) {
-				std::unique_lock<std::mutex> lock{ processRequestQueueMutex };
-
-				while (processRequests.empty ()) {
-					processRequestQueueConditionVariable.wait (lock);
-				}
-
-				auto processRequest = std::move (processRequests.front ());
-				processRequests.pop_front ();
-
-				if (!processRequest.requestData) {
-					break;
-				}
-
-				lock.unlock ();
-
-				OutputRequest outputRequest;
-
-				auto& rd = processRequest.requestData;
-
-				auto& inputBuffer = processRequest.inputBuffer;
-				std::vector<byte> outputBuffer;
-
-				// Encryption
-				if (rd->decryptor) {
-					outputBuffer.resize (rd->encryptionOutputSize);
-					decryptor_->Decrypt (inputBuffer, outputBuffer,
-						rd->ivSalt);
-					std::swap (inputBuffer, outputBuffer);
-				}
-
-				// Hash check
-				if (rd->hasChunkHash) {
-					if (ComputeSHA256 (inputBuffer) != rd->chunkHash) {
-						throw RuntimeException ("PackedRepository",
-							str (boost::format ("Source data for chunk '%1%' is corrupted") %
-								ToString (rd->chunkHash)),
-							KYLA_FILE_LINE);
-					}
-				}
-
-				// Decompression
-				if (rd->compressionAlgorithm != CompressionAlgorithm::Uncompressed) {
-					auto decompressor = CreateBlockCompressor (rd->compressionAlgorithm);
-
-					assert (rd->compressionInputSize == static_cast<int64> (inputBuffer.size ()));
-
-					outputBuffer.resize (rd->compressionOutputSize);
-
-					decompressor->Decompress (inputBuffer, outputBuffer);
-				} else {
-					std::swap (inputBuffer, outputBuffer);
-				}
-
-				outputRequest.data = std::move (outputBuffer);
-				outputRequest.requestData = std::move (processRequest.requestData);
-
-				std::unique_lock<std::mutex> outputLock{ outputRequestQueueMutex };
-				outputRequests.emplace_back (std::move (outputRequest));
-				outputRequestQueueConditionVariable.notify_one ();
-			}
-
-			std::unique_lock<std::mutex> outputLock{ outputRequestQueueMutex };
-			outputRequests.emplace_back (OutputRequest{});
-			outputRequestQueueConditionVariable.notify_one ();
-		} 
-		};
-
-		std::thread outputThread{ [&] () -> void {
-			for (;;) {
-				std::unique_lock<std::mutex> lock{ outputRequestQueueMutex };
-
-				while (outputRequests.empty ()) {
-					outputRequestQueueConditionVariable.wait (lock);
-				}
-
-				auto outputRequest = std::move (outputRequests.front ());
-				outputRequests.pop_front ();
-
-				if (!outputRequest.requestData) {
-					break;
-				}
-
-				lock.unlock ();
-
-				auto& rd = outputRequest.requestData;
-
-				outputRequest.requestData->callback (rd->contentHash, outputRequest.data,
-					rd->sourceOffset, rd->totalSize);
-			}
-		} 
-		};
-
-		readThread.join ();
-		processThread.join ();
-		outputThread.join ();
+		readThread.Join ();
+		processThread.Join ();
+		outputThread.Join ();
 
 		contentObjectsInPackageQuery.Reset ();
 	}
