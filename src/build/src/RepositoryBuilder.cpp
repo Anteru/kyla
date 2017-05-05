@@ -1280,8 +1280,8 @@ void BuildRepository (const KylaBuildSettings* settings)
 	db.Execute ("PRAGMA journal_mode=DELETE;");
 	db.Execute ("PRAGMA synchronous=FULL;");
 	// Necessary to get good index statistics
-	db.Execute ("VACUUM;");
 	db.Execute ("PRAGMA optimize;");
+	db.Execute ("VACUUM;");
 
 	db.Close ();
 

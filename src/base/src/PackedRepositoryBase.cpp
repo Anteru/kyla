@@ -92,8 +92,8 @@ struct PackedRepositoryBase::Decryptor
 		output.resize (bytesWritten);
 	}
 
-	EVP_CIPHER_CTX*	decryptionContext_;
-	const EVP_CIPHER* decryptionCypher_;
+	EVP_CIPHER_CTX*	decryptionContext_ = nullptr;
+	const EVP_CIPHER* decryptionCypher_ = nullptr;
 	std::string key_;
 };
 
@@ -179,7 +179,6 @@ struct ReadRequest
 struct ProcessRequest
 {
 	std::unique_ptr<RequestData> requestData;
-
 	std::vector<byte> inputBuffer;
 
 	ProcessRequest () = default;
@@ -302,11 +301,9 @@ class ProcessThread
 {
 public:
 	ProcessThread (ProducerConsumerQueue<ProcessRequest>& processRequestQueue,
-		ProducerConsumerQueue<OutputRequest>& outputRequestQueue,
-		PackedRepositoryBase::Decryptor* decryptor)
+		ProducerConsumerQueue<OutputRequest>& outputRequestQueue)
 	: inputQueue_ (processRequestQueue)
 	, outputQueue_ (outputRequestQueue)
-	, decryptor_ (decryptor)
 	{
 	}
 
@@ -330,7 +327,7 @@ public:
 				// Encryption
 				if (rd->decryptor) {
 					outputBuffer.resize (rd->encryptionOutputSize);
-					decryptor_->Decrypt (inputBuffer, outputBuffer,
+					rd->decryptor->Decrypt (inputBuffer, outputBuffer,
 						rd->ivSalt);
 					std::swap (inputBuffer, outputBuffer);
 				}
@@ -379,7 +376,6 @@ public:
 private:
 	ProducerConsumerQueue<ProcessRequest>& inputQueue_;
 	ProducerConsumerQueue<OutputRequest>& outputQueue_;
-	PackedRepositoryBase::Decryptor* decryptor_ = nullptr;
 	std::thread thread_;
 };
 
@@ -536,7 +532,7 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 		}
 
 		ReadThread readThread{ std::move (readRequests), processRequestQueue };
-		ProcessThread processThread{ processRequestQueue, outputRequestQueue, decryptor_.get () };
+		ProcessThread processThread{ processRequestQueue, outputRequestQueue };
 		OutputThread outputThread{ outputRequestQueue };
 
 		readThread.Run ();
@@ -585,8 +581,7 @@ void PackedRepositoryBase::RepairImpl (Repository& source,
 		"	StorageHash, "					// = 8
 		"	ContentHash "					// = 9
 		"FROM fs_content_view "
-		"WHERE ContentHash IN (SELECT Hash FROM requested_fs_contents) "
-		"    AND PackageId = ? ");
+		"WHERE PackageId = ? ");
 
 	std::vector<byte> compressionOutputBuffer;
 	std::vector<byte> readBuffer, writeBuffer;
