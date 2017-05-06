@@ -180,19 +180,31 @@ struct ProcessRequest
 {
 	std::unique_ptr<RequestData> requestData;
 	std::vector<byte> inputBuffer;
+	int64 size = 0;
+
+	ProcessRequest (std::unique_ptr<RequestData>&& requestData,
+		std::vector<byte>&& inputBuffer)
+		: requestData (std::move (requestData))
+		, inputBuffer (std::move (inputBuffer))
+	{
+		size = static_cast<int64> (this->inputBuffer.size ());
+	}
 
 	ProcessRequest () = default;
 
 	ProcessRequest (ProcessRequest&& other)
 		: requestData (std::move (other.requestData))
 		, inputBuffer (std::move (other.inputBuffer))
+		, size (other.size)
 	{
 	}
 
-	ProcessRequest& operator==(ProcessRequest&& other)
+	ProcessRequest& operator= (ProcessRequest&& other)
 	{
 		requestData = std::move (other.requestData);
 		inputBuffer = std::move (other.inputBuffer);
+		size = other.size;
+
 		return *this;
 	}
 };
@@ -201,33 +213,81 @@ struct OutputRequest
 {
 	std::unique_ptr<RequestData> requestData;
 	std::vector<byte> data;
+	int64 size = 0;
+
+	OutputRequest (std::unique_ptr<RequestData>&& requestData,
+		std::vector<byte>&& data)
+		: requestData (std::move (requestData))
+		, data (std::move (data))
+	{
+		size = static_cast<int64> (this->data.size ());
+	}
 
 	OutputRequest () = default;
 
 	OutputRequest (OutputRequest&& other)
 		: requestData (std::move (other.requestData))
 		, data (std::move (other.data))
+		, size (other.size)
 	{
 	}
 
-	OutputRequest& operator== (OutputRequest&& other)
+	OutputRequest& operator= (OutputRequest&& other)
 	{
 		requestData = std::move (other.requestData);
 		data = std::move (other.data);
+		size = other.size;
+
+		other.size = 0;
+
 		return *this;
 	}
 };
 
+/**
+This is an internally synchronized producer-consumer-queue. It supports inserting from 
+multiple threads, and retrieving from multiple threads. Threads will block on a condition
+variable if the queue is empty (during retrieval) or optionally, if it is full (during 
+insertion).
+
+The rate limiting works as follows: Any item inserted has a "value" assigned to it (which is
+retrieved using a callback). The limit is based on the item value. If the queue has more value
+pending than the specified limit, it will start blocking on insertions until enough item value
+has been retrieved.
+
+If no limit is specified, it will never block during inserts.
+*/
 template <typename T>
 class ProducerConsumerQueue
 {
 public:
+	ProducerConsumerQueue (std::function<int64 (const T&)> itemValueFunction,
+		int64 maxPendingItemValue)
+		: itemValueFunction_ (itemValueFunction)
+		, maxPendingItemValue_ (maxPendingItemValue)
+	{
+		assert (maxPendingItemValue > 0);
+	}
+
+	ProducerConsumerQueue ()
+	{
+
+	}
+
 	void Insert (T&& t)
 	{
 		std::unique_lock<std::mutex> lock{ mutex_ };
 
+		if (maxPendingItemValue_ && pendingItemValue_ > maxPendingItemValue_) {
+			conditionVariable_.wait (lock, 
+				[this]() { return pendingItemValue_ < maxPendingItemValue_; });
+		}
+
 		queue_.emplace_back (std::move (t));
-		
+		if (maxPendingItemValue_) {
+			pendingItemValue_ += itemValueFunction_ (queue_.back ());
+		}
+
 		lock.unlock ();
 		conditionVariable_.notify_one ();
 	}
@@ -242,8 +302,13 @@ public:
 
 		auto t = std::move (queue_.front ());
 		queue_.pop_front ();
-		
+
+		if (maxPendingItemValue_) {
+			pendingItemValue_ -= itemValueFunction_ (t);
+		}
+
 		lock.unlock ();
+		conditionVariable_.notify_one ();
 
 		return std::move (t);
 	}
@@ -252,6 +317,10 @@ private:
 	std::mutex mutex_;
 	std::condition_variable conditionVariable_;
 	std::deque<T> queue_;
+
+	std::function<int64 (const T&)> itemValueFunction_;
+	int64 maxPendingItemValue_ = 0;
+	int64 pendingItemValue_ = 0;
 };
 
 class ReadThread
@@ -270,13 +339,12 @@ public:
 			for (auto& readRequest : readRequests_) {
 				auto& rd = readRequest.requestData;
 
-				ProcessRequest processRequest;
-				processRequest.inputBuffer.resize (rd->packageSize);
+				std::vector<byte> inputBuffer;
+				inputBuffer.resize (rd->packageSize);
 
-				rd->packageFile->Read (rd->packageOffset, processRequest.inputBuffer);
-				processRequest.requestData = std::move (readRequest.requestData);
+				rd->packageFile->Read (rd->packageOffset, inputBuffer);
 
-				queue_.Insert (std::move (processRequest));
+				queue_.Insert ({ std::move (readRequest.requestData), std::move (inputBuffer) });
 			}
 
 			queue_.Insert (std::move (ProcessRequest{}));
@@ -317,8 +385,6 @@ public:
 					break;
 				}
 
-				OutputRequest outputRequest;
-
 				auto& rd = processRequest.requestData;
 
 				auto& inputBuffer = processRequest.inputBuffer;
@@ -355,10 +421,9 @@ public:
 					std::swap (inputBuffer, outputBuffer);
 				}
 
-				outputRequest.data = std::move (outputBuffer);
-				outputRequest.requestData = std::move (processRequest.requestData);
-
-				outputQueue_.Insert (std::move (outputRequest));
+				outputQueue_.Insert ({ 
+					std::move (processRequest.requestData), 
+					std::move (outputBuffer) });
 			}
 
 			outputQueue_.Insert (OutputRequest{});
@@ -471,9 +536,22 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 		"WHERE ContentHash IN (SELECT Hash FROM requested_fs_contents) "
 		"    AND PackageId = ? ");
 
+	static constexpr auto MaxPendingProcessSize = 64 << 20;
+	static constexpr auto MaxPendingOutputSize = 64 << 20;
+
 	while (findSourcePackagesQuery.Step ()) {
-		ProducerConsumerQueue<ProcessRequest> processRequestQueue;
-		ProducerConsumerQueue<OutputRequest> outputRequestQueue;
+		ProducerConsumerQueue<ProcessRequest> processRequestQueue{
+			[] (const ProcessRequest& pr) { 
+				return static_cast<int64> (pr.size); 
+		},
+			MaxPendingProcessSize
+		};
+		ProducerConsumerQueue<OutputRequest> outputRequestQueue{
+			[] (const OutputRequest& or) {
+			return static_cast<int64> (or.size);
+		},
+			MaxPendingOutputSize
+		};
 		std::vector<ReadRequest> readRequests;
 
 		const auto filename = findSourcePackagesQuery.GetText (0);
