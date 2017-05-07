@@ -541,14 +541,14 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 
 	while (findSourcePackagesQuery.Step ()) {
 		ProducerConsumerQueue<ProcessRequest> processRequestQueue{
-			[] (const ProcessRequest& pr) { 
-				return static_cast<int64> (pr.size); 
+			[] (const ProcessRequest& processRequest) { 
+				return static_cast<int64> (processRequest.size); 
 		},
 			MaxPendingProcessSize
 		};
 		ProducerConsumerQueue<OutputRequest> outputRequestQueue{
-			[] (const OutputRequest& or) {
-			return static_cast<int64> (or.size);
+			[] (const OutputRequest& outputRequest) {
+			return static_cast<int64> (outputRequest.size);
 		},
 			MaxPendingOutputSize
 		};
