@@ -269,10 +269,7 @@ public:
 		assert (maxPendingItemValue > 0);
 	}
 
-	ProducerConsumerQueue ()
-	{
-
-	}
+	ProducerConsumerQueue () = default;
 
 	void Insert (T&& t)
 	{
@@ -323,31 +320,70 @@ private:
 	int64 pendingItemValue_ = 0;
 };
 
+struct ErrorState
+{
+	std::atomic_bool errorOccurred_ = false;
+
+	std::mutex mutex_;
+	std::exception_ptr exception_;
+
+	bool IsSignaled () const
+	{
+		return static_cast<bool> (errorOccurred_);
+	}
+
+	void RegisterException (std::exception_ptr exception)
+	{
+		errorOccurred_ = true;
+		std::lock_guard<std::mutex> lock{ mutex_ };
+		exception = exception;
+	}
+
+	void RethrowException ()
+	{
+		if (!exception_) {
+			std::rethrow_exception (exception_);
+		}
+	}
+};
+
 class ReadThread
 {
 public:
 	ReadThread (std::vector<ReadRequest>&& readRequests,
-		ProducerConsumerQueue<ProcessRequest>& processRequestQueue)
+		ProducerConsumerQueue<ProcessRequest>& processRequestQueue,
+		ErrorState* errorState)
 		: queue_ (processRequestQueue)
 		, readRequests_ (std::move (readRequests))
+		, errorState_ (errorState)
 	{
 	}
 
 	void Run ()
 	{
 		std::thread readThread{ [&] () -> void {
-			for (auto& readRequest : readRequests_) {
-				auto& rd = readRequest.requestData;
+				for (auto& readRequest : readRequests_) {
+					if (errorState_->IsSignaled ()) {
+						break;
+					}
 
-				std::vector<byte> inputBuffer;
-				inputBuffer.resize (rd->packageSize);
+					try {
+						auto& rd = readRequest.requestData;
 
-				rd->packageFile->Read (rd->packageOffset, inputBuffer);
+						std::vector<byte> inputBuffer;
+						inputBuffer.resize (rd->packageSize);
 
-				queue_.Insert ({ std::move (readRequest.requestData), std::move (inputBuffer) });
-			}
+						rd->packageFile->Read (rd->packageOffset, inputBuffer);
 
-			queue_.Insert (std::move (ProcessRequest{}));
+						queue_.Insert ({ std::move (readRequest.requestData), std::move (inputBuffer) });
+					} catch (const std::exception&) {
+						errorState_->RegisterException (std::current_exception ());
+
+						break;
+					}
+				}
+
+				queue_.Insert (std::move (ProcessRequest{}));
 		}
 		};
 
@@ -363,15 +399,18 @@ private:
 	ProducerConsumerQueue<ProcessRequest>& queue_;
 	std::vector<ReadRequest> readRequests_;
 	std::thread thread_;
+	ErrorState* errorState_ = nullptr;
 };
 
 class ProcessThread
 {
 public:
 	ProcessThread (ProducerConsumerQueue<ProcessRequest>& processRequestQueue,
-		ProducerConsumerQueue<OutputRequest>& outputRequestQueue)
+		ProducerConsumerQueue<OutputRequest>& outputRequestQueue,
+		ErrorState* errorState)
 	: inputQueue_ (processRequestQueue)
 	, outputQueue_ (outputRequestQueue)
+	, errorState_ (errorState)
 	{
 	}
 
@@ -379,51 +418,61 @@ public:
 	{
 		std::thread processThread{ [&] () -> void {
 			for (;;) {
-				auto processRequest = inputQueue_.Get ();
-
-				if (!processRequest.requestData) {
+				if (errorState_->IsSignaled ()) {
 					break;
 				}
 
-				auto& rd = processRequest.requestData;
+				try {
+					auto processRequest = inputQueue_.Get ();
 
-				auto& inputBuffer = processRequest.inputBuffer;
-				std::vector<byte> outputBuffer;
-
-				// Encryption
-				if (rd->decryptor) {
-					outputBuffer.resize (rd->encryptionOutputSize);
-					rd->decryptor->Decrypt (inputBuffer, outputBuffer,
-						rd->ivSalt);
-					std::swap (inputBuffer, outputBuffer);
-				}
-
-				// Hash check
-				if (rd->hasChunkHash) {
-					if (ComputeSHA256 (inputBuffer) != rd->chunkHash) {
-						throw RuntimeException ("PackedRepository",
-							str (boost::format ("Source data for chunk '%1%' is corrupted") %
-								ToString (rd->chunkHash)),
-							KYLA_FILE_LINE);
+					if (!processRequest.requestData) {
+						break;
 					}
+
+					auto& rd = processRequest.requestData;
+
+					auto& inputBuffer = processRequest.inputBuffer;
+					std::vector<byte> outputBuffer;
+
+					// Encryption
+					if (rd->decryptor) {
+						outputBuffer.resize (rd->encryptionOutputSize);
+						rd->decryptor->Decrypt (inputBuffer, outputBuffer,
+							rd->ivSalt);
+						std::swap (inputBuffer, outputBuffer);
+					}
+
+					// Hash check
+					if (rd->hasChunkHash) {
+						if (ComputeSHA256 (inputBuffer) != rd->chunkHash) {
+							throw RuntimeException ("PackedRepository",
+								str (boost::format ("Source data for chunk '%1%' is corrupted") %
+									ToString (rd->chunkHash)),
+								KYLA_FILE_LINE);
+						}
+					}
+
+					// Decompression
+					if (rd->compressionAlgorithm != CompressionAlgorithm::Uncompressed) {
+						auto decompressor = CreateBlockCompressor (rd->compressionAlgorithm);
+
+						assert (rd->compressionInputSize == static_cast<int64> (inputBuffer.size ()));
+
+						outputBuffer.resize (rd->compressionOutputSize);
+
+						decompressor->Decompress (inputBuffer, outputBuffer);
+					} else {
+						std::swap (inputBuffer, outputBuffer);
+					}
+
+					outputQueue_.Insert ({ 
+						std::move (processRequest.requestData), 
+						std::move (outputBuffer) });
+				} catch (const std::exception&) {
+					errorState_->RegisterException (std::current_exception ());
+
+					break;
 				}
-
-				// Decompression
-				if (rd->compressionAlgorithm != CompressionAlgorithm::Uncompressed) {
-					auto decompressor = CreateBlockCompressor (rd->compressionAlgorithm);
-
-					assert (rd->compressionInputSize == static_cast<int64> (inputBuffer.size ()));
-
-					outputBuffer.resize (rd->compressionOutputSize);
-
-					decompressor->Decompress (inputBuffer, outputBuffer);
-				} else {
-					std::swap (inputBuffer, outputBuffer);
-				}
-
-				outputQueue_.Insert ({ 
-					std::move (processRequest.requestData), 
-					std::move (outputBuffer) });
 			}
 
 			outputQueue_.Insert (OutputRequest{});
@@ -442,13 +491,16 @@ private:
 	ProducerConsumerQueue<ProcessRequest>& inputQueue_;
 	ProducerConsumerQueue<OutputRequest>& outputQueue_;
 	std::thread thread_;
+	ErrorState* errorState_;
 };
 
 class OutputThread
 {
 public:
-	OutputThread (ProducerConsumerQueue<OutputRequest>& outputRequestQueue)
+	OutputThread (ProducerConsumerQueue<OutputRequest>& outputRequestQueue,
+		ErrorState* errorState)
 		: queue_ (outputRequestQueue)
+		, errorState_ (errorState)
 	{
 	}
 
@@ -456,16 +508,26 @@ public:
 	{
 		std::thread outputThread{ [&] () -> void {
 			for (;;) {
-				auto outputRequest = queue_.Get ();
-
-				if (!outputRequest.requestData) {
+				if (errorState_->IsSignaled ()) {
 					break;
 				}
 
-				auto& rd = outputRequest.requestData;
+				try {
+					auto outputRequest = queue_.Get ();
 
-				outputRequest.requestData->callback (rd->contentHash, outputRequest.data,
-					rd->sourceOffset, rd->totalSize);
+					if (!outputRequest.requestData) {
+						break;
+					}
+
+					auto& rd = outputRequest.requestData;
+
+					outputRequest.requestData->callback (rd->contentHash, outputRequest.data,
+						rd->sourceOffset, rd->totalSize);
+				} catch (const std::exception&) {
+					errorState_->RegisterException (std::current_exception ());
+				
+					break;
+				}
 			}
 		}
 		};
@@ -481,6 +543,7 @@ public:
 private:
 	ProducerConsumerQueue<OutputRequest>& queue_;
 	std::thread thread_;
+	ErrorState* errorState_;
 };
 }
 
@@ -609,9 +672,10 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 			readRequests.emplace_back (std::move (readRequest));
 		}
 
-		ReadThread readThread{ std::move (readRequests), processRequestQueue };
-		ProcessThread processThread{ processRequestQueue, outputRequestQueue };
-		OutputThread outputThread{ outputRequestQueue };
+		ErrorState errorState;
+		ReadThread readThread{ std::move (readRequests), processRequestQueue, &errorState };
+		ProcessThread processThread{ processRequestQueue, outputRequestQueue, &errorState };
+		OutputThread outputThread{ outputRequestQueue, &errorState };
 
 		readThread.Run ();
 		processThread.Run ();
@@ -622,6 +686,10 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 		outputThread.Join ();
 
 		contentObjectsInPackageQuery.Reset ();
+
+		if (errorState.IsSignaled ()) {
+			errorState.RethrowException ();
+		}
 	}
 }
 
