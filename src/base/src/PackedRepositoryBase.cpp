@@ -244,6 +244,15 @@ struct OutputRequest
 	}
 };
 
+class ProducerConsumerQueueBase
+{
+protected:
+	~ProducerConsumerQueueBase () {};
+
+public:
+	virtual void Poison () = 0;
+};
+
 /**
 This is an internally synchronized producer-consumer-queue. It supports inserting from 
 multiple threads, and retrieving from multiple threads. Threads will block on a condition
@@ -258,7 +267,7 @@ has been retrieved.
 If no limit is specified, it will never block during inserts.
 */
 template <typename T>
-class ProducerConsumerQueue
+class ProducerConsumerQueue : public ProducerConsumerQueueBase
 {
 public:
 	ProducerConsumerQueue (std::function<int64 (const T&)> itemValueFunction,
@@ -271,13 +280,28 @@ public:
 
 	ProducerConsumerQueue () = default;
 
+	void Poison () override
+	{
+		std::unique_lock<std::mutex> lock{ mutex_ };
+
+		poisoned_ = true;
+		pendingItemValue_ = 0;
+
+		lock.unlock ();
+		conditionVariable_.notify_all ();
+	}
+
 	void Insert (T&& t)
 	{
 		std::unique_lock<std::mutex> lock{ mutex_ };
 
 		if (maxPendingItemValue_ && pendingItemValue_ > maxPendingItemValue_) {
 			conditionVariable_.wait (lock, 
-				[this]() { return pendingItemValue_ < maxPendingItemValue_; });
+				[this]() { return pendingItemValue_ < maxPendingItemValue_ || poisoned_; });
+		}
+
+		if (poisoned_) {
+			return;
 		}
 
 		queue_.emplace_back (std::move (t));
@@ -293,8 +317,12 @@ public:
 	{
 		std::unique_lock<std::mutex> lock{ mutex_ };
 
-		while (queue_.empty ()) {
+		while (queue_.empty () && !poisoned_) {
 			conditionVariable_.wait (lock);
+		}
+
+		if (poisoned_) {
+			return T{};
 		}
 
 		auto t = std::move (queue_.front ());
@@ -318,6 +346,7 @@ private:
 	std::function<int64 (const T&)> itemValueFunction_;
 	int64 maxPendingItemValue_ = 0;
 	int64 pendingItemValue_ = 0;
+	bool poisoned_ = false;
 };
 
 struct ErrorState
@@ -326,6 +355,13 @@ struct ErrorState
 
 	std::mutex mutex_;
 	std::exception_ptr exception_;
+
+	std::vector<ProducerConsumerQueueBase*> queues_;
+
+	void RegisterQueue (ProducerConsumerQueueBase* queue)
+	{
+		queues_.push_back (queue);
+	}
 
 	bool IsSignaled () const
 	{
@@ -337,6 +373,10 @@ struct ErrorState
 		errorOccurred_ = true;
 		std::lock_guard<std::mutex> lock{ mutex_ };
 		exception = exception;
+
+		for (auto& queue : queues_) {
+			queue->Poison ();
+		}
 	}
 
 	void RethrowException ()
@@ -362,28 +402,28 @@ public:
 	void Run ()
 	{
 		std::thread readThread{ [&] () -> void {
-				for (auto& readRequest : readRequests_) {
-					if (errorState_->IsSignaled ()) {
-						break;
-					}
-
-					try {
-						auto& rd = readRequest.requestData;
-
-						std::vector<byte> inputBuffer;
-						inputBuffer.resize (rd->packageSize);
-
-						rd->packageFile->Read (rd->packageOffset, inputBuffer);
-
-						queue_.Insert ({ std::move (readRequest.requestData), std::move (inputBuffer) });
-					} catch (const std::exception&) {
-						errorState_->RegisterException (std::current_exception ());
-
-						break;
-					}
+			for (auto& readRequest : readRequests_) {
+				if (errorState_->IsSignaled ()) {
+					break;
 				}
 
-				queue_.Insert (std::move (ProcessRequest{}));
+				try {
+					auto& rd = readRequest.requestData;
+
+					std::vector<byte> inputBuffer;
+					inputBuffer.resize (rd->packageSize);
+
+					rd->packageFile->Read (rd->packageOffset, inputBuffer);
+
+					queue_.Insert ({ std::move (readRequest.requestData), std::move (inputBuffer) });
+				} catch (const std::exception&) {
+					errorState_->RegisterException (std::current_exception ());
+
+					break;
+				}
+			}
+
+			queue_.Insert (std::move (ProcessRequest{}));
 		}
 		};
 
@@ -673,6 +713,10 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 		}
 
 		ErrorState errorState;
+
+		errorState.RegisterQueue (&processRequestQueue);
+		errorState.RegisterQueue (&outputRequestQueue);
+
 		ReadThread readThread{ std::move (readRequests), processRequestQueue, &errorState };
 		ProcessThread processThread{ processRequestQueue, outputRequestQueue, &errorState };
 		OutputThread outputThread{ outputRequestQueue, &errorState };
