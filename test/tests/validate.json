@@ -2,18 +2,18 @@
     "info" : {
         "description" : "Basic validation test"
     },
-    "setup" : [
+    "actions" : [
         {
-            "generate-repository" : {
+            "name" : "generate-repository",
+            "args" : {
                 "source" : "data/basic.xml",
                 "source-directory" : "data/shared",
                 "target" : "test"
             }
-        }
-    ],
-    "execute" : [
+        },
         {
-            "install" : {
+            "name" : "install",
+            "args" : {
                 "source" : "test",
                 "target" : "deploy",
                 "features" : [
@@ -22,14 +22,14 @@
             }
         },
         {
-            "zero-file" : [
+            "name" : "zero-file",
+            "args" : [
                 "deploy/1.txt"
             ]
-        }
-    ],
-    "test" : [
+        },
         {
-            "validate" : {
+            "name" : "validate",
+            "args" : {
                 "source" : "test",
                 "target" : "deploy",
                 "features" : [

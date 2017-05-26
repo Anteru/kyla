@@ -2,25 +2,26 @@
     "info" : {
         "description" : "Update one file"
     },
-    "setup" : [
+    "actions" : [
         {
-            "generate-repository" : {
+            "name" : "generate-repository",
+            "args" : {
                 "source" : "data/version_one.xml",
                 "source-directory" : "data/shared",
                 "target" : "v1"
             }
         },
         {
-            "generate-repository" : {
+            "name" : "generate-repository",
+            "args" : {
                 "source" : "data/version_two.xml",
                 "source-directory" : "data/shared",
                 "target" : "v2"
             }
-        }
-    ],
-    "execute" : [
+        },
         {
-            "install" : {
+            "name" : "install",
+            "args" : {
                 "source" : "v1",
                 "target" : "deploy",
                 "features" : [
@@ -29,18 +30,18 @@
             }
         },
         {
-            "configure" : {
+            "name"  : "configure",
+            "args" : {
                 "source" : "v2",
                 "target" : "deploy",
                 "features" : [
                     "77f7f196-8bff-44c3-987e-09e1473cd04e"
                 ]
             }
-        }
-    ],
-    "test" : [
+        },
         {
-            "check-hash" : {
+            "name" : "check-hash",
+            "args" : {
                 "deploy/base.txt" : "928af6ea40cc9728d511a140a552389bec6daa9a3252f65845ec48c861eb4dc3"
             }
         }

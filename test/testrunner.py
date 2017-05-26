@@ -62,7 +62,6 @@ class KylaRunner:
 
     def _ExecuteAction(self, action, source, target, features, key):
         args = [self._kcl, action]
-
         if key:
             args += ['--key', key]
 
@@ -96,7 +95,11 @@ class TestEnvironment:
     def LogError (self, *args):
         self._errorLog.write (' '.join (map (str, args)) + '\n')
 
-class SetupGenerateRepository:
+class TestAction:
+    def Execute (self, env : TestEnvironment, args):
+        pass
+
+class GenerateRepositoryAction (TestAction):
     def Execute(self, env : TestEnvironment, args):
         target = os.path.join (env.testDirectory, args ['target'])
         source = os.path.join (env.workingDirectory, 'tests', args ['source'])
@@ -108,7 +111,7 @@ class SetupGenerateRepository:
         return env.kyla.BuildRepository (source,
             target, sourceDirectory = sourceDirectory)
 
-class ExecuteInstall:
+class InstallAction (TestAction):
     def Execute(self, env : TestEnvironment, args):
         source = os.path.join (env.testDirectory, args ['source'])
         target = os.path.join (env.testDirectory, args ['target'])
@@ -116,7 +119,7 @@ class ExecuteInstall:
 
         return env.kyla.Install (source, target, features, args.get ('key', None))
 
-class ExecuteConfigure:
+class ConfigureAction (TestAction):
     def Execute(self, env : TestEnvironment, args):
         source = os.path.join (env.testDirectory, args ['source'])
         target = os.path.join (env.testDirectory, args ['target'])
@@ -124,7 +127,7 @@ class ExecuteConfigure:
 
         return env.kyla.Configure (source, target, features, args.get ('key', None))
 
-class ExecuteValidate:
+class ValidateAction (TestAction):
     def Execute(self, env : TestEnvironment, args):
         source = os.path.join (env.testDirectory, args ['source'])
         target = os.path.join (env.testDirectory, args ['target'])
@@ -136,7 +139,7 @@ class ExecuteValidate:
         else:
             return not result
 
-class ZeroFile:
+class ZeroFileAction (TestAction):
     def Execute (self, env : TestEnvironment, args):
         blockSize = 1 << 20 # 1 MiB sized blocks
         nullBuffer = bytes([0 for _ in range (blockSize)])
@@ -157,7 +160,7 @@ class ZeroFile:
 
         return True
 
-class CheckHash:
+class CheckHashAction (TestAction):
     def Execute (self, env : TestEnvironment, args):
         for k,v in args.items ():
             try:
@@ -171,29 +174,56 @@ class CheckHash:
                 return False
         return True
 
-class CheckNotExistant:
+class CheckNotExistantAction (TestAction):
     def Execute (self, env : TestEnvironment, args):
         for arg in args:
             if os.path.exists (os.path.join (env.testDirectory, arg)):
                 return False
         return True
 
-class CheckExistant:
+class CheckExistantAction (TestAction):
     def Execute (self, env : TestEnvironment, args):
         for arg in args:
             if not os.path.exists (os.path.join (env.testDirectory, arg)):
                 return False
         return True
 
-hooks = {
-    'generate-repository' : SetupGenerateRepository,
-    'install' : ExecuteInstall,
-    'configure' : ExecuteConfigure,
-    'validate' : ExecuteValidate,
-    'check-hash' : CheckHash,
-    'check-not-existant' : CheckNotExistant,
-    'check-existant' : CheckExistant,
-    'zero-file' : ZeroFile
+class DamageFileAction (TestAction):
+    def Execute (self, env : TestEnvironment, args):
+        filename = os.path.join (env.testDirectory, args ['filename'])
+        offset = args.get ('offset', 0)
+        size = args.get ('size', os.path.getsize (filename) - offset)
+
+        with open (filename, 'r+b') as outputFile:
+            outputFile.seek (offset)
+            nullBuffer = bytes([0 for _ in range (size)])
+            outputFile.write (nullbuffer)
+        
+        return True
+
+class TruncateFileAction (TestAction):
+    def Execute (self, env : TestEnvironment, args):
+        filename = os.path.join (env.testDirectory, args ['filename'])
+        size = args.get ('size')
+
+        if size < 0:
+            size = os.path.getsize (filename) + size
+        
+        os.truncate (filename, size)
+
+        return True
+
+actions = {
+    'generate-repository' : GenerateRepositoryAction,
+    'install' : InstallAction,
+    'configure' : ConfigureAction,
+    'validate' : ValidateAction,
+    'check-hash' : CheckHashAction,
+    'check-not-existant' : CheckNotExistantAction,
+    'check-existant' : CheckExistantAction,
+    'zero-file' : ZeroFileAction,
+    'damage-file' : DamageFileAction,
+    'truncate-file' : TruncateFileAction
 }
 
 class Test:
@@ -205,16 +235,18 @@ class Test:
     def Execute(self):
         with tempfile.TemporaryDirectory () as tempDir:
             env = TestEnvironment (self.__kyla, tempDir)
+            for action in self.__test ['actions']:
+                a = actions [action ['name']] ()
+                args = action ['args']
+                expectedResult = action.get ('result', 'pass')
+                
+                r = a.Execute (env, args)
 
-            for phase in ['setup', 'execute', 'test']:
-                for step in self.__test [phase]:
-                    k = list (step.keys ()) [0]
-                    v = step [k]
-                    hook = hooks [k] ()
-                    r = hook.Execute (env, v)
-
-                    if r == False:
-                        return False
+                if expectedResult == 'pass' and r:
+                    return True
+                if expectedResult == 'fail' and r == False:
+                    return True
+                return False
         return True
 
 def check_negative(invalue):
