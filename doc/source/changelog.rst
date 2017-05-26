@@ -4,7 +4,9 @@ Changelog
 kyla 2.0.1
 ----------
 
-* Updated SQLite from 3.16.1 to 3.19.2
+* The packed repository deployment backend is now multithreaded. It will overlap reading data, decompressing, and writing data. For network sources, this means that downloads will happen concurrently with everything else, and installations should finish as soon as the data download has finished.
+* On Windows, the sample UI now shows the progress in the task bar.
+* Updated SQLite from 3.16.1 to 3.19.2.
 
 kyla 2.0
 --------

@@ -44,6 +44,8 @@ The repository stores various objects which can be referenced. In general, anyth
   
   If present, ``Packages`` is used to group files into packages. A ``Package`` must have a name and it must reference an object from the ``Files`` tree. Files which are not explicitly packaged are automatically placed into a ``main`` package.
 
+  Files can be grouped together for easy referencing using a ``Group`` node.
+
 * ``UI`` contains UI related data. This data is only present in source packages and never deployed, but it's used to create the installation UI.
 
   The ``FeatureTree`` defines the feature grouping. At least one ``Node`` must be present, and every node must reference at least one ``Feature``. Nodes can be arbitrarily nested.
