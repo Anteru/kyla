@@ -4,7 +4,7 @@ Changelog
 kyla 2.0.1
 ----------
 
-* Updated SQLite from 3.16.1 to 3.17.0
+* Updated SQLite from 3.16.1 to 3.19.2
 
 kyla 2.0
 --------
