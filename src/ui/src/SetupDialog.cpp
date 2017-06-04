@@ -103,7 +103,6 @@ public:
 			treeWidget->setFrameShape (QFrame::NoFrame);
 			treeWidget->setSizeAdjustPolicy (QAbstractScrollArea::SizeAdjustPolicy::AdjustToContentsOnFirstShow);
 
-			int totalHeight = 0;
 			for (auto& child : children_) {
 				auto item = child->CreateTreeWidgetItem ();
 				treeWidget->addTopLevelItem (item);
@@ -131,7 +130,6 @@ public:
 			
 			selectedSubfeaturesLabel_ = new QLabel;
 			UpdateSelectedSubfeaturesLabel ();
-			selectedSubfeaturesLabel_->setSizePolicy (QSizePolicy::MinimumExpanding, QSizePolicy::Maximum);
 
 			layout->addWidget (selectedSubfeaturesLabel_, 2, 1);
 			layout->addWidget (treeWidget, 3, 1);
@@ -460,7 +458,7 @@ SetupDialog::SetupDialog (SetupContext* context)
 		featuresLayout->addWidget (root->CreateWidget ());
 	}
 
-	featuresLayout->addSpacerItem (new QSpacerItem{ 0, 0, QSizePolicy::Expanding, QSizePolicy::Expanding });
+	featuresLayout->addStretch (1);
 	
 	ui->featuresAreaContent->setLayout (featuresLayout);
 
