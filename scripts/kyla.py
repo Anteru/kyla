@@ -16,15 +16,15 @@ import xml.dom.minidom
 
 import pathlib
 
-def WalkDirectory(directory, filter):
+def WalkDirectory(directory, filter, recursive):
     with os.scandir (directory) as it:
         for entry in it:
             if filter is not None:
                 if not filter (entry):
                     continue
 
-            if entry.is_dir ():
-                yield from WalkDirectory (entry, filter)
+            if entry.is_dir () and recursive:
+                yield from WalkDirectory (entry, filter, recursive)
             elif entry.is_file ():
                 yield entry
 
@@ -93,8 +93,8 @@ class FileGroup(RepositoryObject):
 		super().__init__()
 		self.__files = []
 	
-	def AddDirectory (self, sourceDirectory, outputDirectory, filter=None):
-		for file in WalkDirectory (sourceDirectory, filter):
+	def AddDirectory (self, sourceDirectory, outputDirectory, filter=None, recursive=True):
+		for file in WalkDirectory (sourceDirectory, filter, recursive):
 			p = pathlib.Path (file.path)
 			self.__files.append ((
 				file.path, 
