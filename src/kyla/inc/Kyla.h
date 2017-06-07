@@ -149,7 +149,7 @@ enum kylaRepositoryProperty
 
 	The result is an int which is 0 if not encrypted and 1 if
 	the repository is encrypted. For encrypted repositories, set
-	the key using kylaRepositoryProperty_DecryptionKey
+	the key by setting the kylaRepositoryProperty_DecryptionKey
 
 	@since 2.0
 	*/
@@ -165,7 +165,7 @@ enum kylaRepositoryProperty
 enum kylaFeatureProperty
 {
 	/**
-	The size of the file set when deployed, stored in an int64_t.
+	The deploy size of a feature, provided as an int64_t.
 	*/
 	kylaFeatureProperty_Size = 1,
 
@@ -258,10 +258,12 @@ struct KylaInstaller
 	Get a repository property.
 
 	The propertyId must be one of enumeration values from
-	kylaRepositoryProperty. If resultSize is provided, the size of the result
-	is written into it. If result is provided, the result is written into it.
-	If result is not null, resultSize must be set to the size of the buffer
-	result points to.
+	kylaRepositoryProperty. If resultSize is non-null, and result is null, the result
+	size is written into resultSize. If resultSize and result are both non-null, the
+	result is written into result if the resultSize is greater than or equal to the
+	required size. The actually written size will be stored in resultSize in this case.
+
+	The result size must be always provided.
 
 	@since 2.0
 	*/
@@ -275,10 +277,7 @@ struct KylaInstaller
 	Set a repository property.
 
 	The propertyId must be one of enumeration values from
-	kylaRepositoryProperty. If resultSize is provided, the size of the result
-	is written into it. If result is provided, the result is written into it.
-	If result is not null, resultSize must be set to the size of the buffer
-	result points to.
+	kylaRepositoryProperty.
 
 	@since 2.0
 	*/
@@ -292,10 +291,12 @@ struct KylaInstaller
 	Get a feature property.
 
 	The propertyId must be one of enumeration values from
-	kylaFeatureProperty. If resultSize is provided, the size of the result
-	is written into it. If result is provided, the result is written into it.
-	If result is not null, resultSize must be set to the size of the buffer
-	result points to.
+	kylaFeatureProperty. If resultSize is non-null, and result is null, the result
+	size is written into resultSize. If resultSize and result are both non-null, the
+	result is written into result if the resultSize is greater than or equal to the
+	required size. The actually written size will be stored in resultSize in this case.
+
+	The result size must be always provided.
 
 	@since 2.0
 	*/
@@ -310,10 +311,12 @@ struct KylaInstaller
 	Get a feature tree property.	
 	
 	The propertyId must be one of enumeration values from
-	kylaFeatureTreeProperty. If resultSize is provided, the size of the result
-	is written into it. If result is provided, the result is written into it.
-	If result is not null, resultSize must be set to the size of the buffer
-	result points to.
+	kylaFeatureTreeProperty. If resultSize is non-null, and result is null, the result
+	size is written into resultSize. If resultSize and result are both non-null, the
+	result is written into result if the resultSize is greater than or equal to the
+	required size. The actually written size will be stored in resultSize in this case.
+
+	The result size must be always provided.
 
 	@since 2.0
 	*/
