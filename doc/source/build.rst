@@ -24,7 +24,7 @@ Run CMake to configure the project. Build the ``kcl`` target to get the kyla run
 
     The ``docs`` target currently supports Windows only due to the virtual environment setup.
 
-tests
+Tests
 ^^^^^
 
 kyla comes with a set of sanity tests which ensure basic functionality. To run the tests, build the ``RUN_TESTS`` target, or use ``CTest``.
