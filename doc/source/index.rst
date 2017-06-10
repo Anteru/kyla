@@ -6,10 +6,13 @@ Contents:
 .. toctree::
     :maxdepth: 1
 
+    quickstart
+    howto
     repository-definition
     repository-types
     comparison
     changelog
+    build
     licenses
 
 Introduction
@@ -29,67 +32,12 @@ kyla is an installation system designed to deploy large amounts data. The main f
 
     kyla is not a full-fledged installer taking care of registry keys, registering services, or similar. It is designed to deploy and manage applications in a single folder. If you need additional pre/post install hooks, you can easily build them on top of kyla. For a comparison with existing tools, check out the :doc:`comparison`.
 
-Overview
---------
+System requirements
+-------------------
 
-kyla consists of three separate parts:
+kyla has been tested on the following OS:
 
-* ``kcl``, the kyla command line binary. It includes a command line front-end to the API, as well as access to the kyla build API.
-* ``kui``, the kyla UI. This is a small UI which can perform an installation, up/downgrades, and configure operations.
-* ``pykyla``, the kyla utility library. A Python module which facilitates the repository description creation.
-* ``libkyla``, the core library which contains all processing logic. ``libkyla`` provides a C API for clients for integration.
+* Windows 10 x64
+* Ubuntu 17.04
 
-Quick start
------------
-
-The fastest -- and also the recommended way -- to get started with kyla is to use the Python bindings to create a build definition. A simple installer could look like this:
-
-.. code:: Python
-
-    import kyla
-
-    rb = kyla.RepositoryBuilder ()
-
-    mainFeature = rb.AddFeature ()
-
-    binaryFiles = rb.AddFileGroup ()
-    binaryFiles.AddDirectory ('path/to/bin', outputDirectory = 'bin')
-
-    # We want to store the binary files in their own package
-    binPackage = rb.AddFilePackage ('bin')
-
-    # Link the binary package to the binary files
-    binPackage.AddReference (binaryFiles)
-
-    # Our main feature consists of only the binary files -- link them together
-    mainFeature.AddReference (binaryFiles)
-
-    # For the UI, we want a single node feature tree
-    featureTreeMainNode = rb.AddFeatureTreeNode ('Binaries', 
-        'These are the binaries')
-
-    # link the feature tree node to the feature. If the user selects the node,
-    # all linked features will be installed
-    featureTreeMainNode.AddReference (mainFeature)
-
-    open ('desc.xml', 'w').write (rb.Finalize())
-
-The Python bindings hide the complexity of referencing nodes and handle all ids internally. The generated Xml file can be then processed using ``kcl`` to create a build package using the following command line: ``kcl build desc.xml target-folder``.
-
-Once created, there are two ways to install. The command line can be used as following:
-
-.. code:: bash
-
-    $ kcl query-repository features path/to/repository
-    c353d049-710e-4027-a707-18e11bbcab22
-
-    $ kcl install path/to/repository path/to/target c353d049-710e-4027-a707-18e11bbcab22
-
-Note that the feature id will vary, this is just an example. The alternative is to build the user interface and create an ``info.json`` file next to the binary with the following contents:
-
-.. code:: json
-
-    {
-        "applicationName": "Name to show in the UI",
-        "repository": "path/to/repository/relative/to/UI"
-    }
+Other Windows/Linux variants should work, as kyla only relies on few cross-platform libraries, but they're not tested regularly.

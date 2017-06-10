@@ -46,6 +46,8 @@ The repository stores various objects which can be referenced. In general, anyth
 
   Files can be grouped together for easy referencing using a ``Group`` node.
 
+  A ``File`` node can reference the full source path or a relative path. If a relative path is used, the source directory must be specified during the compilation. Relative paths are automatically used for the ``Target`` path as well if there's no ``Target`` specified.
+
 * ``UI`` contains UI related data. This data is only present in source packages and never deployed, but it's used to create the installation UI.
 
   The ``FeatureTree`` defines the feature grouping. At least one ``Node`` must be present, and every node must reference at least one ``Feature``. Nodes can be arbitrarily nested.

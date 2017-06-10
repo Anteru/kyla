@@ -7,18 +7,3 @@ License
 -------
 
 kyla is provided under the BSD license. See ``doc/source/licenses.rst`` for license information.
-
-Building kyla
--------------
-
-kyla requires Visual Studio 2015 Update 3 or GCC/Clang to build. The following external dependencies are also required:
-
-* `Boost <http://www.boost.org/>`_, configured with ``program_options``, ``filesytem``.
-* `OpenSSL <https://www.openssl.org/>`_
-* `Python 3.5 <https://python.org>`_ for build infrastructure and the Python bindings
-
-Optional build requirements:
-
-* `Qt 5.6 <https://www.qt.io/>`_ or later for the UI
-
-The build system using `CMake <https://cmake.org/>`_.
