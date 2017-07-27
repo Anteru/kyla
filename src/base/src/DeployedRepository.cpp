@@ -227,22 +227,19 @@ void DeployedRepository::ConfigureImpl (Repository& source,
 	db_.AttachTemporaryCopy ("source", source.GetDatabase ());
 
 	ProgressHelper progressHelper (context.progress);
-	progressHelper.Start (2);
-
-	progressHelper.AdvanceStage ("Setup");
+	progressHelper.Start (1);
+	progressHelper.AdvanceStage ("Install");
 
 	// Store the file sets we're going to install in a temporary table for
 	// joins, etc.
 	auto pendingFeaturesTable = db_.CreateTemporaryTable ("pending_features",
 		"Uuid BLOB NOT NULL UNIQUE");
 
-	PreparePendingFeatures (context.log, features, progressHelper);
+	PreparePendingFeatures (context.log, features);
 	UpdateFeatures ();
 	UpdateFeatureIdsForUnchangedFiles ();
 	RemoveChangedFiles (context.log);
 
-	progressHelper.SetStageFinished ();
-	progressHelper.AdvanceStage ("Install");
 	GetNewContentObjects (source, context.log, progressHelper);
 	CopyExistingFiles (context.log);
 	Cleanup (context.log);
@@ -260,8 +257,7 @@ void DeployedRepository::ConfigureImpl (Repository& source,
 Create a new temporary table pending_features which contains the UUIDs
 of the file sets we're about to add
 */
-void DeployedRepository::PreparePendingFeatures (Log& log, const ArrayRef<Uuid>& features,
-	ProgressHelper& progress)
+void DeployedRepository::PreparePendingFeatures (Log& log, const ArrayRef<Uuid>& features)
 {
 	{
 		auto transaction = db_.BeginTransaction ();
@@ -270,15 +266,12 @@ void DeployedRepository::PreparePendingFeatures (Log& log, const ArrayRef<Uuid>&
 
 		log.Debug ("Configure", "Selecting features for configure");
 
-		progress.SetStageTarget (features.GetCount ());
-		progress.SetAction ("Configuring features");
 		for (const auto& feature : features) {
 			insertPendingFeatureQuery.BindArguments (feature);
 			insertPendingFeatureQuery.Step ();
 			insertPendingFeatureQuery.Reset ();
 
 			log.Debug ("Configure", boost::format ("Selected feature: '%1%'") % ToString (feature));
-			++progress;
 		}
 
 		transaction.Commit ();
@@ -383,8 +376,11 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 	// Find all missing content objects in this database
 	std::vector<SHA256Digest> requiredContentObjects;
 
+	auto requestedContentObjectTable = db_.CreateTemporaryTable ("requested_content_objects",
+		"Hash BLOB UNIQUE NOT NULL");
+
 	{
-		auto diffQuery = db_.Prepare (
+		auto requestedContentObjectQuery = db_.Prepare ("INSERT INTO requested_content_objects "
 			"SELECT DISTINCT Hash FROM source.fs_contents "
 			"INNER JOIN source.fs_files ON "
 			"source.fs_contents.Id = source.fs_files.ContentId "
@@ -393,40 +389,57 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 			"WHERE Uuid IN (SELECT Uuid FROM pending_features)) "
 			"AND NOT Hash IN (SELECT Hash FROM main.fs_contents)");
 
-		while (diffQuery.Step ()) {
-			SHA256Digest contentObjectHash;
+		requestedContentObjectQuery.Step ();
+		requestedContentObjectQuery.Reset ();
+	}
+	{
+		auto requestedContentObjectQuery = db_.Prepare (
+			"SELECT Hash FROM requested_content_objects");
 
-			diffQuery.GetBlob (0, contentObjectHash);
+		while (requestedContentObjectQuery.Step ()) {
+			SHA256Digest contentObjectHash;
+			requestedContentObjectQuery.GetBlob (0, contentObjectHash);
+
 			requiredContentObjects.push_back (contentObjectHash);
 
 			log.Debug ("Configure", boost::format ("Discovered content '%1%'") % ToString (contentObjectHash));
 		}
-	}
 
-	progress.SetStageTarget (requiredContentObjects.size ());
+		auto totalRequiredContentQuery = db_.Prepare ("SELECT SUM(Size) FROM source.fs_contents "
+			"INNER JOIN requested_content_objects ON "
+			"source.fs_contents.Hash = requested_content_objects.Hash");
+
+		totalRequiredContentQuery.Step ();
+		progress.SetStageTarget (totalRequiredContentQuery.GetInt64 (0));
+	}
 
 	// Create directories
 	{
+		auto filePathTable = db_.CreateTemporaryTable ("requested_file_paths", "Path VARCHAR");
+		auto insertPathQuery = db_.Prepare ("INSERT INTO requested_file_paths VALUES (?)");
+
 		auto getTargetFilesQuery = db_.Prepare (
 			"SELECT Path FROM source.fs_files "
-			"WHERE source.fs_files.ContentId = (SELECT Id FROM source.fs_contents WHERE source.fs_contents.Hash = ?)");
+			"INNER JOIN source.fs_contents ON "
+			"source.fs_files.ContentID = source.fs_contents.Id "
+			"INNER JOIN requested_content_objects ON "
+			"source.fs_contents.Hash = requested_content_objects.Hash");
 
-		std::set<Path> paths;
+		while (getTargetFilesQuery.Step ()) {
+			const Path targetPath{ getTargetFilesQuery.GetText (0) };
 
-		for (const auto& hash : requiredContentObjects) {
-			getTargetFilesQuery.BindArguments (hash);
-
-			while (getTargetFilesQuery.Step ()) {
-				const Path targetPath{ getTargetFilesQuery.GetText (0) };
-
-				paths.insert (path_ / targetPath.parent_path ());
-			}
-
-			getTargetFilesQuery.Reset ();
+			insertPathQuery.BindArguments (targetPath.parent_path().string ().c_str ());
+			insertPathQuery.Step ();
+			insertPathQuery.Reset ();
 		}
 
-		for (const auto& path : paths) {
-			boost::filesystem::create_directories (path);
+		getTargetFilesQuery.Reset ();
+		
+		auto uniqueFilePathQuery = db_.Prepare ("SELECT DISTINCT Path "
+			"FROM requested_file_paths ORDER BY Path");
+		while (uniqueFilePathQuery.Step ()) {
+			boost::filesystem::create_directories (path_ / 
+				Path{ uniqueFilePathQuery.GetText (0) });
 		}
 	}
 
@@ -457,11 +470,32 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 	SHA256Digest stagingFileHash;
 #endif
 
+	struct ProgressUpdater
+	{
+	public:
+		ProgressUpdater (ProgressHelper* progress, int64 amount)
+			: progress_ (progress)
+			, progressUpdateAmount_ (amount)
+		{
+		}
+		
+		~ProgressUpdater ()
+		{
+			progress_->Advance (progressUpdateAmount_);
+		}
+
+	private:
+		ProgressHelper* progress_;
+		int64 progressUpdateAmount_;
+	};
+
 	// Fetch the missing ones now and store in the right places
 	source.GetContentObjects (requiredContentObjects, [&](const SHA256Digest& hash,
 		const ArrayRef<>& contents,
 		const int64 offset,
 		const int64 totalSize) -> void {
+		ProgressUpdater pu{ &progress, contents.GetSize () };
+
 		const auto hashString = ToString (hash);
 
 		const auto stagingFilePath = path_ / (hashString + ".kytmp");
@@ -589,8 +623,6 @@ void DeployedRepository::GetNewContentObjects (Repository& source, Log& log,
 			currentTransactionDeployedSize = 0;
 			currentTransactionSize = 0;
 		}
-
-		++progress;
 	});
 
 	log.Debug ("Configure", boost::format ("Committing transaction with %1% operations") % currentTransactionSize);

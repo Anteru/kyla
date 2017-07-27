@@ -38,8 +38,7 @@ private:
 
 	Sql::Database& GetDatabaseImpl () override;
 
-	void PreparePendingFeatures (Log& log, const ArrayRef<Uuid>& featureIds,
-		ProgressHelper& progress);
+	void PreparePendingFeatures (Log& log, const ArrayRef<Uuid>& featureIds);
 	void UpdateFeatures ();
 	void UpdateFeatureIdsForUnchangedFiles ();
 	void RemoveChangedFiles (Log& log);

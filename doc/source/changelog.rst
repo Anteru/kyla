@@ -1,6 +1,12 @@
 Changelog
 =========
 
+kyla 2.0.2
+----------
+
+* Installation preparation time has been drastically cut down if many (>10000) files are to be installed. Previously, a lot of time was spent identifying unique paths to create all directories, which has been reduced by more than an order of magnitude.
+* Progress reporting is now solely based on fetch progress. This optimizes for the default case where progress is dominated by fetching changed contents. In that case, the progress will be 100% accurate and reflect exactly what is written on disk. In cases where an installation mostly consists of duplication, the progress will not be updated while files are duplicated. Renames are treated as new content fetching.
+
 kyla 2.0.1
 ----------
 

@@ -78,20 +78,22 @@ public:
 		action_ = action;
 	}
 
-	void operator++()
+	void Advance (const int64 amount)
 	{
-		++current_;
+		current_ += amount;
 
 		progressCallback_ (GetTotalProgress (),
 			stageName_.c_str (), action_.c_str ());
 	}
 
+	void operator++()
+	{
+		Advance (1);
+	}
+
 	void operator++(int)
 	{
-		++current_;
-
-		progressCallback_ (GetTotalProgress (), 
-			stageName_.c_str (), action_.c_str ());
+		Advance (1);
 	}
 
 	void SetStageFinished ()
@@ -114,7 +116,7 @@ private:
 
 	float GetTotalProgress () const
 	{
-		const float stageWeight = static_cast<float> (currentStage_) / static_cast<float> (stageCount_);
+		const float stageWeight = 1 / static_cast<float> (stageCount_);
 		return stageWeight * currentStage_ + stageWeight * GetInStageProgress ();
 	}
 
