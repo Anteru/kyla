@@ -16,17 +16,6 @@
   <property name="windowTitle">
    <string>Preparing installation ...</string>
   </property>
-  <property name="styleSheet">
-   <string notr="true">QDialog, QMainWindow
-{
-	background-color: rgb(96,96,96);
-}
-
-QWidget
-{
-	color: #DDD;
-}</string>
-  </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
     <spacer name="verticalSpacer_2">

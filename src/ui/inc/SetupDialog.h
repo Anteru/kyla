@@ -22,6 +22,8 @@ details.
 
 #include "SetupContext.h"
 
+class QTreeWidgetItem;
+
 namespace Ui {
 class SetupDialog;
 }
@@ -75,11 +77,15 @@ private:
 	InstallThread* installThread_ = nullptr;
 	std::int64_t requiredDiskSpace_ = 0;
 
-public:
-	class FeatureTreeNode;
-
 private:
-	std::vector<std::unique_ptr<FeatureTreeNode>> featureTreeNodes_;
+	std::vector<QTreeWidgetItem*> featureTreeNodes_;
+	std::vector<std::vector<KylaUuid>> featureTreeFeatureIds_;
+
+	static constexpr int FeatureSizeRole = Qt::UserRole + 0;
+	static constexpr int FeatureDescriptionRole = Qt::UserRole + 1;
+	static constexpr int FeatureFeatureIdsIndexRole = Qt::UserRole + 2;
+
+	void OnFeatureSelectionItemChanged (QTreeWidgetItem*, int);
 
 #if KYLA_PLATFORM_WINDOWS
 	void showEvent (QShowEvent*);

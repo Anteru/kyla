@@ -13,68 +13,6 @@
   <property name="windowTitle">
    <string>Setup</string>
   </property>
-  <property name="styleSheet">
-   <string notr="true">QDialog, QMainWindow
-{
-	background-color: rgb(96,96,96);
-}
-
-QWidget
-{
-	color: #DDD;
-}
-
-QFrame#headerFrame {
-    border-bottom: 1 solid rgb(16,16,16);
-    background-color: rgb(24,24,24);
-}
-
-QFrame#installFeaturesFrame
-{
-    background-color: rgb(48,48,48);
-    border-top: 1 solid rgb(64,64,64);
-}
-
-QPushButton, QLineEdit
-{
-    border-radius: 3;
-}
-
-QLineEdit 
-{
-    background-color: #222;
-    border: 1 solid #666;
-}
-
-QPushButton {
-    background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1, stop:0 rgba(96,96,96, 255), stop:1 rgba(64,64,64, 255));
-
-    border: 1 solid #333;
-    padding: 6;
-}
-
-QPushButton:disabled {
-    background-color: rgb(128,128,128);
-}
-
-QPushButton:hover {
-background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1, stop:0 rgba(128,128,128, 255), stop:1 rgba(96,96,96, 255));
-}
-
-QFrame[frameShape=&quot;4&quot;] {
-	color: #AAA;
-}
-
-QFrame#installSettingsFrame {
-background-color: qlineargradient(spread:pad, x1:0, y1:0, x2:0, y2:1, stop:0 rgb(96,96,96), stop:1 rgb(48,48,48));
-border-bottom: 1 solid rgb(32,32,32);
-}
-
-QFrame#installActionsFrame {
-    background-color: rgb(48,48,48);
-    border-top: 1 solid rgb(64,64,64);
-}</string>
-  </property>
   <property name="sizeGripEnabled">
    <bool>true</bool>
   </property>
@@ -150,22 +88,7 @@ QFrame#installActionsFrame {
      <property name="lineWidth">
       <number>0</number>
      </property>
-     <layout class="QVBoxLayout" name="verticalLayout">
-      <property name="spacing">
-       <number>0</number>
-      </property>
-      <property name="leftMargin">
-       <number>0</number>
-      </property>
-      <property name="topMargin">
-       <number>0</number>
-      </property>
-      <property name="rightMargin">
-       <number>0</number>
-      </property>
-      <property name="bottomMargin">
-       <number>0</number>
-      </property>
+     <layout class="QVBoxLayout" name="verticalLayout_6">
       <item>
        <widget class="QLabel" name="selectFeaturesLabel">
         <property name="text">
@@ -177,52 +100,56 @@ QFrame#installActionsFrame {
        </widget>
       </item>
       <item>
-       <widget class="QScrollArea" name="featuresArea">
-        <property name="styleSheet">
-         <string notr="true">QWidget#featuresArea, QWidget#featuresAreaContent, QTreeWidget
-{
-    background: transparent;
-}
-
-QWidget#featuresAreaContent &gt; QWidget {
-	border-top: 1px solid rgb(64,64,64);
-	border-bottom: 1px solid rgb(16,16,16);
-	margin: 0;
-	background: rgb(48,48,48);
-}</string>
-        </property>
-        <property name="frameShape">
-         <enum>QFrame::NoFrame</enum>
-        </property>
-        <property name="frameShadow">
-         <enum>QFrame::Plain</enum>
-        </property>
-        <property name="lineWidth">
-         <number>0</number>
-        </property>
-        <property name="sizeAdjustPolicy">
-         <enum>QAbstractScrollArea::AdjustToContents</enum>
-        </property>
-        <property name="widgetResizable">
-         <bool>true</bool>
-        </property>
-        <widget class="QWidget" name="featuresAreaContent">
-         <property name="geometry">
-          <rect>
-           <x>0</x>
-           <y>0</y>
-           <width>640</width>
-           <height>258</height>
-          </rect>
-         </property>
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="MinimumExpanding" vsizetype="Minimum">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-        </widget>
-       </widget>
+       <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="2,1">
+        <item>
+         <layout class="QVBoxLayout" name="verticalLayout">
+          <item>
+           <widget class="QTreeWidget" name="featureSelection">
+            <property name="rootIsDecorated">
+             <bool>true</bool>
+            </property>
+            <attribute name="headerVisible">
+             <bool>false</bool>
+            </attribute>
+            <column>
+             <property name="text">
+              <string notr="true">1</string>
+             </property>
+            </column>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="requiredDiskSpaceValue">
+            <property name="sizePolicy">
+             <sizepolicy hsizetype="Preferred" vsizetype="Minimum">
+              <horstretch>0</horstretch>
+              <verstretch>0</verstretch>
+             </sizepolicy>
+            </property>
+            <property name="text">
+             <string>No features selected</string>
+            </property>
+            <property name="alignment">
+             <set>Qt::AlignBottom|Qt::AlignLeading|Qt::AlignLeft</set>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </item>
+        <item>
+         <widget class="QLabel" name="featureDescriptionLabel">
+          <property name="text">
+           <string>Select a feature to see its description.</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
+          </property>
+          <property name="wordWrap">
+           <bool>true</bool>
+          </property>
+         </widget>
+        </item>
+       </layout>
       </item>
      </layout>
     </widget>
@@ -263,7 +190,7 @@ QWidget#featuresAreaContent &gt; QWidget {
          </layout>
         </item>
         <item>
-         <layout class="QHBoxLayout" name="horizontalLayout_3" stretch="3,3">
+         <layout class="QHBoxLayout" name="horizontalLayout_3" stretch="3">
           <item>
            <layout class="QHBoxLayout" name="horizontalLayout">
             <item>
@@ -285,35 +212,10 @@ QWidget#featuresAreaContent &gt; QWidget {
             </item>
            </layout>
           </item>
-          <item>
-           <widget class="QLabel" name="requiredDiskSpaceValue">
-            <property name="text">
-             <string>No features selected</string>
-            </property>
-            <property name="alignment">
-             <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
-            </property>
-           </widget>
-          </item>
          </layout>
         </item>
        </layout>
       </item>
-     </layout>
-    </widget>
-   </item>
-   <item>
-    <widget class="QFrame" name="installActionsFrame">
-     <property name="frameShape">
-      <enum>QFrame::StyledPanel</enum>
-     </property>
-     <property name="frameShadow">
-      <enum>QFrame::Plain</enum>
-     </property>
-     <property name="lineWidth">
-      <number>0</number>
-     </property>
-     <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="0,2,1">
       <item>
        <widget class="QLabel" name="installationProgressLabel">
         <property name="text">
