@@ -281,10 +281,26 @@ public:
 
 	TemporaryTable CreateTemporaryTable (const char* name, const char* columnDefinition)
 	{
-		sqlite3_exec (db_, (boost::format ("CREATE TEMPORARY TABLE %1% (%2%);") % name % columnDefinition).str ().c_str (),
+		sqlite3_exec (db_, (boost::format ("CREATE TEMPORARY TABLE %1% (%2%);") 
+			% name % columnDefinition).str ().c_str (),
 			nullptr, nullptr, nullptr);
 
 		return TemporaryTable (this, name);
+	}
+
+	bool HasTable (const char* name)
+	{
+		sqlite3_stmt* statement;
+		SAFE_SQLITE (sqlite3_prepare_v2 (db_, 
+			"SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?);",
+			-1, &statement, nullptr));
+
+		SAFE_SQLITE (sqlite3_bind_text (statement, 1, name, -1, nullptr));
+		sqlite3_step (statement);
+		const auto result = sqlite3_column_int64 (statement, 0) == 1;
+		sqlite3_finalize (statement);
+
+		return result;
 	}
 
 private:
@@ -627,6 +643,12 @@ TemporaryTable Database::CreateTemporaryTable (const char* name,
 void Database::Detach (const char * name)
 {
 	impl_->Detach (name);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+bool Database::HasTable (const char* name)
+{
+	return impl_->HasTable (name);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

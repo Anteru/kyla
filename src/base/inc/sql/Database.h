@@ -76,6 +76,7 @@ public:
 		const char* columnDefinition);
 
 	void CheckIntegrity ();
+	bool HasTable (const char* name);
 
 public:
 	struct Impl;
