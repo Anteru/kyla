@@ -7,18 +7,34 @@ details.
 [LICENSE END]
 */
 
-#include "SplashDialog.h"
-#include <QApplication>
+#include "SetupLogic.h"
+
+#include <QGuiApplication>
+#include <QQmlApplicationEngine>
+
+SetupContext* g_setupContext = nullptr;
+
+static QObject* SetupLogicSingletonProvider (QQmlEngine *engine, QJSEngine *scriptEngine)
+{
+	Q_UNUSED (engine)
+	Q_UNUSED (scriptEngine)
+
+	return new SetupLogic (g_setupContext);
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 int main(int argc, char *argv[])
 {
-	QApplication a(argc, argv);
+	QGuiApplication a(argc, argv);
 
 	SetupContext setupContext;
+	g_setupContext = &setupContext;
 
-	SplashDialog w (&setupContext, "kyla");
-	w.show();
+	qmlRegisterSingletonType<SetupLogic> ("kyla", 1, 0, "SetupLogic",
+		SetupLogicSingletonProvider);
+
+	QQmlApplicationEngine engine;
+	engine.load (QUrl (QStringLiteral ("qrc:/MainWindow.qml")));
 
 	return a.exec();
 }

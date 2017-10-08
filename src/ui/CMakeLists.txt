@@ -3,40 +3,38 @@ PROJECT(KYLA_UI)
 SET(SOURCES
 	src/main.cpp
 
+	src/OpenSourceRepositoryThread.cpp
 	src/SetupContext.cpp
-	src/SplashDialog.cpp
-	src/SetupDialog.cpp)
+	src/SetupLogic.cpp)
 
 SET(HEADERS
-	inc/SetupDialog.h
-	inc/SplashDialog.h
+	inc/OpenSourceRepositoryThread.h
 	inc/SetupContext.h
+	inc/SetupLogic.h
 	)
 
 SET(MOC_SOURCES
-	inc/SetupDialog.h
-	inc/SplashDialog.h
-	inc/SetupContext.h)
+	inc/OpenSourceRepositoryThread.h
+	inc/SetupContext.h
+	inc/SetupLogic.h)
 
-SET(UI_FILES
-	ui/SetupDialog.ui
-	ui/SplashDialog.ui)
+SET(RCC_FILES
+	ui/res.qrc)
 
 FIND_PACKAGE(Qt5Core)
-FIND_PACKAGE(Qt5Widgets)
+FIND_PACKAGE(Qt5Qml)
 
-# QT5_ADD_RESOURCES(OUT_RCC_FILES res/main.qrc)
-QT5_WRAP_UI(OUT_UI_FILES ${UI_FILES})
 QT5_WRAP_CPP(OUT_MOC_FILES ${MOC_SOURCES})
+QT5_ADD_RESOURCES(OUT_RCC_FILES ${RCC_FILES})
 
 ADD_EXECUTABLE(kui WIN32
 	${SOURCES}
 	${HEADERS}
 	${OUT_MOC_FILES}
-	${OUT_UI_FILES})
+	${OUT_RCC_FILES})
 
 TARGET_LINK_LIBRARIES(kui
-	kyla Qt5::Core Qt5::Gui Qt5::Widgets)
+	kyla Qt5::Core Qt5::Qml)
 
 IF(WIN32)
 	FIND_PACKAGE(Qt5WinExtras)

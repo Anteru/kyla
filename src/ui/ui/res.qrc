@@ -1,0 +1,6 @@
+<RCC>
+    <qresource prefix="/">
+        <file>SplashDialog.qml</file>
+        <file>MainWindow.qml</file>
+    </qresource>
+</RCC>
