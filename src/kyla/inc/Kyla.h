@@ -112,6 +112,11 @@ enum kylaAction
 	kylaAction_Verify		= 4
 };
 
+enum kylaInstallationLevel
+{
+	kylaInstallationLevel_Default = 1000
+};
+
 struct KylaDesiredState
 {
 	int featureCount;
@@ -174,7 +179,18 @@ enum kylaFeatureProperty
 
 	@since 2.0
 	*/
-	kylaFeatureProperty_Dependencies = 2
+	kylaFeatureProperty_Dependencies = 2,
+
+	/**
+	
+	The default installation level at which this feature should be installed.
+
+	The feature level is stored as an int64_t. kylaInstallationLevel_Default
+	is returned for features which should be installed by default.
+
+	@since 2.0
+	*/
+	kylaFeatureProperty_InstallationLevel = 3
 };
 
 enum kylaFeatureTreeProperty
@@ -193,7 +209,21 @@ enum kylaFeatureTreeProperty
 	The result is a list of tightly packed KylaUuid instances. The feature
 	tree node must be passed in as the object into the query function.
 	*/
-	kylaFeatureTreeProperty_NodeFeatures = 2
+	kylaFeatureTreeProperty_NodeFeatures = 2,
+
+	/**
+	The default installation level at which this feature should be installed.
+
+	The feature level is stored as an int64_t. kylaInstallationLevel_Default
+	is returned for features which should be installed by default. The
+	feature tree node must be passed in as the object into the query function.
+
+	This function is guaranteed to return the minimum installation level of all
+	features referenced by the feature tree node.
+
+	@since 2.0
+	*/
+	kylaFeatureTreeProperty_InstallationLevel = 3
 };
 
 struct KylaInstaller

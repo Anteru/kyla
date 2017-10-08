@@ -54,14 +54,25 @@ class Feature(RepositoryObject):
 	def __init__ (self):
 		super().__init__()
 		self.__dependencies = []
+		self.__installationLevel = None
 	
 	def AddDependency (self, otherFeature):
 		assert isinstance (otherFeature, feature)
 		self.__dependencies.append (feature)
 
+	def SetInstallationLevel (self, installationLevel):
+		assert installationLevel > 0
+		self.__installationLevel = installationLevel
+
+	def GetInstallationLevel (self):
+		return self.__installationLevel
+
 	def ToXml (self):
 		n = etree.Element ('Feature')
 		n.set ('Id', str (self.GetId ()))
+
+		if self.__installationLevel is not None:
+			n.set ('InstallationLevel', str (self.__installationLevel))
 
 		for reference in self.GetReferences ():
 			r = etree.SubElement (n, 'Reference')
@@ -118,14 +129,58 @@ class FeatureTreeNode(RepositoryObject):
 		self.__name = name
 		self.__description = description
 
+		self.__installationLevel = None
+		self.__featureInstallationLevel = None
+
 	def AddNode (self, name, description=None):
 		n = FeatureTreeNode (name, description)
 		self.__children.append (n)
 		return n
 
+	def AddReference (self, repositoryObject):
+		assert isinstance (repositoryObject, Feature)
+
+		# Our installation level must be smaller or equal to the lowest
+		# installation level of referenced features. We track the level
+		# of all features here, and bail out it this invariant no longer
+		# holds
+		featureInstallationLevel = repositoryObject.GetInstallationLevel ()
+		if self.__featureInstallationLevel is None:
+			self.__featureInstallationLevel = featureInstallationLevel
+		else:
+			if featureInstallationLevel is not None:
+				if self.__installationLevel > featureInstallationLevel:
+					raise Exception ('Feature tree node "{}" has installation level' \
+					' {} but a feature with level {} is added. ' \
+					'The feature tree node\'s installation level must be less or ' \
+					'equal to the referenced features.'.format (self.__name,
+					self.__installationLevel, featureInstallationLevel))
+				else:
+					self.__featureInstallationLevel = min (
+						self.__featureInstallationLevel,
+						featureInstallationLevel)
+
+		super().AddReference (repositoryObject)
+
+	def SetInstallationLevel (self, installationLevel):
+		if self.__featureInstallationLevel is not None:
+			if installationLevel > self.__featureInstallationLevel:
+				raise Exception ('Feature tree node "{}" has an implicit ' \
+				 	'installation level {} due to referenced features. The ' \
+					'requested installation cannot be set to {}.' \
+					'The feature tree node\'s installation level must be less or ' \
+					'equal to the referenced features.'.format (self.__name,
+					self.__featureInstallationLevel, installationLevel))
+			else:
+				self.__installationLevel = installationLevel
+
 	def ToXml (self):
 		n = etree.Element ('Node')
 		n.set ('Name', self.__name)
+
+		if self.__installationLevel:
+			n.Set ('InstallationLevel', str (self.__installationLevel))
+
 		if self.__description:
 			n.set ('Description', self.__description)
 
@@ -137,7 +192,6 @@ class FeatureTreeNode(RepositoryObject):
 			r.set ('Id', str (reference))
 
 		return n
-
 
 class RepositoryBuilder:
 	def __init__ (self):

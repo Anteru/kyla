@@ -146,6 +146,7 @@ struct FeatureTreeNode
 
 	Uuid* featureIds;
 	int featureIdCount;
+	int installationLevel = 1000;
 };
 
 class FeatureTree final
@@ -200,6 +201,7 @@ struct Repository
 
 	std::vector<Uuid> GetFeatures ();
 	int64_t GetFeatureSize (const Uuid& featureId);
+	int64_t GetFeatureInstallationLevel (const Uuid& featureId);
 
 	struct Dependency
 	{

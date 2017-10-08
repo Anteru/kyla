@@ -10,11 +10,21 @@ CREATE INDEX features_uuid_idx ON features (Uuid ASC);
 CREATE TABLE feature_dependencies (
 	SourceId INTEGER NOT NULL,
 	TargetId INTEGER NOT NULL,
-	-- This will be typically 'requires'
 	Relation TEXT NOT NULL,
 	FOREIGN KEY(SourceId) REFERENCES features(Id),
 	FOREIGN KEY(TargetId) REFERENCES features(Id)
 );
+
+-- Store additional properties for a feature 
+CREATE TABLE feature_properties (
+	FeatureId INTEGER NOT NULL,
+	PropertyId INTEGER NOT NULL,
+	Value NOT NULL,
+	FOREIGN KEY(FeatureId) REFERENCES features(Id)
+);
+
+CREATE INDEX feature_properties_idx 
+	ON feature_properties (FeatureId ASC, PropertyId ASC);
 
 CREATE VIEW feature_fs_contents_size AS 
 	SELECT 
@@ -61,6 +71,17 @@ CREATE TABLE ui_feature_tree_feature_references (
 	FOREIGN KEY(NodeId) REFERENCES ui_feature_tree_nodes(Id),
 	FOREIGN KEY(FeatureId) REFERENCES features(Id)
 );
+
+-- Store additional properties for the feature tree
+CREATE TABLE ui_feature_tree_node_properties (
+	NodeId INTEGER NOT NULL,
+	PropertyId INTEGER NOT NULL,
+	Value NOT NULL,
+	FOREIGN KEY(NodeId) REFERENCES ui_feature_tree_nodes(Id)
+);
+
+CREATE INDEX ui_feature_tree_node_properties_idx 
+	ON ui_feature_tree_node_properties (NodeId ASC, PropertyId ASC);
 
 -- FileStorage engine
 -- All contents stored in this repository
@@ -149,7 +170,11 @@ INSERT INTO properties (Name, Value)
 VALUES ('database_version', 1);
 
 CREATE VIEW fs_contents_with_reference_count AS
-	SELECT Id, Hash, Size, (SELECT COUNT(*) FROM fs_files WHERE ContentId=Id) AS ReferenceCount
+	SELECT 
+		Id, 
+		Hash, 
+		Size, 	
+		(SELECT COUNT(*) FROM fs_files WHERE ContentId=Id) AS ReferenceCount
 	FROM fs_contents;
 
 CREATE VIEW fs_content_view AS

@@ -73,6 +73,23 @@ int64_t BaseRepository::GetFeatureSizeImpl (const Uuid& id)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+int64_t BaseRepository::GetFeatureInstallationLevel (const Uuid& id)
+{
+	if (GetDatabase ().HasTable ("feature_properties")) {
+		static const char* querySql =
+			"SELECT Value FROM feature_properties WHERE FeatureId=? AND PropertyId=?;";
+
+		auto query = GetDatabase ().Prepare (querySql);
+		query.BindArguments (id, FeatureInstallationLevelPropertyId);
+		query.Step ();
+
+		return query.GetInt64 (0);
+	} else {
+		return 1000;
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////
 FeatureTree BaseRepository::GetFeatureTreeImpl ()
 {
 	FeatureTree result;

@@ -22,6 +22,7 @@ public:
 private:
 	virtual std::vector<Uuid> GetFeaturesImpl () override;
 	virtual int64_t GetFeatureSizeImpl (const Uuid& featureId) override;
+	virtual int64_t GetFeatureInstallationLevel (const Uuid& featureId);
 	virtual bool IsEncryptedImpl () override;
 	virtual void SetDecryptionKeyImpl (const std::string& key) override;
 	virtual std::string GetDecryptionKeyImpl () const override;
@@ -39,6 +40,8 @@ private:
 
 protected:
 	std::string key_;
+
+	static constexpr int FeatureInstallationLevelPropertyId = 1;
 };
 }
 
