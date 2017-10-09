@@ -25,17 +25,20 @@ public:
 	explicit SetupLogic (SetupContext* context, QObject* parent = nullptr);
 	~SetupLogic ();
 
-	Q_PROPERTY(QString applicationName MEMBER applicationName_ NOTIFY ApplicationNameChanged)
-	Q_PROPERTY(QString status MEMBER status_ NOTIFY StatusChanged)
+	Q_PROPERTY(QString applicationName MEMBER applicationName_ NOTIFY applicationNameChanged)
+	Q_PROPERTY(QString status MEMBER status_ NOTIFY statusChanged)
+	Q_PROPERTY(bool ready MEMBER ready_ NOTIFY readyChanged)
 
 signals:
-	void RepositoryOpened (const bool success);
-	void ApplicationNameChanged (const QString& newName);
-	void StatusChanged (const QString& status);
+	void repositoryOpened (const bool success);
+	void applicationNameChanged (const QString& newName);
+	void statusChanged (const QString& status);
+	void readyChanged (const bool ready);
 
 private:
 	QString applicationName_;
 	QString status_;
+	bool ready_ = false;
 	SetupContext* context_;
 	std::unique_ptr<OpenSourceRepositoryThread> openSourceRepositoryThread_;	
 };

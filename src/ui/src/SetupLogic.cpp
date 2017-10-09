@@ -29,19 +29,25 @@ SetupLogic::SetupLogic (SetupContext* context, QObject* parent)
 	context->setupInfo = setupInfoDocument.object ();
 
 	applicationName_ = context->setupInfo ["applicationName"].toString ();
-	emit ApplicationNameChanged (applicationName_);
+	emit applicationNameChanged (applicationName_);
 
 	status_ = QStringLiteral ("Opening source repository ...");
-	emit StatusChanged (status_);
+	emit statusChanged (status_);
 
 	openSourceRepositoryThread_.reset (new OpenSourceRepositoryThread (context,
 		context->setupInfo ["repository"].toString ()));
 
 	connect (openSourceRepositoryThread_.get (), &OpenSourceRepositoryThread::RepositoryOpened,
 		[this](const bool success) -> void {
-		emit RepositoryOpened (success);
+
+		emit repositoryOpened (success);
 		status_ = "Ready";
-		emit StatusChanged (status_);
+		emit statusChanged (status_);
+
+		if (success) {
+			ready_ = true;
+			emit readyChanged (true);
+		}
 	});
 	openSourceRepositoryThread_->start ();
 }
