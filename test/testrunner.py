@@ -60,16 +60,20 @@ class KylaRunner:
     def Validate(self, source, target, features=[], key=None):
         return self._ExecuteAction ('validate', source, target, features, key)
 
+    def QueryRepositoryFeatures (self, path, key=None):
+        return self._ExecuteQuery ('query-repository', 'features', path)
+
     def _ExecuteAction(self, action, source, target, features, key):
         args = [self._kcl, action]
         if key:
             args += ['--key', key]
 
-        args +=  [source, target] + features
-
-        # validate doesn't handle features yet, so we need to strip those
+        args +=  [source, target]
+        
         if action == 'validate':
-            args = args[0:2] + ['--summary=false', args[3:4]]
+            args += ['--summary=false']
+        else:
+            args += features
 
         if self._verbose:
             print ('Executing: "{}"'.format (' '.join (args)))
@@ -80,6 +84,26 @@ class KylaRunner:
                 print ('Result:', result.returncode)
                 PrintOutput (result)
             return result.returncode == 0
+        except:
+            if self._verbose:
+                print ('Result:', 'ERROR')
+            return False
+        
+    def _ExecuteQuery(self, action, what, path, key = None):
+        args = [self._kcl, action]
+        
+        args += [what, path]
+
+        if self._verbose:
+            print ('Executing: "{}"'.format (' '.join (args)))
+
+        try:
+            result = subprocess.run (args,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+            if self._verbose:
+                print ('Result:', result.returncode)
+                PrintOutput (result)
+            items = result.stdout.decode ('utf-8').splitlines ()
+            return result.returncode == 0, set (items)
         except:
             if self._verbose:
                 print ('Result:', 'ERROR')
@@ -110,6 +134,17 @@ class GenerateRepositoryAction (TestAction):
 
         return env.kyla.BuildRepository (source,
             target, sourceDirectory = sourceDirectory)
+
+class CheckRepositoryFeaturesPresentAction (TestAction):
+    def Execute(self, env : TestEnvironment, args):
+        path = os.path.join (env.testDirectory, args ['path'])
+        
+        ok, features = env.kyla.QueryRepositoryFeatures (path)
+
+        if not ok:
+            return False
+        else:
+            return set (args ['features']) == features
 
 class InstallAction (TestAction):
     def Execute(self, env : TestEnvironment, args):
@@ -197,14 +232,14 @@ class DamageFileAction (TestAction):
         with open (filename, 'r+b') as outputFile:
             outputFile.seek (offset)
             nullBuffer = bytes([0 for _ in range (size)])
-            outputFile.write (nullbuffer)
+            outputFile.write (nullBuffer)
         
         return True
 
 class TruncateFileAction (TestAction):
     def Execute (self, env : TestEnvironment, args):
         filename = os.path.join (env.testDirectory, args ['filename'])
-        size = args.get ('size')
+        size = args.get ('size', -1)
 
         if size < 0:
             size = os.path.getsize (filename) + size
@@ -223,30 +258,38 @@ actions = {
     'check-existant' : CheckExistantAction,
     'zero-file' : ZeroFileAction,
     'damage-file' : DamageFileAction,
-    'truncate-file' : TruncateFileAction
+    'truncate-file' : TruncateFileAction,
+    'check-features-present' : CheckRepositoryFeaturesPresentAction
 }
 
 class Test:
-    def __init__(self, kyla, testDescription):
+    def __init__(self, kyla, testDescription, keep):
         self.__kyla = kyla
+        self.__keep = keep
         self.__test = json.load (open(testDescription, 'r'),
             object_pairs_hook=OrderedDict)
 
     def Execute(self):
+        if self.__keep:
+            tempDir = tempfile.mkdtemp()
+            return self.__Execute (tempDir)
         with tempfile.TemporaryDirectory () as tempDir:
-            env = TestEnvironment (self.__kyla, tempDir)
-            for action in self.__test ['actions']:
-                a = actions [action ['name']] ()
-                args = action ['args']
-                expectedResult = action.get ('result', 'pass')
-                
-                r = a.Execute (env, args)
+            return self.__Execute (tempDir)
 
-                if expectedResult == 'pass' and r:
-                    return True
-                if expectedResult == 'fail' and r == False:
-                    return True
-                return False
+    def __Execute (self, tempDir):
+        env = TestEnvironment (self.__kyla, tempDir)
+        for action in self.__test ['actions']:
+            a = actions [action ['name']] ()
+            args = action ['args']
+            expectedResult = action.get ('result', 'pass')
+
+            r = a.Execute (env, args)
+
+            if expectedResult == 'pass' and r:
+                continue
+            if expectedResult == 'fail' and r == False:
+                continue
+            return False
         return True
 
 def check_negative(invalue):
@@ -255,12 +298,14 @@ def check_negative(invalue):
          raise argparse.ArgumentTypeError("{} is not a valid - must be an integer greater than or equal 0".format (invalue))
     return v
 
-def ExecuteTest (testFilename, kyla, verbose):
+def ExecuteTest (testFilename, kyla, verbose, keep):
     testName = os.path.splitext (os.path.basename (testFilename))[0]
-    tr = Test (KylaRunner (kyla, verbose=verbose), testFilename)
+    tr = Test (KylaRunner (kyla, verbose=verbose), testFilename, keep=keep)
     try:
         return (testName, tr.Execute (),)
-    except:
+    except Exception as e:
+        if verbose:
+            print ("Error", e)
         return (testName, False,)
 
 def FormatResult(r):
@@ -278,6 +323,8 @@ if __name__ == '__main__':
     parser.add_argument ('-p', '--parallel', type=check_negative,
         default=1,
         help="Run tests in parallel. Set to 0 to use as many threads as available on the machine.")
+    parser.add_argument ('--keep', action='store_true', default=False,
+        help='Do not cleanup directories after the test finishes')
 
     args = parser.parse_args ()
     startTime = time.time ()
@@ -285,7 +332,7 @@ if __name__ == '__main__':
     tests = glob.glob ('tests/' + args.regex + '.json')
     failures = 0
 
-    func = partial (ExecuteTest, kyla=args.binary, verbose=args.verbose)
+    func = partial (ExecuteTest, kyla=args.binary, verbose=args.verbose, keep=args.keep)
 
     if args.parallel == 1:
         for i, test in enumerate (tests, 1):

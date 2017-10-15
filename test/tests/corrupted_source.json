@@ -12,7 +12,7 @@
             }
         },
         {
-            "name" : "corrupt-file",
+            "name" : "damage-file",
             "args" : {
                 "filename" : "test/main.kypkg",
                 "offset" : 68
