@@ -155,6 +155,7 @@ public:
 	void GetBlob (const int column, const MutableArrayRef<>& output) const;
 
 	Type GetColumnType (const int column) const;
+	int GetColumnCount () const;
 
 	bool Step ();
 	void Reset ();

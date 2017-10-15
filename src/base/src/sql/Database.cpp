@@ -234,6 +234,11 @@ public:
 			KYLA_FILE_LINE);
 	}
 
+	int StatementGetColumnCount (void* statement)
+	{
+		return sqlite3_column_count (static_cast<sqlite3_stmt*> (statement));
+	}
+
 	bool Execute (const char* statement)
 	{
 		SAFE_SQLITE (sqlite3_exec (db_, statement, nullptr, nullptr, nullptr));
@@ -568,6 +573,12 @@ void Statement::GetBlob (const int index, const MutableArrayRef<>& result) const
 Type Statement::GetColumnType (const int index) const
 {
 	return impl_->StatementGetColumnType (p_, index);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+int Statement::GetColumnCount () const
+{
+	return impl_->StatementGetColumnCount (p_);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
