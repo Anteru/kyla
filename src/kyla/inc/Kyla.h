@@ -33,7 +33,8 @@ enum kylaResult
 	kylaResult_Ok = 0,
 	kylaResult_Error = 1,
 	kylaResult_ErrorInvalidArgument = 2,
-	kylaResult_ErrorUnsupportedApiVersion = 3
+	kylaResult_ErrorUnsupportedApiVersion = 3,
+	kylaResult_ErrorOpeningRepository = 4
 };
 
 struct KylaProgress

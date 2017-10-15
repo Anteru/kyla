@@ -166,7 +166,12 @@ int kylaOpenSourceRepository_2_0 (
 	}
 
 	KylaSourceRepository repo = new KylaRepositoryImpl;
-	repo->p = kyla::OpenRepository (path, false);
+	try {
+		repo->p = kyla::OpenRepository (path, false);
+	} catch (const std::exception&) {
+		delete repo;
+		return kylaResult_ErrorOpeningRepository;
+	}
 	repo->repositoryType = KylaRepositoryImpl::RepositoryType::Source;
 
 	*repository = repo;
@@ -206,8 +211,13 @@ int kylaOpenTargetRepository_2_0 (
 
 	// If create is not set, we're opening it right away
 	if ((options & kylaRepositoryOption_Create) == 0) {
-		repo->p = kyla::OpenRepository (path,
-			(options & kylaRepositoryOption_ReadOnly) != 1);
+		try {
+			repo->p = kyla::OpenRepository (path,
+				(options & kylaRepositoryOption_ReadOnly) != 1);
+		} catch (const std::exception&) {
+			delete repo;
+			return kylaResult_ErrorOpeningRepository;
+		}
 	}
 
 	*repository = repo;

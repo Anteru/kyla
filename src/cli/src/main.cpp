@@ -27,6 +27,7 @@ const char* kylaGetErrorString (const int r)
 	case kylaResult_Error: return "Error";
 	case kylaResult_ErrorInvalidArgument: return "Invalid argument";
 	case kylaResult_ErrorUnsupportedApiVersion: return "Unsupported Api version";
+	case kylaResult_ErrorOpeningRepository: return "Could not open repository";
 	default:
 		return "Unknown error";
 	}
