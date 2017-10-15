@@ -936,7 +936,7 @@ void DeployedRepository::ConfigureImpl (Repository& source,
 	db_.Detach ("source");
 
 	db_.Execute ("PRAGMA journal_mode = DELETE");
-	db_.Execute ("ANALYZE;");
+	db_.Execute ("PRAGMA optimize;");
 	db_.Execute ("VACUUM;");
 }
 
@@ -947,23 +947,21 @@ of the file sets we're about to add
 */
 void DeployedRepository::PreparePendingFeatures (Log& log, const ArrayRef<Uuid>& features)
 {
-	{
-		auto transaction = db_.BeginTransaction ();
-		auto insertPendingFeatureQuery = db_.Prepare (
-			"INSERT INTO pending_features (Uuid) VALUES (?);");
+	auto transaction = db_.BeginTransaction ();
+	auto insertPendingFeatureQuery = db_.Prepare (
+		"INSERT INTO pending_features (Uuid) VALUES (?);");
 
-		log.Debug ("Configure", "Selecting features for configure");
+	log.Debug ("Configure", "Selecting features for configure");
 
-		for (const auto& feature : features) {
-			insertPendingFeatureQuery.BindArguments (feature);
-			insertPendingFeatureQuery.Step ();
-			insertPendingFeatureQuery.Reset ();
+	for (const auto& feature : features) {
+		insertPendingFeatureQuery.BindArguments (feature);
+		insertPendingFeatureQuery.Step ();
+		insertPendingFeatureQuery.Reset ();
 
-			log.Debug ("Configure", boost::format ("Selected feature: '%1%'") % ToString (feature));
-		}
-
-		transaction.Commit ();
+		log.Debug ("Configure", boost::format ("Selected feature: '%1%'") % ToString (feature));
 	}
+
+	transaction.Commit ();
 }
 
 /**
@@ -986,28 +984,44 @@ to a new features.
 */
 void DeployedRepository::UpdateFeatureIdsForUnchangedFiles ()
 {
+	auto tempTable = db_.CreateTemporaryTable ("temp_file_path_to_new_id", 
+		"Path VARCHAR NOT NULL UNIQUE, Id INTEGER NOT NULL");
+
+	db_.Execute (
+		R"_(INSERT INTO temp_file_path_to_new_id (Path, Id)
+			-- We'll index using Path, FeatureId below
+			-- main.features.Id has been updated already
+			SELECT main.fs_files.Path AS Path, main.features.Id AS Id
+			FROM main.fs_files
+			-- Current files <-> contents are linked through the ContentId
+			INNER JOIN main.fs_contents ON main.fs_files.ContentId = main.fs_contents.Id
+			-- Current files <-> source files are linked through the unique Path
+			INNER JOIN source.fs_files ON source.fs_files.Path = main.fs_files.Path
+			-- We only want the files which didn't change content, that is, with the
+			-- same hash
+			INNER JOIN source.fs_contents ON main.fs_contents.Hash = source.fs_contents.Hash
+			-- We need to link the features on the source side to their UUID
+			INNER JOIN source.features ON source.features.Id = source.fs_files.FeatureId
+			-- We need to link our (new) feeature Id to the source feature Id through the UUID
+			INNER JOIN main.features ON main.features.Uuid = source.features.Uuid;)_"
+	);
+
 	// For files which have the same location and hash as before, update
 	// the feature id
 	// This long query will find every file where the hash and the path
 	// remained the same, and update it to use the new file set id we just
 	// inserted above
 	db_.Execute (
-		"UPDATE fs_files "
-		"SET FeatureId=( "
-		"    SELECT main.features.Id FROM main.features "
-		"    WHERE main.features.Uuid = ( "
-		"        SELECT source.features.Uuid FROM source.fs_files "
-		"        INNER JOIN source.features ON source.fs_files.FeatureId = source.features.Id "
-		"        WHERE source.fs_files.Path=main.fs_files.path) "
-		") "
-		"WHERE "
-		"fs_files.Path IN ( "
-		"SELECT main.fs_files.Path FROM fs_files AS MainFiles "
-		"    INNER JOIN main.fs_contents ON main.fs_files.ContentId = main.fs_contents.Id  "
-		"    INNER JOIN source.fs_files ON source.fs_files.Path = main.fs_files.Path  "
-		"    INNER JOIN source.fs_contents ON source.fs_files.ContentId = source.fs_contents.Id "
-		"    WHERE main.fs_contents.Hash IS source.fs_contents.Hash "
-		")");
+		R"_(
+		UPDATE fs_files 
+		SET FeatureId = (
+			SELECT Id 
+			FROM temp_file_path_to_new_id 
+			WHERE Path=temp_file_path_to_new_id.Path)
+		WHERE Path = (
+			SELECT Path 
+			FROM temp_file_path_to_new_id);
+		)_");
 }
 
 ///////////////////////////////////////////////////////////////////////////////
