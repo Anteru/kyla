@@ -73,7 +73,7 @@ public:
 		currentStageTarget_ = target;
 	}
 
-	void SetAction (const char* action)
+	void SetAction (const std::string& action)
 	{
 		action_ = action;
 	}
@@ -98,9 +98,11 @@ public:
 
 	void SetStageFinished ()
 	{
-		current_ = currentStageTarget_ = 1;
-		progressCallback_ (GetTotalProgress (),
-			stageName_.c_str (), action_.c_str ());
+		if (GetTotalProgress () < 1.0) {
+			current_ = currentStageTarget_ = 1;
+			progressCallback_ (GetTotalProgress (),
+				stageName_.c_str (), action_.c_str ());
+		}
 	}
 
 private:

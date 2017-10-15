@@ -62,7 +62,7 @@ bool CharToByte (const char c, byte& output)
 }
 
 ////////////////////////////////////////////////////////////////////////////
-byte		HexToByte (const char input [2])
+byte HexToByte (const char input [2])
 {
 	byte lower, upper;
 	CharToByte (input [0], upper);

@@ -41,11 +41,6 @@ private:
 	void PreparePendingFeatures (Log& log, const ArrayRef<Uuid>& featureIds);
 	void UpdateFeatures ();
 	void UpdateFeatureIdsForUnchangedFiles ();
-	void RemoveChangedFiles (Log& log);
-	void GetNewContentObjects (Repository& source, Log& log,
-		ProgressHelper& progress);
-	void CopyExistingFiles (Log& log);
-	void Cleanup (Log& log);
 
 	Sql::Database db_;
 	Path path_;

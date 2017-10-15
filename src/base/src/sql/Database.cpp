@@ -425,14 +425,22 @@ Transaction::~Transaction ()
 
 ////////////////////////////////////////////////////////////////////////////////
 Transaction::Transaction (Transaction&& other)
-	: impl_ (other.impl_)
 {
+	if (impl_) {
+		impl_->TransactionRollback ();
+	}
+
+	impl_ = other.impl_;
 	other.impl_ = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 Transaction& Transaction::operator=(Transaction&& other)
 {
+	if (impl_) {
+		impl_->TransactionRollback ();
+	}
+
 	impl_ = other.impl_;
 	other.impl_ = nullptr;
 
@@ -563,7 +571,7 @@ Type Statement::GetColumnType (const int index) const
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-TemporaryTable::TemporaryTable (Database::Impl* impl, const char* name)
+TemporaryTable::TemporaryTable (Database::Impl* const impl, const char* name)
 	: impl_ (impl)
 	, name_ (name)
 {

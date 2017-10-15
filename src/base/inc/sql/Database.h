@@ -59,7 +59,7 @@ public:
 	~Database ();
 
 	Transaction BeginTransaction (TransactionType type = TransactionType::Immediate);
-
+	
 	Statement Prepare (const char* statement);
 	Statement Prepare (const std::string& statement);
 
