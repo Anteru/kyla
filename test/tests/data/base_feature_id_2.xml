@@ -1,0 +1,13 @@
+<?xml version="1.0" ?>
+<Repository>
+	<Features>
+		<Feature Id="77f7f196-8bff-44c3-987e-09e1473cd04e">
+			<Reference Id="f3b9780b-d7dd-44d1-87d4-2bb9d8bc27e6"/>
+		</Feature>
+	</Features>
+	<Files>
+		<Group Id="f3b9780b-d7dd-44d1-87d4-2bb9d8bc27e6">
+			<File Source="1.txt" Target="base.txt"/>
+		</Group>
+	</Files>
+</Repository>

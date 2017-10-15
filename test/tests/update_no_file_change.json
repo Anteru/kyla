@@ -1,0 +1,58 @@
+{
+    "info" : {
+        "description" : "Update with no file change"
+    },
+    "actions" : [
+        {
+            "name" : "generate-repository",
+            "args" : {
+                "source" : "data/base_feature_id_1.xml",
+                "source-directory" : "data/shared",
+                "target" : "v1"
+            }
+        },
+        {
+            "name" : "generate-repository",
+            "args" : {
+                "source" : "data/base_feature_id_2.xml",
+                "source-directory" : "data/shared",
+                "target" : "v2"
+            }
+        },
+        {
+            "name" : "install",
+            "args" : {
+                "source" : "v1",
+                "target" : "deploy",
+                "features" : [
+                    "3111b6f8-3f2b-419e-b8bc-826d839e44c9"
+                ]
+            }
+        },
+        {
+            "name"  : "configure",
+            "args" : {
+                "source" : "v2",
+                "target" : "deploy",
+                "features" : [
+                    "77f7f196-8bff-44c3-987e-09e1473cd04e"
+                ]
+            }
+        },
+        {
+            "name" : "check-hash",
+            "args" : {
+                "deploy/base.txt" : "7f91985fcec377b3ad31c6eba837c8af0f0ad48973795edd33089ec2ad5d9372"
+            }
+        },
+        {
+            "name" : "check-features-present",
+            "args" : {
+                "path" : "deploy",
+                "features" : [
+                    "77f7f196-8bff-44c3-987e-09e1473cd04e"
+                ]
+            }
+        }
+    ]
+}
