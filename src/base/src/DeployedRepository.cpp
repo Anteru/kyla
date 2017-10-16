@@ -178,9 +178,9 @@ void DeployedRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& re
 	const Repository::GetContentObjectCallback& getCallback)
 {
 	auto query = db_.Prepare (
-		"SELECT Path FROM fs_files "
-		"WHERE ContentId=(SELECT Id FROM fs_contents WHERE Hash=?) "
-		"LIMIT 1");
+		R"_(SELECT Path FROM fs_files 
+		WHERE ContentId=(SELECT Id FROM fs_contents WHERE Hash=?)
+		LIMIT 1)_");
 
 	for (const auto& hash : requestedObjects) {
 		query.BindArguments (hash);
@@ -248,9 +248,10 @@ private:
 			"DELETE FROM fs_files WHERE Path=(SELECT Path FROM pending_changed_files)");
 		deleteChangedFilesQuery.Step ();
 
-		db_.Execute ("DELETE FROM fs_contents "
-			"WHERE Id IN "
-			"(SELECT Id FROM fs_contents_with_reference_count WHERE ReferenceCount = 0)");
+		db_.Execute (
+			R"_(DELETE FROM fs_contents
+			WHERE Id IN
+			(SELECT Id FROM fs_contents_with_reference_count WHERE ReferenceCount = 0))_");
 	}
 
 	virtual void ExecuteImpl (Log& log, UpdateProgress progress) override
@@ -295,17 +296,21 @@ private:
 		auto table = db_.CreateTemporaryTable ("pending_changed_files", "Path VARCHAR NOT NULL UNIQUE");
 
 		auto insertPendingFeatureQuery = db_.Prepare (
-			"INSERT INTO pending_changed_files (Path) "
-			"SELECT Path FROM ("
-			"SELECT main.fs_files.Path AS Path, main.fs_contents.Hash AS CurrentHash, source.fs_contents.Hash AS NewHash FROM main.fs_files "
-			"INNER JOIN main.fs_contents ON main.fs_files.ContentId = main.fs_contents.Id "
-			"INNER JOIN source.fs_files ON source.fs_files.Path = main.fs_files.Path "
-			"INNER JOIN source.fs_contents ON source.fs_files.ContentId = source.fs_contents.Id "
-			"WHERE CurrentHash IS NOT NewHash "
-			"AND source.fs_files.FeatureId IN "
-			"(SELECT Id FROM source.features "
-			"WHERE Uuid IN (SELECT Uuid FROM pending_features))"
-			") AS t");
+			R"_(INSERT INTO pending_changed_files (Path)
+			SELECT Path FROM (
+				SELECT 
+					main.fs_files.Path AS Path, 
+					main.fs_contents.Hash AS CurrentHash, 
+					source.fs_contents.Hash AS NewHash 
+				FROM main.fs_files
+				INNER JOIN main.fs_contents ON main.fs_files.ContentId = main.fs_contents.Id
+				INNER JOIN source.fs_files ON source.fs_files.Path = main.fs_files.Path
+				INNER JOIN source.fs_contents ON source.fs_files.ContentId = source.fs_contents.Id
+				WHERE CurrentHash IS NOT NewHash
+				AND source.fs_files.FeatureId IN
+				(SELECT Id FROM source.features
+				WHERE Uuid IN (SELECT Uuid FROM pending_features))
+				) AS t)_");
 
 		insertPendingFeatureQuery.Step ();
 		return table;
@@ -330,30 +335,9 @@ private:
 	{
 		int64_t totalCost = 0;
 		
-		auto requestedContentObjectTable = db_.CreateTemporaryTable ("requested_content_objects",
-			"Hash BLOB UNIQUE NOT NULL");
+		auto requestedContentObjectTable = CreateRequestedContentObjectTable ();
 
-		{
-			auto requestedContentObjectQuery = db_.Prepare ("INSERT INTO requested_content_objects "
-				"SELECT DISTINCT Hash FROM source.fs_contents "
-				"INNER JOIN source.fs_files ON "
-				"source.fs_contents.Id = source.fs_files.ContentId "
-				"WHERE source.fs_files.FeatureId IN "
-				"(SELECT Id FROM source.features "
-				"WHERE Uuid IN (SELECT Uuid FROM pending_features)) "
-				"AND NOT Hash IN (SELECT Hash FROM main.fs_contents)");
-
-			requestedContentObjectQuery.Step ();
-			requestedContentObjectQuery.Reset ();
-		}
-
-		auto insertFileQuery = db_.Prepare (
-			"INSERT INTO main.fs_files (Path, ContentId, FeatureId) "
-			"SELECT ?1, ?2, main.features.Id FROM source.fs_files "
-			"INNER JOIN source.features ON source.features.Id = source.fs_files.FeatureId "
-			"INNER JOIN features ON source.features.Uuid = main.features.Uuid "
-			"WHERE source.fs_files.path = ?1"
-		);
+		auto insertFileQuery = PrepareInsertFileQuery ();
 
 		auto insertContentObjectQuery = db_.Prepare (
 			"INSERT INTO fs_contents (Hash, Size) "
@@ -364,11 +348,13 @@ private:
 			"WHERE source.fs_files.ContentId = (SELECT Id FROM source.fs_contents WHERE source.fs_contents.Hash = ?)");
 
 		auto selectRequestedContentObjectsQuery = db_.Prepare (
-			"SELECT requested_content_objects.Hash AS Hash, "
-			"       source.fs_contents.Size AS Size "
-			"FROM requested_content_objects "
-			"INNER JOIN source.fs_contents ON "
-			"	source.fs_contents.Hash = requested_content_objects.Hash;");
+			R"_(SELECT requested_content_objects.Hash AS Hash,
+			       	   source.fs_contents.Size AS Size
+				FROM requested_content_objects
+				INNER JOIN source.fs_contents ON
+					source.fs_contents.Hash = requested_content_objects.Hash;
+			)_"
+		);
 
 		int64_t totalSize = 0;
 		while (selectRequestedContentObjectsQuery.Step ()) {
@@ -413,22 +399,8 @@ private:
 		// Find all missing content objects in this database
 		std::vector<SHA256Digest> requiredContentObjects;
 
-		auto requestedContentObjectTable = db_.CreateTemporaryTable ("requested_content_objects",
-			"Hash BLOB UNIQUE NOT NULL");
+		auto requestedContentObjectTable = CreateRequestedContentObjectTable ();
 
-		{
-			auto requestedContentObjectQuery = db_.Prepare ("INSERT INTO requested_content_objects "
-				"SELECT DISTINCT Hash FROM source.fs_contents "
-				"INNER JOIN source.fs_files ON "
-				"source.fs_contents.Id = source.fs_files.ContentId "
-				"WHERE source.fs_files.FeatureId IN "
-				"(SELECT Id FROM source.features "
-				"WHERE Uuid IN (SELECT Uuid FROM pending_features)) "
-				"AND NOT Hash IN (SELECT Hash FROM main.fs_contents)");
-
-			requestedContentObjectQuery.Step ();
-			requestedContentObjectQuery.Reset ();
-		}
 		{
 			auto requestedContentObjectQuery = db_.Prepare (
 				"SELECT Hash FROM requested_content_objects");
@@ -455,11 +427,12 @@ private:
 			auto insertPathQuery = db_.Prepare ("INSERT INTO requested_file_paths VALUES (?)");
 
 			auto getTargetFilesQuery = db_.Prepare (
-				"SELECT Path FROM source.fs_files "
-				"INNER JOIN source.fs_contents ON "
-				"source.fs_files.ContentID = source.fs_contents.Id "
-				"INNER JOIN requested_content_objects ON "
-				"source.fs_contents.Hash = requested_content_objects.Hash");
+				R"_(SELECT Path FROM source.fs_files
+				INNER JOIN source.fs_contents ON
+				source.fs_files.ContentID = source.fs_contents.Id
+				INNER JOIN requested_content_objects ON
+				source.fs_contents.Hash = requested_content_objects.Hash)_"
+			);
 
 			while (getTargetFilesQuery.Step ()) {
 				const Path targetPath{ getTargetFilesQuery.GetText (0) };
@@ -485,13 +458,7 @@ private:
 		int64 currentTransactionDeployedSize = 0;
 		int64 currentTransactionSize = 0;
 
-		auto insertFileQuery = db_.Prepare (
-			"INSERT INTO main.fs_files (Path, ContentId, FeatureId) "
-			"SELECT ?1, ?2, main.features.Id FROM source.fs_files "
-			"INNER JOIN source.features ON source.features.Id = source.fs_files.FeatureId "
-			"INNER JOIN features ON source.features.Uuid = main.features.Uuid "
-			"WHERE source.fs_files.path = ?1"
-		);
+		auto insertFileQuery = PrepareInsertFileQuery ();
 
 		auto insertContentObjectQuery = db_.Prepare (
 			"INSERT INTO fs_contents (Hash, Size) "
@@ -646,6 +613,47 @@ private:
 		transaction.Commit ();
 	}
 
+	Sql::TemporaryTable CreateRequestedContentObjectTable ()
+	{
+		auto requestedContentObjectTable = db_.CreateTemporaryTable (
+			"requested_content_objects",
+			"Hash BLOB UNIQUE NOT NULL");
+
+		{
+			auto requestedContentObjectQuery = db_.Prepare (
+				R"_(INSERT INTO requested_content_objects
+					SELECT DISTINCT Hash 
+						FROM source.fs_contents
+					INNER JOIN source.fs_files ON source.fs_contents.Id = source.fs_files.ContentId
+					WHERE source.fs_files.FeatureId IN
+					(
+						SELECT Id FROM source.features
+						WHERE Uuid IN (SELECT Uuid FROM pending_features)
+					)
+					AND NOT Hash IN 
+					(
+						SELECT Hash FROM main.fs_contents
+					)
+				)_");
+
+			requestedContentObjectQuery.Step ();
+			requestedContentObjectQuery.Reset ();
+		}
+
+		return requestedContentObjectTable;
+	}
+
+	Sql::Statement PrepareInsertFileQuery ()
+	{
+		return db_.Prepare (
+			R"_(INSERT INTO main.fs_files (Path, ContentId, FeatureId)
+			SELECT ?1, ?2, main.features.Id FROM source.fs_files
+			INNER JOIN source.features ON source.features.Id = source.fs_files.FeatureId
+			INNER JOIN features ON source.features.Uuid = main.features.Uuid
+			WHERE source.fs_files.path = ?1)_"
+		);
+	}
+
 	Sql::Database& db_;
 	Path path_;
 	Repository& source_;
@@ -665,13 +673,25 @@ private:
 	virtual void SimulateImpl (int64_t* cost) override
 	{
 		auto diffQuery = db_.Prepare (
-			"SELECT Path, Hash, Size FROM source.fs_contents "
-			"INNER JOIN source.fs_files ON "
-			"	source.fs_contents.Id = source.fs_files.ContentId "
-			"WHERE source.fs_files.FeatureId IN "
-			"	(SELECT Id FROM source.features "
-			"		WHERE Uuid IN (SELECT Uuid FROM pending_features)) "
-			"		AND NOT Path IN (SELECT Path FROM main.fs_files)");
+			R"_(
+				SELECT Path, Hash, Size 
+				FROM source.fs_contents
+				INNER JOIN source.fs_files ON
+					source.fs_contents.Id = source.fs_files.ContentId
+				WHERE source.fs_files.FeatureId IN
+				(
+					SELECT Id FROM source.features
+					WHERE Uuid IN 
+					(
+						SELECT Uuid FROM pending_features
+					)
+				)
+				AND NOT Path IN 
+				(
+					SELECT Path FROM main.fs_files
+				)
+			)_"
+		);
 
 		auto exemplarQuery = PrepareExemplarQuery ();
 
@@ -710,13 +730,24 @@ private:
 		auto transaction = db_.BeginTransaction ();
 
 		auto diffQuery = db_.Prepare (
-			"SELECT Path, Hash FROM source.fs_contents "
-			"INNER JOIN source.fs_files ON "
-			"source.fs_contents.Id = source.fs_files.ContentId "
-			"WHERE source.fs_files.FeatureId IN "
-			"(SELECT Id FROM source.features "
-			"WHERE Uuid IN (SELECT Uuid FROM pending_features)) "
-			"AND NOT Path IN (SELECT Path FROM main.fs_files)");
+			R"_(SELECT Path, Hash 
+				FROM source.fs_contents
+				INNER JOIN source.fs_files 
+					ON source.fs_contents.Id = source.fs_files.ContentId
+				WHERE source.fs_files.FeatureId IN
+				(
+					SELECT Id FROM source.features
+					WHERE Uuid IN 
+					(
+						SELECT Uuid FROM pending_features
+					)
+				)
+				AND NOT Path IN 
+				(
+					SELECT Path FROM main.fs_files
+				)
+		)_"
+		);
 
 		auto exemplarQuery = PrepareExemplarQuery ();
 
@@ -750,19 +781,19 @@ private:
 	Sql::Statement PrepareExemplarQuery ()
 	{
 		return db_.Prepare (
-			"SELECT Path, Id FROM fs_files "
-			"INNER JOIN fs_contents ON fs_files.ContentId = fs_contents.Id "
-			"WHERE Hash=?");
+			R"_(SELECT Path, Id FROM fs_files
+			INNER JOIN fs_contents ON fs_files.ContentId = fs_contents.Id
+			WHERE Hash=?)_");
 	}
 
 	Sql::Statement PrepareInsertFileQuery ()
 	{
 		return db_.Prepare (
-			"INSERT INTO main.fs_files (Path, ContentId, FeatureId) "
-			"SELECT ?1, ?2, main.features.Id FROM source.fs_files "
-			"INNER JOIN source.features ON source.features.Id = source.fs_files.FeatureId "
-			"INNER JOIN features ON source.features.Uuid = main.features.Uuid "
-			"WHERE source.fs_files.path = ?1"
+			R"_(INSERT INTO main.fs_files (Path, ContentId, FeatureId)
+			SELECT ?1, ?2, main.features.Id FROM source.fs_files
+			INNER JOIN source.features ON source.features.Id = source.fs_files.FeatureId
+			INNER JOIN features ON source.features.Uuid = main.features.Uuid
+			WHERE source.fs_files.path = ?1)_"
 		);
 	}
 
@@ -786,10 +817,10 @@ private:
 		// files
 		{
 			auto unusedFileCountQuery = db_.Prepare (
-				"SELECT COUNT(*) FROM fs_files WHERE FeatureId NOT IN ("
-				"    SELECT Id FROM features WHERE features.Uuid IN "
-				"        (SELECT Uuid FROM pending_features)"
-				"    )"
+				R"_(SELECT COUNT(*) FROM fs_files WHERE FeatureId NOT IN (
+				    SELECT Id FROM features WHERE features.Uuid IN 
+				        (SELECT Uuid FROM pending_features)
+				    ))_"
 			);
 
 			unusedFileCountQuery.Step ();
@@ -798,12 +829,12 @@ private:
 			}
 
 			auto deleteFileQuery = db_.Prepare (
-				"DELETE FROM fs_files WHERE Path IN ("
-				"SELECT Path FROM fs_files WHERE FeatureId NOT IN ("
-				"    SELECT Id FROM features WHERE features.Uuid IN "
-				"        (SELECT Uuid FROM pending_features)"
-				"    )"
-				")");
+				R"_(DELETE FROM fs_files WHERE Path IN (
+				SELECT Path FROM fs_files WHERE FeatureId NOT IN (
+				    SELECT Id FROM features WHERE features.Uuid IN 
+				        (SELECT Uuid FROM pending_features)
+				    )
+				))_");
 
 			deleteFileQuery.Step ();
 			deleteFileQuery.Reset ();
@@ -820,11 +851,10 @@ private:
 		// files
 		{
 			auto unusedFilesQuery = db_.Prepare (
-				"SELECT Path FROM fs_files WHERE FeatureId NOT IN ("
-				"    SELECT Id FROM features WHERE features.Uuid IN "
-				"        (SELECT Uuid FROM pending_features)"
-				"    )"
-			);
+				R"_(SELECT Path FROM fs_files WHERE FeatureId NOT IN (
+				    SELECT Id FROM features WHERE features.Uuid IN
+				        (SELECT Uuid FROM pending_features)
+				))_");
 
 			auto deleteFileQuery = db_.Prepare (
 				"DELETE FROM fs_files WHERE Path=?");
@@ -880,11 +910,13 @@ void DeployedRepository::ConfigureImpl (Repository& source,
 	// allows us to process partially uninstalled repositories (or a
 	// repository that has been recovered.)
 	db_.Execute (
-		"DELETE FROM fs_contents WHERE "
-		"Id IN ("
-		"SELECT Id from fs_contents_with_reference_count "
-		"WHERE ReferenceCount=0"
-		");");
+		R"_(DELETE FROM fs_contents 
+			WHERE Id IN (
+				SELECT Id 
+				FROM fs_contents_with_reference_count 
+				WHERE ReferenceCount=0
+			);
+		)_");
 
 	// This copies everything over, so we can do joins on source and target
 	// now. Assumes the source contains all file sets, content objects and
@@ -972,10 +1004,10 @@ void DeployedRepository::UpdateFeatures ()
 	// Insert those we don't have yet into our features, but which are
 	// pending
 	db_.Execute (
-		"INSERT INTO features (Uuid) "
-		"SELECT Uuid FROM source.features "
-		"WHERE source.features.Uuid IN (SELECT Uuid FROM pending_features) "
-		"AND NOT source.features.Uuid IN (SELECT Uuid FROM features)");
+		R"_(INSERT INTO features (Uuid)
+		SELECT Uuid FROM source.features
+		WHERE source.features.Uuid IN (SELECT Uuid FROM pending_features)
+		AND NOT source.features.Uuid IN (SELECT Uuid FROM features))_");
 }
 
 /**
