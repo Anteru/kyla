@@ -47,88 +47,45 @@ private:
 class ProgressHelper
 {
 public:
-	ProgressHelper (Progress progressCallback)
+	ProgressHelper (Progress progressCallback, const std::string& what, const int64_t target)
 		: progressCallback_ (progressCallback)
+		, target_ (target)
+		, what_ (what)
 	{
 	}
 
-	void Start (const int stageCount)
-	{
-		stageCount_ = stageCount;
-		currentStage_ = -1;
-	}
-
-	void AdvanceStage (const char* stageName)
-	{
-		++currentStage_;
-		stageName_ = stageName;
-		currentStageTarget_ = 0;
-		current_ = 0;
-		progressCallback_ (GetTotalProgress (),
-			stageName_.c_str (), nullptr);
-	}
-
-	void SetStageTarget (const int64 target)
-	{
-		currentStageTarget_ = target;
-	}
-
-	void SetAction (const std::string& action)
-	{
-		action_ = action;
-	}
-
-	void Advance (const int64 amount)
+	void Advance (const std::string& action, const int64 amount)
 	{
 		current_ += amount;
 
-		progressCallback_ (GetTotalProgress (),
-			stageName_.c_str (), action_.c_str ());
+		progressCallback_ (GetProgress (),
+			what_.c_str (), action.c_str ());
 	}
 
-	void operator++()
+	void Done ()
 	{
-		Advance (1);
-	}
-
-	void operator++(int)
-	{
-		Advance (1);
-	}
-
-	void SetStageFinished ()
-	{
-		if (GetTotalProgress () < 1.0) {
-			current_ = currentStageTarget_ = 1;
-			progressCallback_ (GetTotalProgress (),
-				stageName_.c_str (), action_.c_str ());
+		if (GetProgress () < 1.0) {
+			current_ = target_ = 1;
+			progressCallback_ (1.0f,
+				what_.c_str (), nullptr);
 		}
 	}
 
 private:
-	float GetInStageProgress () const
+	float GetProgress () const
 	{
-		assert (current_ <= currentStageTarget_);
-		if (currentStageTarget_ != 0) {
-			return static_cast<float> (current_) / static_cast<float> (currentStageTarget_);
+		assert (current_ <= target_);
+		if (target_ != 0) {
+			return static_cast<float> (current_) / static_cast<float> (target_);
 		} else {
 			return 0;
 		}
 	}
 
-	float GetTotalProgress () const
-	{
-		const float stageWeight = 1 / static_cast<float> (stageCount_);
-		return stageWeight * currentStage_ + stageWeight * GetInStageProgress ();
-	}
-
 	Progress progressCallback_;
 	int64 current_ = 0;
-	int64 currentStageTarget_ = 0;
-	int stageCount_ = 1;
-	int currentStage_ = 0;
-	std::string action_;
-	std::string stageName_;
+	int64 target_ = 0;
+	std::string what_;
 };
 
 enum class RepairResult

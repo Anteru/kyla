@@ -23,6 +23,7 @@ details.
 
 #include <unordered_map>
 #include <set>
+#include <numeric>
 
 namespace kyla {
 ///////////////////////////////////////////////////////////////////////////////
@@ -83,8 +84,7 @@ void DeployedRepository::RepairImpl (Repository& source,
 		return countQuery.GetInt64 (0);
 	} ();
 
-	ProgressHelper progress (context.progress);
-	progress.SetStageTarget (objectCount);
+	ProgressHelper progress (context.progress, "Repair", objectCount);
 
 	while (query.Step ()) {
 		const Path path = query.GetText (0);
@@ -101,7 +101,7 @@ void DeployedRepository::RepairImpl (Repository& source,
 					RepairResult::Missing);
 			}
 
-			++progress;
+			progress.Advance (filePath.string (), 1);
 			continue;
 		}
 
@@ -119,7 +119,7 @@ void DeployedRepository::RepairImpl (Repository& source,
 					RepairResult::Corrupted);
 			}
 
-			++progress;
+			progress.Advance (filePath.string (), 1);
 			continue;
 		}
 
@@ -133,14 +133,14 @@ void DeployedRepository::RepairImpl (Repository& source,
 					RepairResult::Corrupted);
 			}
 
-			++progress;
+			progress.Advance (filePath.string (), 1);
 			continue;
 		}
 
 		repairCallback (filePath.string ().c_str (),
 			RepairResult::Ok);
 
-		++progress;
+		progress.Advance (filePath.string (), 1);
 	}
 
 	if (restore) {
@@ -200,6 +200,7 @@ void DeployedRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& re
 	}
 }
 
+///////////////////////////////////////////////////////////////////////////////
 class ConfigurePhase
 {
 public:
@@ -220,6 +221,174 @@ public:
 private:
 	virtual void SimulateImpl (int64_t* cost) = 0;
 	virtual void ExecuteImpl (Log& log, UpdateProgress progress) = 0;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+class PreparePendingFeaturesPhase : public ConfigurePhase
+{
+public:
+	PreparePendingFeaturesPhase (Sql::Database& db, const ArrayRef<Uuid>& features)
+		: db_ (db)
+		, features_ (features)
+	{
+	}
+
+private:
+	void SimulateImpl (int64_t* cost)
+	{
+		auto insertPendingFeatureQuery = GetInsertPendingFeatureQuery ();
+
+		for (const auto& feature : features_) {
+			insertPendingFeatureQuery.BindArguments (feature);
+			insertPendingFeatureQuery.Step ();
+			insertPendingFeatureQuery.Reset ();
+		}
+
+		if (cost) {
+			*cost = features_.GetCount ();
+		}
+	}
+
+	void ExecuteImpl (Log& log, UpdateProgress progress)
+	{
+		auto transaction = db_.BeginTransaction ();
+		auto insertPendingFeatureQuery = GetInsertPendingFeatureQuery ();
+
+		log.Debug ("Configure", "Selecting features for configure");
+
+		for (const auto& feature : features_) {
+			insertPendingFeatureQuery.BindArguments (feature);
+			insertPendingFeatureQuery.Step ();
+			insertPendingFeatureQuery.Reset ();
+
+			progress ("Selected feature", 1);
+
+			log.Debug ("Configure", 
+				boost::format ("Selected feature: '%1%'") % ToString (feature));
+		}
+
+		transaction.Commit ();
+	}
+
+	Sql::Statement GetInsertPendingFeatureQuery ()
+	{
+		return db_.Prepare (
+			"INSERT INTO pending_features (Uuid) VALUES (?);");;
+	}
+
+	Sql::Database& db_;
+	const ArrayRef<Uuid>& features_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+class UpdateFeaturesPhase : public ConfigurePhase
+{
+public:
+	UpdateFeaturesPhase (Sql::Database& db)
+	: db_ (db)
+	{
+	}
+
+private:
+	void SimulateImpl (int64_t* cost)
+	{
+		ExecuteQuery ();
+
+		if (cost) {
+			*cost = 1;
+		}
+	}
+
+	void ExecuteImpl (Log&, UpdateProgress progress)
+	{
+		ExecuteQuery ();
+
+		progress ("Updating features", 1);
+	}
+
+	void ExecuteQuery ()
+	{
+		// Insert those we don't have yet into our features, but which are
+		// pending
+		db_.Execute (
+			R"_(INSERT INTO features (Uuid)
+		SELECT Uuid FROM source.features
+		WHERE source.features.Uuid IN (SELECT Uuid FROM pending_features)
+		AND NOT source.features.Uuid IN (SELECT Uuid FROM features))_");
+	}
+
+	Sql::Database& db_;
+};
+
+///////////////////////////////////////////////////////////////////////////////
+class UpdateFeatureIdsForExistingFilesPhase : public ConfigurePhase
+{
+public:
+	UpdateFeatureIdsForExistingFilesPhase (Sql::Database& db)
+		: db_ (db)
+	{
+	}
+
+private:
+	void SimulateImpl (int64_t* cost)
+	{
+		ExecuteQuery ();
+
+		if (cost) {
+			*cost = 1;
+		}
+	}
+
+	void ExecuteImpl (Log&, UpdateProgress progress)
+	{
+		ExecuteQuery ();
+
+		progress ("Updating existing files", 1);
+	}
+
+	void ExecuteQuery ()
+	{
+		auto tempTable = db_.CreateTemporaryTable ("temp_file_path_to_new_id",
+			"Path VARCHAR NOT NULL UNIQUE, Id INTEGER NOT NULL");
+
+		db_.Execute (
+			R"_(INSERT INTO temp_file_path_to_new_id (Path, Id)
+			-- We'll index using Path, FeatureId below
+			-- main.features.Id has been updated already
+			SELECT main.fs_files.Path AS Path, main.features.Id AS Id
+			FROM main.fs_files
+			-- Current files <-> contents are linked through the ContentId
+			INNER JOIN main.fs_contents ON main.fs_files.ContentId = main.fs_contents.Id
+			-- Current files <-> source files are linked through the unique Path
+			INNER JOIN source.fs_files ON source.fs_files.Path = main.fs_files.Path
+			-- We only want the files which didn't change content, that is, with the
+			-- same hash
+			INNER JOIN source.fs_contents ON main.fs_contents.Hash = source.fs_contents.Hash
+			-- We need to link the features on the source side to their UUID
+			INNER JOIN source.features ON source.features.Id = source.fs_files.FeatureId
+			-- We need to link our (new) feeature Id to the source feature Id through the UUID
+			INNER JOIN main.features ON main.features.Uuid = source.features.Uuid;)_"
+		);
+
+		// For files which have the same location and hash as before, update
+		// the feature id
+		// This long query will find every file where the hash and the path
+		// remained the same, and update it to use the new file set id we just
+		// inserted above
+		db_.Execute (
+			R"_(
+		UPDATE fs_files 
+		SET FeatureId = (
+			SELECT Id 
+			FROM temp_file_path_to_new_id 
+			WHERE Path=temp_file_path_to_new_id.Path)
+		WHERE Path = (
+			SELECT Path 
+			FROM temp_file_path_to_new_id);
+		)_");
+	}
+
+	Sql::Database& db_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -320,6 +489,7 @@ private:
 	Path path_;
 };
 
+///////////////////////////////////////////////////////////////////////////////
 class GetContentPhase : public ConfigurePhase
 {
 public:
@@ -509,6 +679,8 @@ private:
 				stagingFile->Seek (offset);
 				stagingFile->Write (contents);
 
+				progress (ToString (hash), contents.GetSize ());
+
 				if ((offset + contents.GetSize ()) != totalSize) {
 					return;
 				}
@@ -552,7 +724,6 @@ private:
 				while (getTargetFilesQuery.Step ()) {
 					const Path targetPath{ getTargetFilesQuery.GetText (0) };
 
-					progress (getTargetFilesQuery.GetText (0), contents.GetSize ());
 					if (isFirstFile) {
 						log.Debug ("Configure",
 							boost::format ("Renaming staging file %1% to %2%")
@@ -562,6 +733,9 @@ private:
 							path_ / targetPath);
 						isFirstFile = false;
 					} else {
+						progress (getTargetFilesQuery.GetText (0),
+							totalSize);
+
 						log.Debug ("Configure",
 							boost::format ("Copying file %1% to %2%")
 							% lastFilePath % targetPath);
@@ -659,6 +833,7 @@ private:
 	Repository& source_;
 };
 
+///////////////////////////////////////////////////////////////////////////////
 class CopyExistingFilesPhase : public ConfigurePhase
 {
 public:
@@ -716,6 +891,10 @@ private:
 				exemplarQuery.GetInt64 (1));
 
 			exemplarQuery.Reset ();
+		}
+
+		if (cost) {
+			*cost = totalCost;
 		}
 	}
 
@@ -802,6 +981,7 @@ private:
 	Repository& source_;
 };
 
+///////////////////////////////////////////////////////////////////////////////
 class CleanupPhase : public ConfigurePhase
 {
 public:
@@ -923,137 +1103,49 @@ void DeployedRepository::ConfigureImpl (Repository& source,
 	// files we're about to configure
 	db_.AttachTemporaryCopy ("source", source.GetDatabase ());
 
-	ProgressHelper progressHelper (context.progress);
-	progressHelper.Start (1);
-	progressHelper.AdvanceStage ("Install");
-
 	// Store the file sets we're going to install in a temporary table for
 	// joins, etc.
 	auto pendingFeaturesTable = db_.CreateTemporaryTable ("pending_features",
 		"Uuid BLOB NOT NULL UNIQUE");
 
-	std::array<std::unique_ptr<ConfigurePhase>, 4> configurePhases = {
+	std::array<std::unique_ptr<ConfigurePhase>, 7> configurePhases = {
+		std::make_unique<PreparePendingFeaturesPhase> (db_, features),
+		std::make_unique<UpdateFeaturesPhase> (db_),
+		std::make_unique<UpdateFeatureIdsForExistingFilesPhase> (db_),
 		std::make_unique<RemoveChangedFilesPhase> (db_, path_),
 		std::make_unique<GetContentPhase> (db_, path_, source),
 		std::make_unique<CopyExistingFilesPhase> (db_, path_, source),
 		std::make_unique<CleanupPhase> (db_, path_)
 	};
 
-	PreparePendingFeatures (context.log, features);
-	UpdateFeatures ();
-	UpdateFeatureIdsForUnchangedFiles ();
+	std::array<int64_t, 7> stageCosts;
 
 	auto simulationTransaction = db_.BeginTransaction ();
 
-	int64_t totalCost = 0;
-	for (auto& phase : configurePhases) {
-		int64_t cost = 0;
-		phase->Simulate (&cost);
-
-		totalCost += cost;
+	for (int i = 0; i < configurePhases.size (); ++i) {
+		auto& phase = configurePhases [i];
+		phase->Simulate (&stageCosts [i]);
 	}
 
 	simulationTransaction.Rollback ();
 
-	progressHelper.SetStageTarget (totalCost);
-	for (auto& phase : configurePhases) {
+	ProgressHelper progressHelper (context.progress, "Install",
+		std::accumulate (stageCosts.begin (), stageCosts.end (), 0LL));
+
+	for (int i = 0; i < configurePhases.size (); ++i) {
+		auto& phase = configurePhases [i];
 		phase->Execute (context.log, [&](const std::string& s, const int64_t cost) -> void {
-			progressHelper.SetAction (s);
-			progressHelper.Advance (cost);
+			progressHelper.Advance (s, cost);
 		});
 	}
 
-	progressHelper.SetStageFinished ();
+	progressHelper.Done ();
 
 	db_.Detach ("source");
 
 	db_.Execute ("PRAGMA journal_mode = DELETE");
 	db_.Execute ("PRAGMA optimize;");
 	db_.Execute ("VACUUM;");
-}
-
-///////////////////////////////////////////////////////////////////////////////
-/**
-Create a new temporary table pending_features which contains the UUIDs
-of the file sets we're about to add
-*/
-void DeployedRepository::PreparePendingFeatures (Log& log, const ArrayRef<Uuid>& features)
-{
-	auto transaction = db_.BeginTransaction ();
-	auto insertPendingFeatureQuery = db_.Prepare (
-		"INSERT INTO pending_features (Uuid) VALUES (?);");
-
-	log.Debug ("Configure", "Selecting features for configure");
-
-	for (const auto& feature : features) {
-		insertPendingFeatureQuery.BindArguments (feature);
-		insertPendingFeatureQuery.Step ();
-		insertPendingFeatureQuery.Reset ();
-
-		log.Debug ("Configure", boost::format ("Selected feature: '%1%'") % ToString (feature));
-	}
-
-	transaction.Commit ();
-}
-
-/**
-Insert the new features we're about to configure from pending_features
-*/
-void DeployedRepository::UpdateFeatures ()
-{
-	// Insert those we don't have yet into our features, but which are
-	// pending
-	db_.Execute (
-		R"_(INSERT INTO features (Uuid)
-		SELECT Uuid FROM source.features
-		WHERE source.features.Uuid IN (SELECT Uuid FROM pending_features)
-		AND NOT source.features.Uuid IN (SELECT Uuid FROM features))_");
-}
-
-/**
-Update the file set ids of all files which remain unchanged, but have moved
-to a new features.
-*/
-void DeployedRepository::UpdateFeatureIdsForUnchangedFiles ()
-{
-	auto tempTable = db_.CreateTemporaryTable ("temp_file_path_to_new_id", 
-		"Path VARCHAR NOT NULL UNIQUE, Id INTEGER NOT NULL");
-
-	db_.Execute (
-		R"_(INSERT INTO temp_file_path_to_new_id (Path, Id)
-			-- We'll index using Path, FeatureId below
-			-- main.features.Id has been updated already
-			SELECT main.fs_files.Path AS Path, main.features.Id AS Id
-			FROM main.fs_files
-			-- Current files <-> contents are linked through the ContentId
-			INNER JOIN main.fs_contents ON main.fs_files.ContentId = main.fs_contents.Id
-			-- Current files <-> source files are linked through the unique Path
-			INNER JOIN source.fs_files ON source.fs_files.Path = main.fs_files.Path
-			-- We only want the files which didn't change content, that is, with the
-			-- same hash
-			INNER JOIN source.fs_contents ON main.fs_contents.Hash = source.fs_contents.Hash
-			-- We need to link the features on the source side to their UUID
-			INNER JOIN source.features ON source.features.Id = source.fs_files.FeatureId
-			-- We need to link our (new) feeature Id to the source feature Id through the UUID
-			INNER JOIN main.features ON main.features.Uuid = source.features.Uuid;)_"
-	);
-
-	// For files which have the same location and hash as before, update
-	// the feature id
-	// This long query will find every file where the hash and the path
-	// remained the same, and update it to use the new file set id we just
-	// inserted above
-	db_.Execute (
-		R"_(
-		UPDATE fs_files 
-		SET FeatureId = (
-			SELECT Id 
-			FROM temp_file_path_to_new_id 
-			WHERE Path=temp_file_path_to_new_id.Path)
-		WHERE Path = (
-			SELECT Path 
-			FROM temp_file_path_to_new_id);
-		)_");
 }
 
 ///////////////////////////////////////////////////////////////////////////////

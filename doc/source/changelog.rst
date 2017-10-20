@@ -1,6 +1,11 @@
 Changelog
 =========
 
+kyla 2.0.3
+----------
+
+* Progress update has been rewritten and is now much more accurate. Deleting files reports progress now so removing features shows progress, and retrieving files reports progressed based on data written, including file duplication.
+
 kyla 2.0.2
 ----------
 

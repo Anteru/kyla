@@ -38,10 +38,6 @@ private:
 
 	Sql::Database& GetDatabaseImpl () override;
 
-	void PreparePendingFeatures (Log& log, const ArrayRef<Uuid>& featureIds);
-	void UpdateFeatures ();
-	void UpdateFeatureIdsForUnchangedFiles ();
-
 	Sql::Database db_;
 	Path path_;
 };

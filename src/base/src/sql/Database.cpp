@@ -286,9 +286,9 @@ public:
 
 	TemporaryTable CreateTemporaryTable (const char* name, const char* columnDefinition)
 	{
-		sqlite3_exec (db_, (boost::format ("CREATE TEMPORARY TABLE %1% (%2%);") 
+		SAFE_SQLITE (sqlite3_exec (db_, (boost::format ("CREATE TEMPORARY TABLE %1% (%2%);") 
 			% name % columnDefinition).str ().c_str (),
-			nullptr, nullptr, nullptr);
+			nullptr, nullptr, nullptr));
 
 		return TemporaryTable (this, name);
 	}
@@ -605,15 +605,23 @@ void TemporaryTable::Drop ()
 
 ////////////////////////////////////////////////////////////////////////////////
 TemporaryTable::TemporaryTable (TemporaryTable&& other)
-	: impl_ (other.impl_)
-	, name_ (std::move (other.name_))
 {
+	if (impl_) {
+		Drop ();
+	}
+
+	impl_ = other.impl_;
+	name_ = std::move (other.name_);
 	other.impl_ = nullptr;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 TemporaryTable& TemporaryTable::operator=(TemporaryTable&& other)
 {
+	if (impl_) {
+		Drop ();
+	}
+
 	impl_ = other.impl_;
 	name_ = std::move (other.name_);
 	other.impl_ = nullptr;
