@@ -94,9 +94,6 @@
         <property name="text">
          <string>Select features to install</string>
         </property>
-        <property name="margin">
-         <number>8</number>
-        </property>
        </widget>
       </item>
       <item>

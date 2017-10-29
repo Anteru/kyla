@@ -169,8 +169,9 @@ int kylaOpenSourceRepository_2_0 (
 	try {
 		repo->p = kyla::OpenRepository (path, false);
 	} catch (const std::exception&) {
+		internal->log->Error ("kylaCloseRepository", "could not open repository");
 		delete repo;
-		return kylaResult_ErrorOpeningRepository;
+		return kylaResult_Error;
 	}
 	repo->repositoryType = KylaRepositoryImpl::RepositoryType::Source;
 
@@ -215,8 +216,9 @@ int kylaOpenTargetRepository_2_0 (
 			repo->p = kyla::OpenRepository (path,
 				(options & kylaRepositoryOption_ReadOnly) != 1);
 		} catch (const std::exception&) {
+			internal->log->Error ("kylaCloseRepository", "could not open repository");
 			delete repo;
-			return kylaResult_ErrorOpeningRepository;
+			return kylaResult_Error;
 		}
 	}
 
@@ -280,7 +282,7 @@ int kylaExecute_2_0 (
 	}
 
 	if (targetRepository->repositoryType != KylaRepositoryImpl::RepositoryType::Target) {
-		internal->log->Error ("kylaExecute", "target repository has is not a valid target. "
+		internal->log->Error ("kylaExecute", "target repository is not a valid target. "
 			"A target repository must be opened using OpenTargetRepository.");
 		return kylaResult_ErrorInvalidArgument;
 	}
@@ -290,7 +292,7 @@ int kylaExecute_2_0 (
 	}
 
 	if (sourceRepository->repositoryType != KylaRepositoryImpl::RepositoryType::Source) {
-		internal->log->Error ("kylaExecute", "source repository has is not a valid source. "
+		internal->log->Error ("kylaExecute", "source repository is not a valid source. "
 			"A source repository must be opened using OpenSourceRepository.");
 		return kylaResult_ErrorInvalidArgument;
 	}
@@ -594,7 +596,7 @@ int kylaSetRepositoryProperty_2_0 (KylaInstaller* installer,
 			return kylaResult_ErrorInvalidArgument;
 		}
 
-		if (propertyValue == 0) {
+		if (propertyValue == nullptr) {
 			return kylaResult_ErrorInvalidArgument;
 		}
 
