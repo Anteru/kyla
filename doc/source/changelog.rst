@@ -4,7 +4,7 @@ Changelog
 kyla 2.0.3
 ----------
 
-* Progress update has been rewritten and is now much more accurate. Deleting files reports progress now so removing features shows progress, and retrieving files reports progressed based on data written, including file duplication.
+* Progress update has been rewritten and is now much more accurate. Deleting files reports progress now so removing features shows progress, and retrieving files reports progress based on data written, including file duplication.
 * Fix memory leak if a repository could not be opened.
 * UI has been simplified and uses the "fusion" style for cross-platform portability.
 * Updated SQLite from 3.19.2 to 3.21.0.
@@ -39,4 +39,4 @@ kyla 2.0
 * The repository builder can print out various statistics now, for instance, the final compression ratio.
 * kyla supports file content encryption.
 
-  .. note:: The encryption only encrypts the file contents, so file names, sizes, and even the hashes of the content will remain visibile. In particular, the database itself is not encrypted.
+  .. note:: The encryption only encrypts the file contents, so file names, sizes, and even the hashes of the content will remain visible. In particular, the database itself is not encrypted.
