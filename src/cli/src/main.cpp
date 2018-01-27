@@ -355,17 +355,17 @@ int QueryRepository (const std::vector<std::string>& options,
 int QueryFeature (const std::vector<std::string>& options,
 	po::variables_map& vm)
 {
-	po::options_description build_desc ("query-repository options");
+	po::options_description build_desc ("query-feature options");
 	build_desc.add_options ()
 		("property", po::value<std::string> ())
-		("source", po::value<std::string> ())
-		("feature-id", po::value<std::string> ());
+		("feature-id", po::value<std::string> ())
+		("source", po::value<std::string> ());
 
 	po::positional_options_description posBuild;
 	posBuild
 		.add ("property", 1)
-		.add ("source", 1)
-		.add ("feature-id", 1);
+		.add ("feature-id", 1)
+		.add ("source", 1);
 
 	try {
 		po::store (po::command_line_parser (options).options (build_desc).positional (posBuild).run (), vm);
@@ -412,7 +412,7 @@ int QueryFeature (const std::vector<std::string>& options,
 			&resultSize, subfeatures.data ());
 
 		for (const auto& subfeature : subfeatures) {
-			std::cout << ToString (kyla::Uuid (subfeature.bytes)) << " ";
+			std::cout << ToString (kyla::Uuid (subfeature.bytes));
 		}
 	} else if (property == "size") {
 		int64_t result = 0;

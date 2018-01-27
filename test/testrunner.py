@@ -60,8 +60,8 @@ class KylaRunner:
     def Validate(self, source, target, features=[], key=None):
         return self._ExecuteAction ('validate', source, target, features, key)
 
-    def QueryRepositoryFeatures (self, path, key=None):
-        return self._ExecuteQuery ('query-repository', 'features', path)
+    def Query (self, path, query, queryArgs = [], key=None):
+        return self._ExecuteQuery (query, queryArgs, path)
 
     def _ExecuteAction(self, action, source, target, features, key):
         args = [self._kcl, action]
@@ -89,11 +89,14 @@ class KylaRunner:
                 print ('Result:', 'ERROR')
             return False
         
-    def _ExecuteQuery(self, action, what, path, key = None):
-        args = [self._kcl, action]
+    def _ExecuteQuery(self, query, queryArgs, path, key = None):
+        args = [self._kcl, query]
         
-        args += [what, path]
+        if queryArgs:
+            args += queryArgs
 
+        args.append (path)    
+        
         if self._verbose:
             print ('Executing: "{}"'.format (' '.join (args)))
 
@@ -139,12 +142,24 @@ class CheckRepositoryFeaturesPresentAction (TestAction):
     def Execute(self, env : TestEnvironment, args):
         path = os.path.join (env.testDirectory, args ['path'])
         
-        ok, features = env.kyla.QueryRepositoryFeatures (path)
+        ok, features = env.kyla.Query (path, 'query-repository', ['features'])
 
         if not ok:
             return False
         else:
-            return set (args ['features']) == features
+            return set (args ['features']) == set (features)
+
+class CheckSubfeaturesFeaturesPresentAction (TestAction):
+    def Execute(self, env : TestEnvironment, args):
+        path = os.path.join (env.testDirectory, args ['path'])
+        
+        ok, features = env.kyla.Query (path, 'query-feature', 
+            ['subfeatures', args ['id']])
+
+        if not ok:
+            return False
+        else:
+            return set (args ['subfeatures']) == set (features)
 
 class InstallAction (TestAction):
     def Execute(self, env : TestEnvironment, args):
@@ -259,7 +274,8 @@ actions = {
     'zero-file' : ZeroFileAction,
     'damage-file' : DamageFileAction,
     'truncate-file' : TruncateFileAction,
-    'check-features-present' : CheckRepositoryFeaturesPresentAction
+    'check-features-present' : CheckRepositoryFeaturesPresentAction,
+    'check-subfeatures-present' : CheckSubfeaturesFeaturesPresentAction
 }
 
 class Test:
@@ -304,8 +320,9 @@ def ExecuteTest (testFilename, kyla, verbose, keep):
     try:
         return (testName, tr.Execute (),)
     except Exception as e:
+        import traceback
         if verbose:
-            print ("Error", e)
+            traceback.print_exc ()
         return (testName, False,)
 
 def FormatResult(r):
