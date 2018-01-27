@@ -317,9 +317,30 @@ private:
 		// pending
 		db_.Execute (
 			R"_(INSERT INTO features (Uuid)
-		SELECT Uuid FROM source.features
-		WHERE source.features.Uuid IN (SELECT Uuid FROM pending_features)
-		AND NOT source.features.Uuid IN (SELECT Uuid FROM features))_");
+				SELECT Uuid FROM source.features
+				WHERE source.features.Uuid IN (SELECT Uuid FROM pending_features)
+				AND NOT source.features.Uuid IN (SELECT Uuid FROM features))_");
+
+		// For each feature, update the parent -- this can also change
+		// the parents for existing features if the source repository
+		// changed the relationship
+		auto pendingFeaturesWithoutParent = db_.Prepare (
+			"SELECT source.features.ParentId, source.features.Uuid FROM source.features "
+			"INNER JOIN features ON source.features.Uuid = main.features.Uuid "
+			"WHERE source.features.ParentId IS NOT NULL");
+		
+		auto updateParent = db_.Prepare (
+			"UPDATE features SET ParentId = "
+			"(SELECT Id FROM features WHERE Uuid="
+			"(SELECT Uuid FROM source.features WHERE Id=?)) WHERE Uuid=?;");
+		while (pendingFeaturesWithoutParent.Step ()) {
+			int64 parentId = pendingFeaturesWithoutParent.GetInt64 (0);
+			Uuid uuid;
+			pendingFeaturesWithoutParent.GetBlob (1, uuid);
+			
+			updateParent.BindArguments (parentId, uuid);
+			updateParent.Step ();
+		}
 	}
 
 	Sql::Database& db_;

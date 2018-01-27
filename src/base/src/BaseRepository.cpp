@@ -83,7 +83,7 @@ std::vector<Uuid> BaseRepository::GetSubfeaturesImpl (const Uuid& featureId)
 	auto& db = GetDatabase ();
 
 	auto selectSubfeatureQuery = db.Prepare (
-		"SELECT Uuid FROM features WHERE Parent = (SELECT Id FROM features WHERE Uuid=?)");
+		"SELECT Uuid FROM features WHERE ParentId = (SELECT Id FROM features WHERE Uuid=?);");
 	selectSubfeatureQuery.BindArguments (featureId);
 
 	std::vector<Uuid> result;

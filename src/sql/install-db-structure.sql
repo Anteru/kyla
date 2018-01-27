@@ -3,8 +3,8 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE features (
 	Id INTEGER PRIMARY KEY NOT NULL,
 	Uuid BLOB NOT NULL UNIQUE,
-	Parent INTEGER DEFAULT NULL,
-	FOREIGN KEY(Parent) REFERENCES features(Id)
+	ParentId INTEGER DEFAULT NULL,
+	FOREIGN KEY(ParentId) REFERENCES features(Id)
 );
 
 CREATE INDEX features_uuid_idx ON features (Uuid ASC);

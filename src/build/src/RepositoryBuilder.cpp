@@ -71,6 +71,7 @@ public:
 		, packageDeleteStatement_ (db.Prepare ("DELETE FROM fs_packages WHERE Id=?;"))
 		, contentInsertStatement_ (db.Prepare ("INSERT INTO fs_contents (Hash, Size) VALUES (?, ?);"))
 		, featureInsertStatement_ (db.Prepare ("INSERT INTO features (Uuid) VALUES (?);"))
+		, featureInsertWithParentStatement_ (db.Prepare ("INSERT INTO features (Uuid, ParentId) VALUES (?, ?);"))
 		, featureDependencyInsertStatement_ (db.Prepare (
 			"INSERT INTO feature_dependencies (SourceId, TargetId, Relation) VALUES ( "
 			"(SELECT Id FROM features WHERE Uuid=?), "
@@ -100,6 +101,15 @@ public:
 		featureInsertStatement_.BindArguments (uuid);
 		featureInsertStatement_.Step ();
 		featureInsertStatement_.Reset ();
+
+		return db_.GetLastRowId ();
+	}
+
+	int64 StoreFeature (const Uuid& uuid, const int64 parentId)
+	{
+		featureInsertWithParentStatement_.BindArguments (uuid, parentId);
+		featureInsertWithParentStatement_.Step ();
+		featureInsertWithParentStatement_.Reset ();
 
 		return db_.GetLastRowId ();
 	}
@@ -188,6 +198,7 @@ private:
 	Sql::Statement packageDeleteStatement_;
 	Sql::Statement contentInsertStatement_;
 	Sql::Statement featureInsertStatement_;
+	Sql::Statement featureInsertWithParentStatement_;
 	Sql::Statement featureDependencyInsertStatement_;
 	Sql::Statement chunkInsertQuery_;
 	Sql::Statement chunkHashesInsertQuery_;
@@ -338,7 +349,8 @@ public:
 //////////////////////////////////////////////////////////////////////////////
 struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 {
-	Feature (const pugi::xml_node& featureNode)
+	Feature (const pugi::xml_node& featureNode, Feature* parent)
+	: parent_ (parent)
 	{
 		uuid_ = Uuid::Parse (featureNode.attribute ("Id").as_string ());
 
@@ -358,7 +370,11 @@ struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 	void Store (BuildDatabase& db)
 	{
 		assert (persistentId_ == -1);
-		persistentId_ = db.StoreFeature (uuid_);
+		if (parent_) {
+			persistentId_ = db.StoreFeature (uuid_, parent_->GetPersistentId ());
+		} else {
+			persistentId_ = db.StoreFeature (uuid_);
+		}
 	}
 
 	void StoreDependencies (BuildDatabase& db)
@@ -390,6 +406,8 @@ struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 private:
 	Uuid uuid_;
 	int64 persistentId_ = -1;
+
+	Feature* parent_ = nullptr;
 
 	std::vector<Reference> references_;
 	std::vector<Reference> dependencies_;
@@ -1072,17 +1090,57 @@ public:
 	{
 		auto featuresNode = root.select_node ("/Repository/Features");
 
+		struct FeatureTreeWalker : public XmlTreeWalker
+		{
+			FeatureTreeWalker (std::vector<std::unique_ptr<Feature>>& features)
+			: features_ (features)
+			{
+				featureStack_.push (nullptr);
+			}
+
+			bool OnEnter (const pugi::xml_node& node)
+			{
+				return true;
+			}
+
+			bool OnNode (const pugi::xml_node& node)
+			{
+				if (strcmp (node.name (), "Feature") == 0) {
+					features_.emplace_back (std::move (new Feature{ node,
+						featureStack_.top ()}));
+					featureStack_.push (features_.back ().get ());
+				}
+
+				return true;
+			}
+
+			bool OnLeave (const pugi::xml_node& node)
+			{
+				if (strcmp (node.name (), "Feature") == 0) {
+					featureStack_.pop ();
+				}
+
+				return true;
+			}
+
+		private:
+			std::stack<Feature*> featureStack_;
+			std::vector<std::unique_ptr<Feature>>& features_;
+		};
+
 		if (!featuresNode) {
 			///@TODO(minor) Handle error
 		} else {
-			for (auto& feature : featuresNode.node ().children ("Feature")) {
-				features_.emplace_back (std::move (new Feature{ feature }));
-				auto ptr = features_.back ().get ();
+			FeatureTreeWalker ftw{ features_ };
+			Traverse (featuresNode.node (), ftw);
+		}
 
-				ptr->Store (ctx.buildDatabase);
-
-				repositoryObjects_[ptr->GetUuid ()] = ptr;
-			}
+		// Persist all features. As we added them in depth-first order, parents
+		// will always get persistet before children, so no special ordering is
+		// required here
+		for (auto& feature : features_) {
+			feature->Store (ctx.buildDatabase);
+			repositoryObjects_ [feature->GetUuid ()] = feature.get ();
 		}
 
 		// Store the dependencies now that every feature has been stored
@@ -1129,8 +1187,10 @@ public:
 	}
 
 private:
-	std::unordered_map<Uuid, RepositoryObject*,
-		ArrayRefHash, ArrayRefEqual> repositoryObjects_;
+	using RepositoryObjectMap = std::unordered_map<Uuid, RepositoryObject*,
+		ArrayRefHash, ArrayRefEqual>;
+	
+	RepositoryObjectMap repositoryObjects_;
 
 	std::vector<std::unique_ptr<Feature> > features_;
 	std::unique_ptr<FileStorage> fileStorage_;
