@@ -12,6 +12,7 @@ details.
 
 #include <functional>
 #include <memory>
+#include <unordered_map>
 
 #include "ArrayRef.h"
 #include "FileIO.h"
@@ -25,49 +26,31 @@ namespace Sql {
 
 class Log;
 
-class Progress
+class ProgressHelper
 {
 public:
 	using ProgressCallback = std::function<void (const float p, const char* s, const char* a)>;
 
-	Progress (ProgressCallback callback)
-		: callback_ (callback)
-	{
-	}
-
-	void operator () (const float p, const char* s, const char* a)
-	{
-		callback_ (p, s, a);
-	}
-
-private:
-	ProgressCallback callback_;
-};
-
-class ProgressHelper
-{
-public:
-	ProgressHelper (Progress progressCallback, const std::string& what, const int64_t target)
+	ProgressHelper (ProgressCallback progressCallback, const std::string& what, const int64_t target)
 		: progressCallback_ (progressCallback)
 		, target_ (target)
 		, what_ (what)
 	{
+		assert (progressCallback_);
 	}
 
 	void Advance (const std::string& action, const int64 amount)
 	{
 		current_ += amount;
 
-		progressCallback_ (GetProgress (),
-			what_.c_str (), action.c_str ());
+		progressCallback_ (GetProgress (), what_.c_str (), action.c_str ());
 	}
 
 	void Done ()
 	{
 		if (GetProgress () < 1.0) {
 			current_ = target_ = 1;
-			progressCallback_ (1.0f,
-				what_.c_str (), nullptr);
+			progressCallback_ (1.0f, what_.c_str (), nullptr);
 		}
 	}
 
@@ -82,7 +65,7 @@ private:
 		}
 	}
 
-	Progress progressCallback_;
+	ProgressCallback progressCallback_;
 	int64 current_ = 0;
 	int64 target_ = 0;
 	std::string what_;
@@ -96,30 +79,55 @@ enum class RepairResult
 	Restored
 };
 
-struct FeatureTreeNode
-{
-	FeatureTreeNode* parent = nullptr;
-	
-	std::string name;
-	std::string description;
-
-	Uuid* featureIds;
-	int featureIdCount;
-};
-
-class FeatureTree final
+class Variable final
 {
 public:
-	std::vector<std::unique_ptr<FeatureTreeNode>> nodes;
-
-	Uuid* SetFeatureIds (const ArrayRef<Uuid>& ids)
+	const char* GetString () const
 	{
-		featureIds_.assign (ids.begin (), ids.end ());
-		return featureIds_.data ();
+		return static_cast<const char*> (
+			static_cast<const void*> (value_.data ()));
+	}
+
+	int GetInt () const
+	{
+		return Get<int> ();
+	}
+
+	void Set (const size_t length, const void* v)
+	{
+		if (readOnly_) {
+			throw std::runtime_error ("Variable is read-only");
+		}
+
+		const auto p = static_cast<const byte*> (v);
+		value_.assign (p, p + length);
+	}
+
+	void Get (size_t* size, void* buffer)
+	{
+		if (size != nullptr) {
+			*size = value_.size ();
+		}
+
+		if (buffer != nullptr) {
+			::memcpy (buffer, value_.data (), value_.size ());
+		}
+	}
+
+	bool IsReadOnly () const
+	{
+		return readOnly_;
 	}
 
 private:
-	std::vector<Uuid> featureIds_;
+	template <typename T>
+	T Get () const
+	{
+		return *static_cast<const T*> (static_cast<const void*> (value_.data ()));
+	}
+
+	std::vector<byte> value_;
+	bool readOnly_ = false;
 };
 
 struct Repository
@@ -132,8 +140,17 @@ struct Repository
 
 	struct ExecutionContext
 	{
+		using ProgressCallback = std::function<void (const float p, const char* s, const char* a)>;
+
+		ExecutionContext (Log& log) : log (log)
+		{
+		}
+
 		Log& log;
-		Progress& progress;
+		ProgressCallback progress = [](const float, const char*, const char*) {};
+		std::unordered_map<std::string, Variable> variables;
+
+		static constexpr auto EncryptionKey = "Encryption.Key";
 	};
 
 	using RepairCallback = std::function<void (
@@ -146,7 +163,8 @@ struct Repository
 		const int64 totalSize)>;
 
 	void GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjects,
-		const GetContentObjectCallback& getCallback);
+		const GetContentObjectCallback& getCallback,
+		ExecutionContext& context);
 
 	void Repair (Repository& source,
 		ExecutionContext& context,
@@ -160,25 +178,16 @@ struct Repository
 	std::vector<Uuid> GetFeatures ();
 	int64_t GetFeatureSize (const Uuid& featureId);
 
-	struct Dependency
-	{
-		Uuid source;
-		Uuid target;
-	};
-
-	std::vector<Dependency> GetFeatureDependencies (const Uuid& featureId);
-
-	FeatureTree GetFeatureTree ();
+	std::vector<Uuid> GetSubfeatures (const Uuid& featureId);
 
 	Sql::Database& GetDatabase ();
 
 	bool IsEncrypted ();
-	void SetDecryptionKey (const std::string& key);
-	std::string GetDecryptionKey () const;
 
 private:
 	virtual void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
-		const GetContentObjectCallback& getCallback) = 0;
+		const GetContentObjectCallback& getCallback,
+		ExecutionContext& context) = 0;
 	virtual void RepairImpl (Repository& source,
 		ExecutionContext& context,
 		RepairCallback repairCallback,
@@ -189,11 +198,8 @@ private:
 		const ArrayRef<Uuid>& features,
 		ExecutionContext& context) = 0;
 	virtual bool IsEncryptedImpl () = 0;
-	virtual void SetDecryptionKeyImpl (const std::string& key) = 0;
-	virtual std::string GetDecryptionKeyImpl () const = 0;
 	virtual Sql::Database& GetDatabaseImpl () = 0;
-	virtual std::vector<Dependency> GetFeatureDependenciesImpl (const Uuid& featureId) = 0;
-	virtual FeatureTree GetFeatureTreeImpl () = 0;
+	virtual std::vector<Uuid> GetSubfeaturesImpl (const Uuid& featureId) = 0;
 };
 
 std::unique_ptr<Repository> OpenRepository (const char* path,

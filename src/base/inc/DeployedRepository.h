@@ -27,7 +27,8 @@ public:
 
 private:
 	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
-		const GetContentObjectCallback& getCallback) override;
+		const GetContentObjectCallback& getCallback,
+		ExecutionContext& context) override;
 	void RepairImpl (Repository& source,
 		ExecutionContext& context,
 		RepairCallback repairCallback,

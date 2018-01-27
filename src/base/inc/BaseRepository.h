@@ -23,8 +23,8 @@ private:
 	virtual std::vector<Uuid> GetFeaturesImpl () override;
 	virtual int64_t GetFeatureSizeImpl (const Uuid& featureId) override;
 	virtual bool IsEncryptedImpl () override;
-	virtual void SetDecryptionKeyImpl (const std::string& key) override;
-	virtual std::string GetDecryptionKeyImpl () const override;
+
+	std::vector<Uuid> GetSubfeaturesImpl (const Uuid& featureId) override;
 
 	void RepairImpl (Repository& source,
 		ExecutionContext& context,
@@ -33,12 +33,6 @@ private:
 	void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& featureIds,
 		ExecutionContext& context) override;
-	std::vector<Dependency> GetFeatureDependenciesImpl (const Uuid& featureId) override;
-
-	FeatureTree GetFeatureTreeImpl () override;
-
-protected:
-	std::string key_;
 };
 }
 

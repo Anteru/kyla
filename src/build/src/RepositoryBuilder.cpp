@@ -92,12 +92,6 @@ public:
 		"INSERT INTO fs_chunk_encryption "
 		"(ChunkId, Algorithm, Data, InputSize, OutputSize) "
 		"VALUES (?, ?, ?, ?, ?)"))
-		, uiFeatureTreeNodeInsertQuery_ (db.Prepare (
-			"INSERT INTO ui_feature_tree_nodes (Name, Description, ParentId) VALUES (?,?,?)"))
-		, uiFeatureTreeFeatureReferencesInsertQuery_ (db.Prepare (
-			"INSERT INTO ui_feature_tree_feature_references (NodeId, FeatureId) VALUES (?, "
-			"(SELECT Id FROM features WHERE Uuid=?))"
-		))
 	{
 	}
 
@@ -178,7 +172,6 @@ public:
 		chunkCompressionInsertQuery_.Reset ();
 
 		return db_.GetLastRowId ();
-
 	}
 
 	int64 StoreChunkEncryption (int64 chunkId, const char* algorithm, const ArrayRef<>& data, int64 inputSize, int64 outputSize)
@@ -189,35 +182,6 @@ public:
 
 		return db_.GetLastRowId ();
 	}
-
-	int64 StoreUiFeatureTreeNode (const char* name, const char* description,
-		int64 parentId)
-	{
-		uiFeatureTreeNodeInsertQuery_.BindArguments (name, description);
-
-		if (parentId > 0) {
-			uiFeatureTreeNodeInsertQuery_.Bind (3, parentId);
-		} else {
-			uiFeatureTreeNodeInsertQuery_.Bind (3, Sql::Null ());
-		}
-
-		uiFeatureTreeNodeInsertQuery_.Step ();
-		uiFeatureTreeNodeInsertQuery_.Reset ();
-
-		return db_.GetLastRowId ();
-	}
-
-	int64 StoreUiFeatureTreeFeatureReference (int64 nodeId,
-		const Uuid& featureUuid)
-	{
-		uiFeatureTreeFeatureReferencesInsertQuery_.BindArguments (
-			nodeId, featureUuid);
-		uiFeatureTreeFeatureReferencesInsertQuery_.Step ();
-		uiFeatureTreeFeatureReferencesInsertQuery_.Reset ();
-
-		return db_.GetLastRowId ();
-	}
-
 private:
 	Sql::Statement fileInsertStatement_;
 	Sql::Statement packageInsertStatement_;
@@ -229,8 +193,6 @@ private:
 	Sql::Statement chunkHashesInsertQuery_;
 	Sql::Statement chunkCompressionInsertQuery_;
 	Sql::Statement chunkEncryptionInsertQuery_;
-	Sql::Statement uiFeatureTreeNodeInsertQuery_;
-	Sql::Statement uiFeatureTreeFeatureReferencesInsertQuery_;
 
 	Sql::Database& db_;
 };
@@ -1103,52 +1065,6 @@ private:
 	}
 };
 
-struct FeatureTreeWalker : public XmlTreeWalker
-{
-public:
-	FeatureTreeWalker (BuildDatabase& db)
-		: db_ (db)
-	{
-	}
-
-	bool OnEnter (const pugi::xml_node& node) override
-	{
-		if (strcmp (node.name (), "Node") == 0) {
-			currentNodeId_.push (
-				db_.StoreUiFeatureTreeNode (
-					node.attribute ("Name").as_string (),
-					node.attribute ("Description").as_string (),
-					currentNodeId_.empty () ? -1 : currentNodeId_.top ()
-				));
-		} else if (strcmp (node.name (), "Reference") == 0) {
-			db_.StoreUiFeatureTreeFeatureReference (
-				currentNodeId_.top (),
-				Uuid::Parse (node.attribute ("Id").as_string ())
-			);
-		}
-
-		return true;
-	}
-
-	bool OnNode (const pugi::xml_node&) override
-	{
-		return true;
-	}
-
-	bool OnLeave (const pugi::xml_node& node) override
-	{
-		if (strcmp (node.name (), "Node") == 0) {
-			currentNodeId_.pop ();
-		}
-
-		return true;
-	}
-
-private:
-	BuildDatabase& db_;
-	std::stack<int64> currentNodeId_;
-};
-
 class Repository
 {
 public:
@@ -1212,16 +1128,6 @@ public:
 		fileStorage_->Persist (ctx);
 	}
 
-	void CreateAndPersistUi (const pugi::xml_node& root, BuildContext& ctx)
-	{
-		auto uiNode = root.select_node ("/Repository/UI/FeatureTree");
-
-		if (uiNode) {
-			FeatureTreeWalker ftw{ ctx.buildDatabase };
-			Traverse (uiNode.node (), ftw);
-		}
-	}
-
 private:
 	std::unordered_map<Uuid, RepositoryObject*,
 		ArrayRefHash, ArrayRefEqual> repositoryObjects_;
@@ -1270,8 +1176,6 @@ void BuildRepository (const KylaBuildSettings* settings)
 
 	repository.LinkFeatures ();
 	repository.PersistFileStorage (*ctx);
-
-	repository.CreateAndPersistUi (doc, *ctx);
 
 	ctx.reset ();
 

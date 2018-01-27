@@ -2,7 +2,9 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE features (
 	Id INTEGER PRIMARY KEY NOT NULL,
-	Uuid BLOB NOT NULL UNIQUE
+	Uuid BLOB NOT NULL UNIQUE,
+	Parent INTEGER DEFAULT NULL,
+	FOREIGN KEY(Parent) REFERENCES features(Id)
 );
 
 CREATE INDEX features_uuid_idx ON features (Uuid ASC);
@@ -45,21 +47,6 @@ CREATE TABLE ui_resources (
 	Content BLOB NOT NULL,
 	CompressionAlgorithm VARCHAR,
 	SourceSize INTEGER NOT NULL
-);
-
-CREATE TABLE ui_feature_tree_nodes (
-	Id INTEGER PRIMARY KEY NOT NULL,
-	Name TEXT NOT NULL,
-	Description TEXT,
-	ParentId INTEGER,
-	FOREIGN KEY(ParentId) REFERENCES ui_feature_tree_nodes(Id)
-);
-
-CREATE TABLE ui_feature_tree_feature_references (
-	NodeId INTEGER NOT NULL,
-	FeatureId INTEGER NOT NULL,
-	FOREIGN KEY(NodeId) REFERENCES ui_feature_tree_nodes(Id),
-	FOREIGN KEY(FeatureId) REFERENCES features(Id)
 );
 
 -- FileStorage engine
