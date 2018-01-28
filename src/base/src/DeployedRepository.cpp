@@ -324,7 +324,7 @@ private:
 		// For each feature, update the parent -- this can also change
 		// the parents for existing features if the source repository
 		// changed the relationship
-		auto pendingFeaturesWithoutParent = db_.Prepare (
+		auto pendingFeaturesParents = db_.Prepare (
 			"SELECT source.features.ParentId, source.features.Uuid FROM source.features "
 			"INNER JOIN features ON source.features.Uuid = main.features.Uuid "
 			"WHERE source.features.ParentId IS NOT NULL");
@@ -333,14 +333,19 @@ private:
 			"UPDATE features SET ParentId = "
 			"(SELECT Id FROM features WHERE Uuid="
 			"(SELECT Uuid FROM source.features WHERE Id=?)) WHERE Uuid=?;");
-		while (pendingFeaturesWithoutParent.Step ()) {
-			int64 parentId = pendingFeaturesWithoutParent.GetInt64 (0);
+		while (pendingFeaturesParents.Step ()) {
+			int64 parentId = pendingFeaturesParents.GetInt64 (0);
 			Uuid uuid;
-			pendingFeaturesWithoutParent.GetBlob (1, uuid);
+			pendingFeaturesParents.GetBlob (1, uuid);
 			
 			updateParent.BindArguments (parentId, uuid);
 			updateParent.Step ();
 		}
+
+		// Clear parents where the source cleared them
+		db_.Execute (
+			"UPDATE main.features SET ParentId = NULL "
+			"WHERE Uuid IN (SELECT Uuid FROM source.features WHERE ParentId IS NULL);");
 	}
 
 	Sql::Database& db_;
