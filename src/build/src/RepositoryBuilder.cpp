@@ -215,6 +215,7 @@ struct BuildContext
 	Path targetDirectory;
 
 	BuildDatabase buildDatabase;
+	BuildStatistics statistics;
 };
 
 struct Reference
@@ -656,8 +657,6 @@ private:
 	int64 chunkSize_ = 4 << 20; // 4 MiB chunks is the default
 	std::string encryptionKey_;
 
-	BuildStatistics buildStatistics_;
-
 	using FileContentMap =
 		std::unordered_map<SHA256Digest, std::unique_ptr<Content>,
 		ArrayRefHash, ArrayRefEqual>;
@@ -823,7 +822,8 @@ public:
 	void WritePackage (BuildDatabase& db,
 		const Package& package,
 		const Path& packagePath,
-		const std::string& encryptionKey)
+		const std::string& encryptionKey,
+		BuildStatistics& statistics)
 	{
 		///@TODO(minor) Support splitting packages for media limits
 		auto packageFile = CreateFile (packagePath / (package.name));
@@ -875,10 +875,11 @@ public:
 					compressionResult = TransformCompress (readBuffer,
 						writeBuffer, compressor.get ());
 
-					buildStatistics_.bytesStoredUncompressed +=
+					statistics.bytesStoredUncompressed +=
 						compressionResult.inputBytes;
-					buildStatistics_.bytesStoredCompressed +=
+					statistics.bytesStoredCompressed +=
 						compressionResult.outputBytes;
+					statistics.compressionTime += compressionResult.duration;
 
 					const auto compressedChunkHash = ComputeSHA256 (writeBuffer);
 
@@ -891,7 +892,7 @@ public:
 							writeBuffer, encryptionKey,
 							encryptionData, encryptionContext);
 
-						buildStatistics_.encryptionTime +=
+						statistics.encryptionTime +=
 							encryptionResult.duration;
 					}
 
@@ -967,7 +968,8 @@ public:
 		}
 
 		for (auto& package : packages_) {
-			WritePackage (ctx.buildDatabase, *package, ctx.targetDirectory, encryptionKey_);
+			WritePackage (ctx.buildDatabase, *package, ctx.targetDirectory, 
+				encryptionKey_, ctx.statistics);
 		}
 	}
 
@@ -1237,9 +1239,24 @@ void BuildRepository (const KylaBuildSettings* settings)
 	repository.LinkFeatures ();
 	repository.PersistFileStorage (*ctx);
 
-	ctx.reset ();
+	if (settings->buildStatistics) {
+		settings->buildStatistics->compressedContentSize = ctx->statistics.bytesStoredCompressed;
+		settings->buildStatistics->uncompressedContentSize = ctx->statistics.bytesStoredUncompressed;
+		settings->buildStatistics->compressionRatio =
+			static_cast<float> (ctx->statistics.bytesStoredUncompressed) /
+			static_cast<float> (ctx->statistics.bytesStoredCompressed);
+		settings->buildStatistics->compressionTimeSeconds =
+			static_cast<double> (ctx->statistics.compressionTime.count ())
+			/ 1000000000.0;
+		settings->buildStatistics->hashTimeSeconds =
+			static_cast<double> (hashTime.count ())
+			/ 1000000000.0;
+		settings->buildStatistics->encryptionTimeSeconds =
+			static_cast<double> (ctx->statistics.encryptionTime.count ())
+			/ 1000000000.0;
+	}
 
-	BuildStatistics statistics;
+	ctx.reset ();
 
 	db.Execute ("PRAGMA journal_mode=DELETE;");
 	db.Execute ("PRAGMA synchronous=FULL;");
@@ -1247,23 +1264,6 @@ void BuildRepository (const KylaBuildSettings* settings)
 	db.Execute ("VACUUM;");
 
 	db.Close ();
-
-	if (settings->buildStatistics) {
-		settings->buildStatistics->compressedContentSize = statistics.bytesStoredCompressed;
-		settings->buildStatistics->uncompressedContentSize = statistics.bytesStoredUncompressed;
-		settings->buildStatistics->compressionRatio =
-			static_cast<float> (statistics.bytesStoredUncompressed) /
-			static_cast<float> (statistics.bytesStoredCompressed);
-		settings->buildStatistics->compressionTimeSeconds =
-			static_cast<double> (statistics.compressionTime.count ())
-			/ 1000000000.0;
-		settings->buildStatistics->hashTimeSeconds =
-			static_cast<double> (hashTime.count ())
-			/ 1000000000.0;
-		settings->buildStatistics->encryptionTimeSeconds =
-			static_cast<double> (statistics.encryptionTime.count ())
-			/ 1000000000.0;
-	}
 }
 }
 
