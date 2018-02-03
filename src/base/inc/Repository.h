@@ -177,6 +177,8 @@ struct Repository
 
 	std::vector<Uuid> GetFeatures ();
 	int64_t GetFeatureSize (const Uuid& featureId);
+	std::string GetFeatureTitle (const Uuid& featureId);
+	std::string GetFeatureDescription (const Uuid& featureId);
 
 	std::vector<Uuid> GetSubfeatures (const Uuid& featureId);
 
@@ -194,6 +196,8 @@ private:
 		bool restore) = 0;
 	virtual std::vector<Uuid> GetFeaturesImpl () = 0;
 	virtual int64_t GetFeatureSizeImpl (const Uuid& featureId) = 0;
+	virtual std::string GetFeatureTitleImpl (const Uuid& featureId) = 0;
+	virtual std::string GetFeatureDescriptionImpl (const Uuid& featureId) = 0;
 	virtual void ConfigureImpl (Repository& other,
 		const ArrayRef<Uuid>& features,
 		ExecutionContext& context) = 0;

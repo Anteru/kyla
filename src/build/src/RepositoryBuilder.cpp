@@ -70,8 +70,7 @@ public:
 		, packageInsertStatement_ (db.Prepare ("INSERT INTO fs_packages (Filename) VALUES (?);"))
 		, packageDeleteStatement_ (db.Prepare ("DELETE FROM fs_packages WHERE Id=?;"))
 		, contentInsertStatement_ (db.Prepare ("INSERT INTO fs_contents (Hash, Size) VALUES (?, ?);"))
-		, featureInsertStatement_ (db.Prepare ("INSERT INTO features (Uuid) VALUES (?);"))
-		, featureInsertWithParentStatement_ (db.Prepare ("INSERT INTO features (Uuid, ParentId) VALUES (?, ?);"))
+		, featureInsertStatement_ (db.Prepare ("INSERT INTO features (Uuid, Title, Description, ParentId) VALUES (?,?,?,?);"))
 		, featureDependencyInsertStatement_ (db.Prepare (
 			"INSERT INTO feature_dependencies (SourceId, TargetId, Relation) VALUES ( "
 			"(SELECT Id FROM features WHERE Uuid=?), "
@@ -96,20 +95,27 @@ public:
 	{
 	}
 
-	int64 StoreFeature (const Uuid& uuid)
+	int64 StoreFeature (const Uuid& uuid, const std::string& title,
+		const std::string& description, const int64 parentId)
 	{
-		featureInsertStatement_.BindArguments (uuid);
+		featureInsertStatement_.Bind (1, uuid);
+		if (title.empty ()) {
+			featureInsertStatement_.Bind (2, Sql::Null ());
+		} else {
+			featureInsertStatement_.Bind (2, title);
+		}
+		if (description.empty ()) {
+			featureInsertStatement_.Bind (3, Sql::Null ());
+		} else {
+			featureInsertStatement_.Bind (3, description);
+		}
+		if (parentId < 0) {
+			featureInsertStatement_.Bind (4, Sql::Null ());
+		} else {
+			featureInsertStatement_.Bind (4, parentId);
+		}
 		featureInsertStatement_.Step ();
 		featureInsertStatement_.Reset ();
-
-		return db_.GetLastRowId ();
-	}
-
-	int64 StoreFeature (const Uuid& uuid, const int64 parentId)
-	{
-		featureInsertWithParentStatement_.BindArguments (uuid, parentId);
-		featureInsertWithParentStatement_.Step ();
-		featureInsertWithParentStatement_.Reset ();
 
 		return db_.GetLastRowId ();
 	}
@@ -198,7 +204,6 @@ private:
 	Sql::Statement packageDeleteStatement_;
 	Sql::Statement contentInsertStatement_;
 	Sql::Statement featureInsertStatement_;
-	Sql::Statement featureInsertWithParentStatement_;
 	Sql::Statement featureDependencyInsertStatement_;
 	Sql::Statement chunkInsertQuery_;
 	Sql::Statement chunkHashesInsertQuery_;
@@ -355,6 +360,14 @@ struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 	{
 		uuid_ = Uuid::Parse (featureNode.attribute ("Id").as_string ());
 
+		if (featureNode.attribute ("Title")) {
+			title_ = featureNode.attribute ("Title").as_string ();
+		}
+
+		if (featureNode.attribute ("Description")) {
+			description_ = featureNode.attribute ("Description").as_string ();
+		}
+
 		for (auto refNode : featureNode.children ("Reference")) {
 			references_.push_back (Reference{
 				Uuid::Parse (refNode.attribute ("Id").as_string ())
@@ -372,9 +385,9 @@ struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 	{
 		assert (persistentId_ == -1);
 		if (parent_) {
-			persistentId_ = db.StoreFeature (uuid_, parent_->GetPersistentId ());
+			persistentId_ = db.StoreFeature (uuid_, title_, description_, parent_->GetPersistentId ());
 		} else {
-			persistentId_ = db.StoreFeature (uuid_);
+			persistentId_ = db.StoreFeature (uuid_, title_, description_, -1);
 		}
 	}
 
@@ -409,6 +422,9 @@ private:
 	int64 persistentId_ = -1;
 
 	Feature* parent_ = nullptr;
+
+	std::string title_;
+	std::string description_;
 
 	std::vector<Reference> references_;
 	std::vector<Reference> dependencies_;

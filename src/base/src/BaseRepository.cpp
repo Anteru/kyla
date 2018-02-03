@@ -61,6 +61,40 @@ int64_t BaseRepository::GetFeatureSizeImpl (const Uuid& id)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+std::string BaseRepository::GetFeatureTitleImpl (const Uuid& id)
+{
+	static const char* querySql =
+		"SELECT Title FROM features WHERE Uuid=?;";
+
+	auto query = GetDatabase ().Prepare (querySql);
+	query.BindArguments (id);
+	query.Step ();
+
+	if (query.GetText (0)) {
+		return query.GetText (0);
+	} else {
+		return std::string ();
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::string BaseRepository::GetFeatureDescriptionImpl (const Uuid& id)
+{
+	static const char* querySql =
+		"SELECT Description FROM features WHERE Uuid=?;";
+
+	auto query = GetDatabase ().Prepare (querySql);
+	query.BindArguments (id);
+	query.Step ();
+
+	if (query.GetText (0)) {
+		return query.GetText (0);
+	} else {
+		return std::string ();
+	}
+}
+
+///////////////////////////////////////////////////////////////////////////////
 void BaseRepository::RepairImpl (Repository& /*source*/,
 	ExecutionContext& /*context*/,
 	RepairCallback /*repairCallback*/,

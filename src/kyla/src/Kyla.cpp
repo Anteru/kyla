@@ -85,7 +85,6 @@ struct KylaInstaller_3_0
 		size_t* resultSize,
 		void* result);
 
-
 	int (*GetFeatureProperty)(KylaInstaller* installer,
 		KylaSourceRepository repository,
 		struct KylaUuid id,
@@ -610,12 +609,12 @@ int kylaGetFeatureProperty_2_0 (KylaInstaller* installer,
 	auto internal = GetInternalInstaller (installer);
 
 	if (repository == nullptr) {
-		internal->log->Error ("kylaQueryFeature", "repository was null");
+		internal->log->Error ("kylaGetFeatureProperty", "repository was null");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
 	if (repository->repositoryType != KylaRepositoryImpl::RepositoryType::Source) {
-		internal->log->Error ("kylaQueryFeature", 
+		internal->log->Error ("kylaGetFeatureProperty", 
 			"repository must be a source repository");
 		return kylaResult_ErrorInvalidArgument;
 	}
@@ -627,7 +626,7 @@ int kylaGetFeatureProperty_2_0 (KylaInstaller* installer,
 	{
 		return KylaGet (repository->p->GetFeatureSize (uuid),
 			pResultSize, pResult, *internal->log,
-			"kylaQueryFeature");
+			"kylaGetFeatureProperty");
 	}
 
 	case kylaFeatureProperty_SubfeatureIds:
@@ -635,11 +634,27 @@ int kylaGetFeatureProperty_2_0 (KylaInstaller* installer,
 		std::vector<kyla::Uuid> result = repository->p->GetSubfeatures (uuid);
 
 		return KylaGet (result, pResultSize, pResult,
-			*internal->log, "kylaQueryFeature");
+			*internal->log, "kylaGetFeatureProperty");
+	}
+
+	case kylaFeatureProperty_Title:
+	{
+		const auto title = repository->p->GetFeatureTitle (uuid);
+
+		return KylaGet (title, pResultSize, pResult, *internal->log,
+			"kylaGetFeatureProperty");
+	}
+
+	case kylaFeatureProperty_Description:
+	{
+		const auto description = repository->p->GetFeatureTitle (uuid);
+
+		return KylaGet (description, pResultSize, pResult, *internal->log,
+			"kylaGetFeatureProperty");
 	}
 
 	default:
-		internal->log->Error ("kylaQueryFeature", "invalid property id");
+		internal->log->Error ("kylaGetFeatureProperty", "invalid property id");
 		return kylaResult_ErrorInvalidArgument;
 	}
 

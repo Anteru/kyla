@@ -340,12 +340,19 @@ private:
 			
 			updateParent.BindArguments (parentId, uuid);
 			updateParent.Step ();
+			updateParent.Reset ();
 		}
 
 		// Clear parents where the source cleared them
 		db_.Execute (
 			"UPDATE main.features SET ParentId = NULL "
 			"WHERE Uuid IN (SELECT Uuid FROM source.features WHERE ParentId IS NULL);");
+
+		// Update title/descriptions
+		db_.Execute (
+			"UPDATE main.features SET (Title, Description) = "
+			"(SELECT Title,Description FROM source.Features "
+			"WHERE source.features.Uuid = main.features.Uuid);");
 	}
 
 	Sql::Database& db_;

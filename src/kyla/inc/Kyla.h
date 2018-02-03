@@ -163,6 +163,26 @@ enum kylaFeatureProperty
 	@since 3.0
 	*/
 	kylaFeatureProperty_SubfeatureIds = 2,
+
+	/**
+	The title of this feature.
+
+	Returns a null-terminated string. This string may be empty in case no title
+	has been set.
+
+	@since 3.0
+	*/
+	kylaFeatureProperty_Title = 3,
+
+	/**
+	The description of this feature.
+
+	Returns a null-terminated string. This string may be empty in case no 
+	description has been set.
+
+	@since 3.0
+	*/
+	kylaFeatureProperty_Description = 4
 };
 
 struct KylaInstaller

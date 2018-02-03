@@ -49,6 +49,18 @@ int64_t Repository::GetFeatureSize (const Uuid& id)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+std::string Repository::GetFeatureTitle (const Uuid& id)
+{
+	return GetFeatureTitleImpl (id);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::string Repository::GetFeatureDescription (const Uuid& id)
+{
+	return GetFeatureDescriptionImpl (id);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 Sql::Database& Repository::GetDatabase ()
 {
 	return GetDatabaseImpl ();

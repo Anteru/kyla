@@ -4,6 +4,8 @@ CREATE TABLE features (
 	Id INTEGER PRIMARY KEY NOT NULL,
 	Uuid BLOB NOT NULL UNIQUE,
 	ParentId INTEGER DEFAULT NULL,
+	Title TEXT,
+	Description TEXT,
 	FOREIGN KEY(ParentId) REFERENCES features(Id)
 );
 

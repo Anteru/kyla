@@ -79,7 +79,7 @@ private:
 
 private:
 	std::vector<QTreeWidgetItem*> featureTreeNodes_;
-	std::vector<std::vector<KylaUuid>> featureTreeFeatureIds_;
+	std::vector<KylaUuid> featureTreeFeatureIds_;
 
 	static constexpr int FeatureSizeRole = Qt::UserRole + 0;
 	static constexpr int FeatureDescriptionRole = Qt::UserRole + 1;

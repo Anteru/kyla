@@ -22,6 +22,8 @@ public:
 private:
 	virtual std::vector<Uuid> GetFeaturesImpl () override;
 	virtual int64_t GetFeatureSizeImpl (const Uuid& featureId) override;
+	virtual std::string GetFeatureTitleImpl (const Uuid& featureId) override;
+	virtual std::string GetFeatureDescriptionImpl (const Uuid& featureId) override;
 	virtual bool IsEncryptedImpl () override;
 
 	std::vector<Uuid> GetSubfeaturesImpl (const Uuid& featureId) override;
