@@ -1,6 +1,17 @@
 Changelog
 =========
 
+kyla 3.0.0
+----------
+
+.. warning::
+
+    This release contains a breaking change of the file format. Kyla 3.0 will
+    fail to open a package created with earlier versions.
+
+* The feature tree is now part of the features themselves, and no longer external. This means features can be nested now, and a deployed repository will now properly retain the feature relationships.
+* Run-time variables in the build are now provided through *variables* instead of special write-enabled properties.
+
 kyla 2.0.3
 ----------
 
