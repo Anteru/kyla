@@ -351,12 +351,17 @@ private:
 
 struct ErrorState
 {
-	std::atomic_bool errorOccurred_ = false;
+	std::atomic_bool errorOccurred_;
 
 	std::mutex mutex_;
 	std::exception_ptr exception_;
 
 	std::vector<ProducerConsumerQueueBase*> queues_;
+
+	ErrorState ()
+	{
+		errorOccurred_.store (false);
+	}
 
 	void RegisterQueue (ProducerConsumerQueueBase* queue)
 	{

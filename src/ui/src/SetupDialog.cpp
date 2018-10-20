@@ -268,9 +268,9 @@ SetupDialog::SetupDialog (SetupContext* context)
 		}
 
 		auto item = new QTreeWidgetItem ();
-		item->setData (0, FeatureSizeRole, QVariant{ size });
+		item->setData (0, FeatureSizeRole, QVariant{ static_cast<qlonglong> (size) });
 		item->setData (0, FeatureDescriptionRole, QVariant{ node->description });
-		item->setData (0, FeatureFeatureIdsIndexRole, QVariant{ featureTreeFeatureIds_.size () });
+		item->setData (0, FeatureFeatureIdsIndexRole, QVariant{ static_cast<qlonglong> (featureTreeFeatureIds_.size ()) });
 		item->setText (0, node->name);
 		item->setCheckState (0, Qt::Unchecked);
 
