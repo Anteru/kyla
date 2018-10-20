@@ -630,6 +630,9 @@ void File::OnLinkAddedImpl (RepositoryObject* source)
 		}
 
 		break;
+
+	default:
+		break;
 	}
 }
 

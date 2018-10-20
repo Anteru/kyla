@@ -99,8 +99,8 @@ struct KylaInstaller_2_0
 		struct KylaUuid id,
 		int propertyId,
 		size_t* resultSize,
-		void* result);	
-	
+		void* result);
+
 	int (*GetFeatureTreeProperty)(KylaInstaller* installer,
 		KylaSourceRepository repository,
 		int propertyId,
@@ -296,7 +296,7 @@ int kylaExecute_2_0 (
 			"A source repository must be opened using OpenSourceRepository.");
 		return kylaResult_ErrorInvalidArgument;
 	}
-	
+
 	std::vector<kyla::Uuid> featureIds;
 
 	if (desiredState == nullptr) {
@@ -306,6 +306,8 @@ int kylaExecute_2_0 (
 			internal->log->Error ("kylaExecute",
 				"desired state must not be null for kylaAction_Configure and kylaAction_Install");
 			return kylaResult_ErrorInvalidArgument;
+		default:
+			break;// Passthrough, repair and verify is ok
 		}
 	} else {
 		if (desiredState->featureCount <= 0) {
@@ -642,7 +644,7 @@ int kylaGetFeatureProperty_2_0 (KylaInstaller* installer,
 	}
 
 	if (repository->repositoryType != KylaRepositoryImpl::RepositoryType::Source) {
-		internal->log->Error ("kylaQueryFeature", 
+		internal->log->Error ("kylaQueryFeature",
 			"repository must be a source repository");
 		return kylaResult_ErrorInvalidArgument;
 	}
@@ -685,7 +687,7 @@ int kylaGetFeatureProperty_2_0 (KylaInstaller* installer,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaSetLogCallback_2_0 (KylaInstaller* installer, KylaLogCallback logCallback, 
+int kylaSetLogCallback_2_0 (KylaInstaller* installer, KylaLogCallback logCallback,
 	void* callbackContext)
 {
 	KYLA_C_API_BEGIN ()
@@ -725,7 +727,7 @@ int kylaSetLogCallback_2_0 (KylaInstaller* installer, KylaLogCallback logCallbac
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaSetProgressCallback_2_0 (KylaInstaller* installer, 
+int kylaSetProgressCallback_2_0 (KylaInstaller* installer,
 	KylaProgressCallback progressCallback, void* callbackContext)
 {
 	KYLA_C_API_BEGIN ()
@@ -752,7 +754,7 @@ int kylaSetProgressCallback_2_0 (KylaInstaller* installer,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaSetValidationCallback_2_0 (KylaInstaller* installer, 
+int kylaSetValidationCallback_2_0 (KylaInstaller* installer,
 	KylaValidationCallback validationCallback, void* callbackContext)
 {
 	KYLA_C_API_BEGIN ()
@@ -875,7 +877,7 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** pInstaller)
 	if (kylaApiVersion < KYLA_API_VERSION_2_0 || kylaApiVersion > KYLA_API_VERSION_2_0) {
 		return kylaResult_ErrorUnsupportedApiVersion;
 	}
-	
+
 	switch (kylaApiVersion) {
 	case KYLA_API_VERSION_2_0:
 	{
@@ -900,7 +902,7 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** pInstaller)
 		installer->SetProgressCallback = kylaSetProgressCallback_2_0;
 		installer->SetValidationCallback = kylaSetValidationCallback_2_0;
 		installer->GetFeatureTreeProperty = kylaGetFeatureTreeProperty_2_0;
-		
+
 		*reinterpret_cast<void**>(pInstaller) = installer;
 
 		break;

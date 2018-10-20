@@ -180,7 +180,7 @@ private:
 class TemporaryTable final
 {
 public:
-	TemporaryTable (Database::Impl* impl, const char* name);
+	TemporaryTable (Database::Impl* const impl, const char* name);
 	~TemporaryTable ();
 
 	void Drop ();

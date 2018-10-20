@@ -54,6 +54,8 @@ public:
 	{
 		db_ = other.db_;
 		other.db_ = nullptr;
+
+		return *this;
 	}
 
 	void CheckIntegrity ();
@@ -286,7 +288,7 @@ public:
 
 	TemporaryTable CreateTemporaryTable (const char* name, const char* columnDefinition)
 	{
-		SAFE_SQLITE (sqlite3_exec (db_, (boost::format ("CREATE TEMPORARY TABLE %1% (%2%);") 
+		SAFE_SQLITE (sqlite3_exec (db_, (boost::format ("CREATE TEMPORARY TABLE %1% (%2%);")
 			% name % columnDefinition).str ().c_str (),
 			nullptr, nullptr, nullptr));
 
@@ -717,5 +719,5 @@ void Database::CheckIntegrity ()
 {
 	impl_->CheckIntegrity ();
 }
-} 
+}
 }
