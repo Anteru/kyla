@@ -24,9 +24,35 @@ details.
 #undef min
 #undef max
 #undef CreateFile
+#elif KYLA_PLATFORM_LINUX
+
+#include <iostream>
+#include <cassert>
+#include <curl/curl.h>
+
 #endif
 
 namespace kyla {
+#if KYLA_PLATFORM_LINUX
+struct BufferStream
+{
+	byte* buffer = nullptr;
+	int64 offset = 0;
+	int64 size = 0;
+};
+
+size_t WriteToBufferCallback (void* buffer, size_t /* size is always 1 */, size_t nmeb, void* userptr)
+{
+	BufferStream* stream = static_cast<BufferStream*> (userptr);
+	std::cout << stream->offset << " " << nmeb << " " << stream->size << " ! " << (stream->offset + nmeb) << std::endl;
+	assert ((stream->offset + nmeb) <= stream->size);
+	::memcpy (stream->buffer + stream->offset, buffer, nmeb);
+	stream->offset += nmeb;
+
+	return nmeb;
+}
+#endif
+
 struct WebRepository::Impl
 {
 #if KYLA_PLATFORM_WINDOWS
@@ -115,15 +141,61 @@ struct WebRepository::Impl
 #elif KYLA_PLATFORM_LINUX
 	struct File
 	{
+		File (const File&) = delete;
+		File& operator= (const File&) = delete;
+
+		File (const std::string& url)
+		{
+			curl_ = curl_easy_init ();
+			curl_easy_setopt (curl_, CURLOPT_URL, url.c_str ());
+			curl_easy_setopt (curl_, CURLOPT_FOLLOWLOCATION, 1L);
+		}
+
+		~File ()
+		{
+			curl_easy_cleanup (curl_);
+		}
+
 		int64 Read (const int64 offset, const MutableArrayRef<>& buffer)
 		{
-			throw RuntimeException ("NOT IMPLEMENTED", KYLA_FILE_LINE);
+			std::string range;
+			range += std::to_string (offset);
+			range += "-";
+			range += std::to_string (offset + buffer.GetSize () - 1 /* ranges are inclusive */);
+
+			curl_easy_setopt (curl_, CURLOPT_RANGE, range.c_str ());
+			curl_easy_setopt (curl_, CURLOPT_WRITEFUNCTION, WriteToBufferCallback);
+  			curl_easy_setopt (curl_, CURLOPT_USERAGENT, "libcurl-kyla/1.0");
+
+			BufferStream stream = {
+				static_cast<byte*> (buffer.GetData ()),
+				0,
+				buffer.GetSize ()
+			};
+			curl_easy_setopt (curl_, CURLOPT_WRITEDATA, &stream);
+
+			auto res = curl_easy_perform (curl_);
+
+			return stream.offset;
 		}
+
+		private:
+		CURL* curl_;
 	};
 
 	std::unique_ptr<File> Open (const std::string& file)
 	{
-		throw RuntimeException ("NOT IMPLEMENTED", KYLA_FILE_LINE);
+		return std::make_unique<File> (file);
+	}
+
+	Impl ()
+	{
+		curl_global_init (CURL_GLOBAL_ALL);
+	}
+
+	~Impl ()
+	{
+		curl_global_cleanup ();
 	}
 #else
 #endif

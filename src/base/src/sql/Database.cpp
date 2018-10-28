@@ -298,7 +298,7 @@ public:
 	bool HasTable (const char* name)
 	{
 		sqlite3_stmt* statement;
-		SAFE_SQLITE (sqlite3_prepare_v2 (db_, 
+		SAFE_SQLITE (sqlite3_prepare_v2 (db_,
 			"SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?);",
 			-1, &statement, nullptr));
 
