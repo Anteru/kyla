@@ -71,7 +71,7 @@ struct LinuxFile final : public File
 		}
 	}
 
-	void CloseImpl ()
+	void CloseImpl () override
 	{
 		close (fd_);
 		fd_ = -1;
@@ -107,7 +107,7 @@ struct LinuxFile final : public File
 		return r;
 	}
 
-	void* UnmapImpl (void* p) override
+	void UnmapImpl (void* p) override
 	{
 		munmap (p, mappings_.find (p)->second);
 		mappings_.erase (p);
@@ -118,7 +118,7 @@ struct LinuxFile final : public File
 		ftruncate (fd_, size);
 	}
 
-	std::int64_t GetSizeImpl () const
+	std::int64_t GetSizeImpl () const override
 	{
 		struct stat s;
 		::fstat (fd_, &s);
@@ -126,7 +126,7 @@ struct LinuxFile final : public File
 		return s.st_size;
 	}
 
-	std::int64_t TellImpl () const
+	std::int64_t TellImpl () const override
 	{
 		return ::lseek (fd_, 0, SEEK_CUR);
 	}
@@ -306,7 +306,7 @@ struct WindowsFile final : public File
 		return pointer;
 	}
 
-	void* UnmapImpl (void* p) override
+	void UnmapImpl (void* p) override
 	{
 		::UnmapViewOfFile (p);
 		::CloseHandle (mappings_.find (p)->second);

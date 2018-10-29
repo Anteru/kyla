@@ -54,6 +54,8 @@ public:
 	{
 		db_ = other.db_;
 		other.db_ = nullptr;
+
+		return *this;
 	}
 
 	void CheckIntegrity ();

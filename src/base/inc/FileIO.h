@@ -58,9 +58,9 @@ struct File
 		return MapImpl (0, GetSize ());
 	}
 
-	void* Unmap (void* p)
+	void Unmap (void* p)
 	{
-		return UnmapImpl (p);
+		UnmapImpl (p);
 	}
 
 	void SetSize (const std::int64_t size)
@@ -85,7 +85,7 @@ private:
 	virtual void SeekImpl (const std::int64_t offset) = 0;
 	virtual std::int64_t TellImpl () const = 0;
 	virtual void* MapImpl (const std::int64_t offset, const std::int64_t size) = 0;
-	virtual void* UnmapImpl (void* p) = 0;
+	virtual void UnmapImpl (void* p) = 0;
 
 	virtual void SetSizeImpl (const std::int64_t size) = 0;
 	virtual std::int64_t GetSizeImpl () const = 0;
