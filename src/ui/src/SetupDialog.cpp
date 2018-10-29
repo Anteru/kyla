@@ -231,8 +231,16 @@ void SetupDialog::OnFeatureSelectionItemChanged (QTreeWidgetItem* item, int)
 
 	if (isEnabled) {
 		requiredDiskSpace_ += size;
+
+		if (item->parent ()) {
+			item->parent ()->setCheckState (0, Qt::Checked);
+		}
 	} else {
 		requiredDiskSpace_ -= size;
+
+		for (int i = 0; i < item->childCount (); ++i) {
+			item->child (i)->setCheckState (0, Qt::Unchecked);
+		}
 	}
 
 	UpdateRequiredDiskSpace ();
