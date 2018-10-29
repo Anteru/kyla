@@ -649,7 +649,7 @@ int kylaGetFeatureProperty_2_0 (KylaInstaller* installer,
 
 	case kylaFeatureProperty_Description:
 	{
-		const auto description = repository->p->GetFeatureTitle (uuid);
+		const auto description = repository->p->GetFeatureDescription (uuid);
 
 		return KylaGet (description, pResultSize, pResult, *internal->log,
 			"kylaGetFeatureProperty");
