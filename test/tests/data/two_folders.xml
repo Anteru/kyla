@@ -1,0 +1,14 @@
+<?xml version="1.0" ?>
+<Repository>
+	<Features>
+		<Feature Id="3111b6f8-3f2b-419e-b8bc-826d839e44c9">
+			<Reference Id="5ee578f3-de17-4e76-9c7b-07cfa7384915"/>
+		</Feature>
+	</Features>
+	<Files>
+		<Group Id="5ee578f3-de17-4e76-9c7b-07cfa7384915">
+			<File Source="1.txt" Target="folder/1.txt" />
+			<File Source="2.txt" Target="folder/subfolder/2.txt" />
+		</Group>
+	</Files>
+</Repository>
