@@ -311,8 +311,6 @@ struct WindowsFile final : public File
 		::UnmapViewOfFile (p);
 		::CloseHandle (mappings_.find (p)->second);
 		mappings_.erase (p);
-
-		return p;
 	}
 
 	void SetSizeImpl (const std::int64_t size) override
