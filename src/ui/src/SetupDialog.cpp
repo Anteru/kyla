@@ -244,7 +244,12 @@ void SetupDialog::OnFeatureSelectionItemChanged (QTreeWidgetItem* item, int)
 	}
 
 	UpdateRequiredDiskSpace ();
+	UpdateInstallButtonState ();
+}
 
+///////////////////////////////////////////////////////////////////////////////
+void SetupDialog::UpdateInstallButtonState ()
+{
 	bool anyEnabled = false;
 	for (auto& featureTreeNode : featureTreeNodes_) {
 		if (featureTreeNode->checkState (0) == Qt::Checked) {
@@ -253,7 +258,8 @@ void SetupDialog::OnFeatureSelectionItemChanged (QTreeWidgetItem* item, int)
 		}
 	}
 
-	ui->startInstallationButton->setEnabled (anyEnabled);
+	ui->startInstallationButton->setEnabled (anyEnabled && 
+		!ui->targetDirectoryEdit->text ().isEmpty ());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -277,8 +283,7 @@ SetupDialog::SetupDialog (SetupContext* context)
 
 	connect (ui->targetDirectoryEdit, &QLineEdit::textChanged,
 		[=]() -> void {
-		ui->startInstallationButton->setEnabled (
-			!ui->targetDirectoryEdit->text ().isEmpty ());
+		UpdateInstallButtonState ();
 	});
 
 	auto installer = context_->installer;
@@ -342,17 +347,7 @@ SetupDialog::SetupDialog (SetupContext* context)
 
 	connect (ui->featureSelection, &QTreeWidget::itemChanged, 
 		this, &SetupDialog::OnFeatureSelectionItemChanged);
-
-	connect (ui->featureSelection, &QTreeWidget::currentItemChanged, 
-		[this] (QTreeWidgetItem* item, QTreeWidgetItem*) -> void
-	{
-		auto desc = item->data (0, FeatureDescriptionRole);
-
-		if (desc.isValid ()) {
-			ui->featureDescriptionLabel->setText (desc.toString ());
-		}
-	});
-
+	
 	// We create all tree items now, and will link them below
 	std::unordered_map<KylaFeature*, QTreeWidgetItem*> featureToTreeItem;
 	for (const auto& feature : features) {
@@ -363,9 +358,9 @@ SetupDialog::SetupDialog (SetupContext* context)
 
 		auto item = new QTreeWidgetItem ();
 		item->setData (0, FeatureSizeRole, QVariant{ static_cast<qlonglong> (size) });
-		item->setData (0, FeatureDescriptionRole, QVariant{ feature.second->GetDescription ()});
 		item->setData (0, FeatureFeatureIdsIndexRole, QVariant{ static_cast<qlonglong> (featureTreeFeatureIds_.size ()) });
 		item->setText (0, feature.second->GetTitle ());
+		item->setToolTip (0, QString ("%1\n%2").arg (feature.second->GetTitle ()).arg (feature.second->GetDescription ()));
 		item->setCheckState (0, Qt::Unchecked);
 
 		featureToTreeItem [feature.second.get ()] = item;
