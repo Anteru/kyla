@@ -4,7 +4,7 @@ pipelines:
   default:
     - step:
         script: # Modify the commands below to build your repository.
-          - apt-get update && apt-get install -y wget libcurl4-openssl-dev libboost-filesystem-dev libboost-program-options-dev libboost-system-dev libssl-dev python g++ ninja-build
+          - apt-get update && apt-get install -y wget libcurl4-openssl-dev libboost-filesystem-dev libboost-program-options-dev libboost-system-dev libssl-dev python3 g++ ninja-build
           - mkdir cmake
           - cd cmake
           - wget https://cmake.org/files/v3.12/cmake-3.12.3-Linux-x86_64.sh
