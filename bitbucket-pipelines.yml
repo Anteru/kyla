@@ -4,7 +4,7 @@ pipelines:
   default:
     - step:
         script: # Modify the commands below to build your repository.
-          - apt-get update && apt-get install -y cmake libboost-filesystem-dev libboost-program-options-dev libboost-system-dev libssl-dev python g++ ninja-build
+          - apt-get update && apt-get install -y cmake libcurl4-openssl-dev libboost-filesystem-dev libboost-program-options-dev libboost-system-dev libssl-dev python g++ ninja-build
           - mkdir build
           - cd build
           - cmake -DKYLA_BUILD_UI:BOOL=OFF -DCMAKE_BUILD_TYPE:STRING=Release -G "Ninja" ..
