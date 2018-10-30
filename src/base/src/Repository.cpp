@@ -30,9 +30,10 @@ void Repository::Configure (Repository& source, const ArrayRef<Uuid>& features,
 
 ///////////////////////////////////////////////////////////////////////////////
 void Repository::GetContentObjects (const ArrayRef<SHA256Digest>& requestedObjects,
-	const GetContentObjectCallback& getCallback)
+	const GetContentObjectCallback& getCallback,
+	ExecutionContext& context)
 {
-	GetContentObjectsImpl (requestedObjects, getCallback);
+	GetContentObjectsImpl (requestedObjects, getCallback, context);
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -48,6 +49,18 @@ int64_t Repository::GetFeatureSize (const Uuid& id)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+std::string Repository::GetFeatureTitle (const Uuid& id)
+{
+	return GetFeatureTitleImpl (id);
+}
+
+///////////////////////////////////////////////////////////////////////////////
+std::string Repository::GetFeatureDescription (const Uuid& id)
+{
+	return GetFeatureDescriptionImpl (id);
+}
+
+///////////////////////////////////////////////////////////////////////////////
 Sql::Database& Repository::GetDatabase ()
 {
 	return GetDatabaseImpl ();
@@ -60,28 +73,9 @@ bool Repository::IsEncrypted ()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void Repository::SetDecryptionKey (const std::string& key)
+std::vector<Uuid> Repository::GetSubfeatures (const Uuid& featureId)
 {
-	SetDecryptionKeyImpl (key);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-std::string Repository::GetDecryptionKey () const
-{
-	return GetDecryptionKeyImpl ();
-}
-
-///////////////////////////////////////////////////////////////////////////////
-std::vector<Repository::Dependency> 
-Repository::GetFeatureDependencies (const Uuid& featureId)
-{
-	return GetFeatureDependenciesImpl (featureId);
-}
-
-///////////////////////////////////////////////////////////////////////////////
-FeatureTree Repository::GetFeatureTree ()
-{
-	return GetFeatureTreeImpl ();
+	return GetSubfeaturesImpl (featureId);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

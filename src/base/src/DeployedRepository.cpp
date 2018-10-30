@@ -169,13 +169,14 @@ void DeployedRepository::RepairImpl (Repository& source,
 				repairCallback (it->second.string ().c_str (), 
 					RepairResult::Restored);
 			}
-		});
+		}, context);
 	}
 }
 
 ///////////////////////////////////////////////////////////////////////////////
 void DeployedRepository::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
-	const Repository::GetContentObjectCallback& getCallback)
+	const Repository::GetContentObjectCallback& getCallback,
+	ExecutionContext& context)
 {
 	auto query = db_.Prepare (
 		R"_(SELECT Path FROM fs_files 
@@ -213,14 +214,16 @@ public:
 		return SimulateImpl (cost);
 	}
 
-	void Execute (Log& log, UpdateProgress progress)
+	void Execute (Log& log, UpdateProgress progress,
+		Repository::ExecutionContext& context)
 	{
-		ExecuteImpl (log, progress);
+		ExecuteImpl (log, progress, context);
 	}
 
 private:
 	virtual void SimulateImpl (int64_t* cost) = 0;
-	virtual void ExecuteImpl (Log& log, UpdateProgress progress) = 0;
+	virtual void ExecuteImpl (Log& log, UpdateProgress progress,
+		Repository::ExecutionContext& context) = 0;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -249,7 +252,8 @@ private:
 		}
 	}
 
-	void ExecuteImpl (Log& log, UpdateProgress progress)
+	void ExecuteImpl (Log& log, UpdateProgress progress,
+		Repository::ExecutionContext&)
 	{
 		auto transaction = db_.BeginTransaction ();
 		auto insertPendingFeatureQuery = GetInsertPendingFeatureQuery ();
@@ -299,7 +303,8 @@ private:
 		}
 	}
 
-	void ExecuteImpl (Log&, UpdateProgress progress)
+	void ExecuteImpl (Log&, UpdateProgress progress,
+		Repository::ExecutionContext&)
 	{
 		ExecuteQuery ();
 
@@ -312,9 +317,42 @@ private:
 		// pending
 		db_.Execute (
 			R"_(INSERT INTO features (Uuid)
-		SELECT Uuid FROM source.features
-		WHERE source.features.Uuid IN (SELECT Uuid FROM pending_features)
-		AND NOT source.features.Uuid IN (SELECT Uuid FROM features))_");
+				SELECT Uuid FROM source.features
+				WHERE source.features.Uuid IN (SELECT Uuid FROM pending_features)
+				AND NOT source.features.Uuid IN (SELECT Uuid FROM features))_");
+
+		// For each feature, update the parent -- this can also change
+		// the parents for existing features if the source repository
+		// changed the relationship
+		auto pendingFeaturesParents = db_.Prepare (
+			"SELECT source.features.ParentId, source.features.Uuid FROM source.features "
+			"INNER JOIN features ON source.features.Uuid = main.features.Uuid "
+			"WHERE source.features.ParentId IS NOT NULL");
+		
+		auto updateParent = db_.Prepare (
+			"UPDATE features SET ParentId = "
+			"(SELECT Id FROM features WHERE Uuid="
+			"(SELECT Uuid FROM source.features WHERE Id=?)) WHERE Uuid=?;");
+		while (pendingFeaturesParents.Step ()) {
+			int64 parentId = pendingFeaturesParents.GetInt64 (0);
+			Uuid uuid;
+			pendingFeaturesParents.GetBlob (1, uuid);
+			
+			updateParent.BindArguments (parentId, uuid);
+			updateParent.Step ();
+			updateParent.Reset ();
+		}
+
+		// Clear parents where the source cleared them
+		db_.Execute (
+			"UPDATE main.features SET ParentId = NULL "
+			"WHERE Uuid IN (SELECT Uuid FROM source.features WHERE ParentId IS NULL);");
+
+		// Update title/descriptions
+		db_.Execute (
+			"UPDATE main.features SET (Title, Description) = "
+			"(SELECT Title,Description FROM source.Features "
+			"WHERE source.features.Uuid = main.features.Uuid);");
 	}
 
 	Sql::Database& db_;
@@ -339,7 +377,8 @@ private:
 		}
 	}
 
-	void ExecuteImpl (Log&, UpdateProgress progress)
+	void ExecuteImpl (Log&, UpdateProgress progress,
+		Repository::ExecutionContext&)
 	{
 		ExecuteQuery ();
 
@@ -423,7 +462,8 @@ private:
 			(SELECT Id FROM fs_contents_with_reference_count WHERE ReferenceCount = 0))_");
 	}
 
-	virtual void ExecuteImpl (Log& log, UpdateProgress progress) override
+	virtual void ExecuteImpl (Log& log, UpdateProgress progress,
+		Repository::ExecutionContext&) override
 	{
 		auto changedFilesTable = CreateChangedFileTable ();
 
@@ -564,7 +604,8 @@ private:
 		}
 	}
 
-	virtual void ExecuteImpl (Log& log, UpdateProgress progress) override
+	virtual void ExecuteImpl (Log& log, UpdateProgress progress, 
+		Repository::ExecutionContext& context) override
 	{
 		// Find all missing content objects in this database
 		std::vector<SHA256Digest> requiredContentObjects;
@@ -780,7 +821,7 @@ private:
 				currentTransactionDeployedSize = 0;
 				currentTransactionSize = 0;
 			}
-		});
+		}, context);
 
 		log.Debug ("Configure", 
 			boost::format ("Committing transaction with %1% operations") % currentTransactionSize);
@@ -898,7 +939,8 @@ private:
 		}
 	}
 
-	virtual void ExecuteImpl (Log& log, UpdateProgress progress) override
+	virtual void ExecuteImpl (Log& log, UpdateProgress progress,
+		Repository::ExecutionContext&) override
 	{
 		// We may have files that only require local copies - find those
 		// and execute them now
@@ -1023,7 +1065,8 @@ private:
 		DeleteFeaturesContents ();
 	}
 
-	virtual void ExecuteImpl (Log& log, UpdateProgress progress) override
+	virtual void ExecuteImpl (Log& log, UpdateProgress progress,
+		Repository::ExecutionContext&) override
 	{
 		// The order here is files, features, fs_contents, to keep
 		// referential integrity at all times
@@ -1136,7 +1179,7 @@ void DeployedRepository::ConfigureImpl (Repository& source,
 		auto& phase = configurePhases [i];
 		phase->Execute (context.log, [&](const std::string& s, const int64_t cost) -> void {
 			progressHelper.Advance (s, cost);
-		});
+		}, context);
 	}
 
 	progressHelper.Done ();

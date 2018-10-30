@@ -1,0 +1,20 @@
+<?xml version="1.0" ?>
+<Repository>
+	<Features>
+		<Feature Id="5d195f63-f424-431f-b7c5-8d57cd32f57b">
+			<Reference Id="5ee578f3-de17-4e76-9c7b-07cfa7384915"/>
+
+            <Feature Id="c8bed51b-cbba-4699-953a-834930704d89">
+                <Reference Id="6f244d6e-65dc-41e8-8987-b53a417a645e"/>
+            </Feature>
+		</Feature>
+	</Features>
+	<Files>
+		<Group Id="5ee578f3-de17-4e76-9c7b-07cfa7384915">
+			<File Source="1.txt"/>
+		</Group>
+		<Group Id="6f244d6e-65dc-41e8-8987-b53a417a645e">
+			<File Source="2.txt"/>
+		</Group>
+	</Files>
+</Repository>

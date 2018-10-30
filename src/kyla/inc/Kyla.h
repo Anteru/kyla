@@ -78,13 +78,6 @@ typedef struct KylaRepositoryImpl* KylaSourceRepository;
 typedef struct KylaRepositoryImpl* KylaTargetRepository;
 typedef struct KylaRepositoryImpl* KylaRepository;
 
-struct KylaFeatureTreeNode
-{
-	const struct KylaFeatureTreeNode* parent;
-	const char* name;
-	const char* description;
-};
-
 enum kylaRepositoryOption
 {
 	/**
@@ -123,18 +116,6 @@ struct KylaUuid
 	uint8_t bytes [16];
 };
 
-enum kylaFeatureRelationship
-{
-	kylaFeatureRelationship_Requires
-};
-
-struct KylaFeatureDependency
-{
-	KylaUuid source;
-	KylaUuid target;
-	kylaFeatureRelationship relationship;
-};
-
 enum kylaRepositoryProperty
 {
 	/**
@@ -153,13 +134,17 @@ enum kylaRepositoryProperty
 
 	@since 2.0
 	*/
-	kylaRepositoryProperty_IsEncrypted = 2,
+	kylaRepositoryProperty_IsEncrypted = 2
+};
 
+enum kylaInstallerVariable
+{
 	/**
-	The decryption key which will be used if the repository is encrypted.
-	@since 2.0
+	The decryption key to use if the repository was encrypted.
+
+	@since 3.0
 	*/
-	kylaRepositoryProperty_DecryptionKey = 3
+	kylaInstallerVariable_DecryptionKey
 };
 
 enum kylaFeatureProperty
@@ -170,30 +155,34 @@ enum kylaFeatureProperty
 	kylaFeatureProperty_Size = 1,
 
 	/**
-	All dependencies of this feature, as KylaFeatureDependency instances
+	All subfeatures of this feature.
 
-	@since 2.0
+	Returns a list of feature IDs. This returns a tighly packed list of 
+	Uuids.
+
+	@since 3.0
 	*/
-	kylaFeatureProperty_Dependencies = 2
-};
-
-enum kylaFeatureTreeProperty
-{
-	/**
-	Returns all nodes in the feature tree.
-
-	The result is an array of kylaFeatureTreeNode pointers. The list order
-	is guaranteed to stay the same for one source repository.
-	*/
-	kylaFeatureTreeProperty_Nodes = 1,
+	kylaFeatureProperty_SubfeatureIds = 2,
 
 	/**
-	Returns all features associated with a feature tree node.
+	The title of this feature.
 
-	The result is a list of tightly packed KylaUuid instances. The feature
-	tree node must be passed in as the object into the query function.
+	Returns a null-terminated string. This string may be empty in case no title
+	has been set.
+
+	@since 3.0
 	*/
-	kylaFeatureTreeProperty_NodeFeatures = 2
+	kylaFeatureProperty_Title = 3,
+
+	/**
+	The description of this feature.
+
+	Returns a null-terminated string. This string may be empty in case no 
+	description has been set.
+
+	@since 3.0
+	*/
+	kylaFeatureProperty_Description = 4
 };
 
 struct KylaInstaller
@@ -274,18 +263,25 @@ struct KylaInstaller
 		void* result);
 
 	/**
-	Set a repository property.
+	Set an installer variable by name.
 
-	The propertyId must be one of enumeration values from
-	kylaRepositoryProperty.
+	The variable name must be non-zero.
 
-	@since 2.0
+	@since 3.0
 	*/
-	int (*SetRepositoryProperty)(KylaInstaller* installer,
-		KylaSourceRepository repository,
-		int propertyId,
-		size_t propertySize,
-		const void* propertyValue);
+	int (*SetVariable)(KylaInstaller* installer,
+		const char* variableName,
+		size_t variableSize,
+		const void* variableValue);
+
+	/**
+	
+	@since 3.0
+	*/
+	int (*GetVariable)(KylaInstaller* installer,
+		const char* variableName,
+		size_t* resultSize,
+		void* result);
 
 	/**
 	Get a feature property.
@@ -308,25 +304,6 @@ struct KylaInstaller
 		void* result);
 
 	/**
-	Get a feature tree property.	
-	
-	The propertyId must be one of enumeration values from
-	kylaFeatureTreeProperty. If resultSize is non-null, and result is null, the result
-	size is written into resultSize. If resultSize and result are both non-null, the
-	result is written into result if the resultSize is greater than or equal to the
-	required size. The actually written size will be stored in resultSize in this case.
-
-	The result size must be always provided.
-
-	@since 2.0
-	*/
-	int (*GetFeatureTreeProperty)(KylaInstaller* installer,
-		KylaSourceRepository repository,
-		int propertyId,
-		const void* object,
-		size_t* resultSize, void* result);
-
-	/**
 	Execute an action on the target repository.
 
 	Most actions require a desired state.
@@ -337,7 +314,7 @@ struct KylaInstaller
 };
 
 #define KYLA_MAKE_API_VERSION(major,minor,patch) (major << 22 | minor << 12 | patch)
-#define KYLA_API_VERSION_2_0 KYLA_MAKE_API_VERSION(2,0,0)
+#define KYLA_API_VERSION_3_0 KYLA_MAKE_API_VERSION(3,0,0)
 
 /**
 Create a new installer. Installer must be non-null, and kylaApiVersion must be

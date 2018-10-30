@@ -33,7 +33,8 @@ public:
 
 private:
 	void GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
-		const GetContentObjectCallback& getCallback) override;
+		const GetContentObjectCallback& getCallback,
+		ExecutionContext& context) override;
 
 	virtual std::unique_ptr<PackageFile> OpenPackage (const std::string& packageName) const = 0;
 	
@@ -41,11 +42,6 @@ private:
 		ExecutionContext& context,
 		RepairCallback repairCallback,
 		bool restore) override;
-
-protected:
-	void SetDecryptionKeyImpl (const std::string& key) override;
-
-	std::unique_ptr<Decryptor> decryptor_;
 };
 } // namespace kyla
 

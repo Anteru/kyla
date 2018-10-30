@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>640</width>
-    <height>480</height>
+    <width>480</width>
+    <height>360</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -66,6 +66,9 @@
           <pointsize>16</pointsize>
          </font>
         </property>
+        <property name="styleSheet">
+         <string notr="true">background-color: white;</string>
+        </property>
         <property name="text">
          <string>TextLabel</string>
         </property>
@@ -97,7 +100,7 @@
        </widget>
       </item>
       <item>
-       <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="2,1">
+       <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="2">
         <item>
          <layout class="QVBoxLayout" name="verticalLayout">
           <item>
@@ -132,19 +135,6 @@
            </widget>
           </item>
          </layout>
-        </item>
-        <item>
-         <widget class="QLabel" name="featureDescriptionLabel">
-          <property name="text">
-           <string>Select a feature to see its description.</string>
-          </property>
-          <property name="alignment">
-           <set>Qt::AlignLeading|Qt::AlignLeft|Qt::AlignTop</set>
-          </property>
-          <property name="wordWrap">
-           <bool>true</bool>
-          </property>
-         </widget>
         </item>
        </layout>
       </item>

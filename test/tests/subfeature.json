@@ -1,0 +1,46 @@
+{
+    "info" : {
+        "description" : "Check that subfeatures are present on both source and install"
+    },
+    "actions" : [
+        {
+            "name" : "generate-repository",
+            "args" : {
+                "source" : "data/subfeature.xml",
+                "source-directory" : "data/shared",
+                "target" : "test"
+            }
+        },
+        {
+            "name" : "check-subfeatures-present",
+            "args" : {
+                "path" : "test",
+                "id" : "5d195f63-f424-431f-b7c5-8d57cd32f57b",
+                "subfeatures" : [
+                    "c8bed51b-cbba-4699-953a-834930704d89"
+                ]
+            }
+        },
+        {
+            "name" : "install",
+            "args" : {
+                "source" : "test",
+                "target" : "deploy",
+                "features" : [
+                    "5d195f63-f424-431f-b7c5-8d57cd32f57b",
+                    "c8bed51b-cbba-4699-953a-834930704d89"
+                ]
+            }
+        },
+        {
+            "name" : "check-subfeatures-present",
+            "args" : {
+                "path" : "deploy",
+                "id" : "5d195f63-f424-431f-b7c5-8d57cd32f57b",
+                "subfeatures" : [
+                    "c8bed51b-cbba-4699-953a-834930704d89"
+                ]
+            }
+        }
+    ]
+}

@@ -51,17 +51,32 @@ class RepositoryObject:
 		return self.__references
 
 class Feature(RepositoryObject):
-	def __init__ (self):
+	def __init__ (self, title, description = None):
 		super().__init__()
 		self.__dependencies = []
-	
+		self.__title = title
+		self.__description = description
+		self.__features = []
+
 	def AddDependency (self, otherFeature):
 		assert isinstance (otherFeature, feature)
 		self.__dependencies.append (feature)
 
+	def AddFeature (self, title, description = None):
+		f = Feature (title, description)
+		self.__features.append (f)
+		return f
+
 	def ToXml (self):
 		n = etree.Element ('Feature')
 		n.set ('Id', str (self.GetId ()))
+		n.set ('Title', self.__title)
+
+		if self.__description:
+			n.set ('Description', self.__description)
+
+		for feature in self.__features:
+			n.append (feature.ToXml ())
 
 		for reference in self.GetReferences ():
 			r = etree.SubElement (n, 'Reference')
@@ -93,7 +108,9 @@ class FileGroup(RepositoryObject):
 		super().__init__()
 		self.__files = []
 	
-	def AddDirectory (self, sourceDirectory, outputDirectory, filter=None, recursive=True):
+	def AddDirectory (self, sourceDirectory, outputDirectory = None, filter=None, recursive=True):
+		if outputDirectory is None:
+			outputDirectory = sourceDirectory
 		for file in WalkDirectory (sourceDirectory, filter, recursive):
 			p = pathlib.Path (file.path)
 			self.__files.append ((
@@ -111,44 +128,15 @@ class FileGroup(RepositoryObject):
 		
 		return n
 
-class FeatureTreeNode(RepositoryObject):
-	def __init__(self, name, description = None):
-		super().__init__ ()
-		self.__children = []
-		self.__name = name
-		self.__description = description
-
-	def AddNode (self, name, description=None):
-		n = FeatureTreeNode (name, description)
-		self.__children.append (n)
-		return n
-
-	def ToXml (self):
-		n = etree.Element ('Node')
-		n.set ('Name', self.__name)
-		if self.__description:
-			n.set ('Description', self.__description)
-
-		for c in self.__children:
-			n.append (c.ToXml ())
-
-		for reference in self.GetReferences ():
-			r = etree.SubElement (n, 'Reference')
-			r.set ('Id', str (reference))
-
-		return n
-
-
 class RepositoryBuilder:
 	def __init__ (self):
 		self.__root = etree.Element ('Repository')
 		self.__features = []
 		self.__fileGroups = []
 		self.__filePackages = []
-		self.__featureTreeNodes = []
 
-	def AddFeature (self):
-		f = Feature ()
+	def AddFeature (self, title, description = None):
+		f = Feature (title, description)
 		self.__features.append (f)
 		return f
 
@@ -161,11 +149,6 @@ class RepositoryBuilder:
 		p = FilePackage (name)
 		self.__filePackages.append (p)
 		return p
-
-	def AddFeatureTreeNode (self, name, description=None):
-		n = FeatureTreeNode (name, description)
-		self.__featureTreeNodes.append (n)
-		return n
 
 	def Finalize (self, prettyPrint = True):
 		'''Generate the installer XML and return as a string. The output is
@@ -184,12 +167,6 @@ class RepositoryBuilder:
 			
 			for filePackage in self.__filePackages:
 				packagesNode.append (filePackage.ToXml ())
-
-		if self.__featureTreeNodes:
-			uiNode = etree.SubElement (self.__root, 'UI')
-			featureTreeNodeElement = etree.SubElement (uiNode, 'FeatureTree')
-			for featureTreeNode in self.__featureTreeNodes:
-				featureTreeNodeElement.append (featureTreeNode.ToXml ())
 
 		decl = '<?xml version="1.0" encoding="UTF-8"?>'
 		result = decl + etree.tostring (self.__root, encoding='utf-8').decode ('utf-8')

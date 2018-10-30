@@ -9,7 +9,7 @@ The fastest -- and also the recommended way -- to get started with kyla is to us
 
     rb = kyla.RepositoryBuilder ()
 
-    mainFeature = rb.AddFeature ()
+    mainFeature = rb.AddFeature ('Main app', 'The main application')
 
     binaryFiles = rb.AddFileGroup ()
     binaryFiles.AddDirectory ('path/to/bin', outputDirectory = 'bin')
@@ -22,14 +22,6 @@ The fastest -- and also the recommended way -- to get started with kyla is to us
 
     # Our main feature consists of only the binary files -- link them together
     mainFeature.AddReference (binaryFiles)
-
-    # For the UI, we want a single node feature tree
-    featureTreeMainNode = rb.AddFeatureTreeNode ('Binaries', 
-        'These are the binaries')
-
-    # link the feature tree node to the feature. If the user selects the node,
-    # all linked features will be installed
-    featureTreeMainNode.AddReference (mainFeature)
 
     open ('desc.xml', 'w').write (rb.Finalize())
 

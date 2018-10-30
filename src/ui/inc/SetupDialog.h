@@ -70,6 +70,7 @@ public slots:
 
 private:
 	void UpdateRequiredDiskSpace ();
+	void UpdateInstallButtonState ();
 	void StartProgress ();
 
 	Ui::SetupDialog *ui;
@@ -79,11 +80,10 @@ private:
 
 private:
 	std::vector<QTreeWidgetItem*> featureTreeNodes_;
-	std::vector<std::vector<KylaUuid>> featureTreeFeatureIds_;
+	std::vector<KylaUuid> featureTreeFeatureIds_;
 
 	static constexpr int FeatureSizeRole = Qt::UserRole + 0;
-	static constexpr int FeatureDescriptionRole = Qt::UserRole + 1;
-	static constexpr int FeatureFeatureIdsIndexRole = Qt::UserRole + 2;
+	static constexpr int FeatureFeatureIdsIndexRole = Qt::UserRole + 1;
 
 	void OnFeatureSelectionItemChanged (QTreeWidgetItem*, int);
 

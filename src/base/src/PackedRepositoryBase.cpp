@@ -49,9 +49,25 @@ AES256IvSalt UnpackAES256IvSalt (const void* data)
 
 	return result;
 }
+
+/**
+Create a decryptor based on the execution context.
+
+If the EncryptionKey variable is set, the returning decryptor will be non-null.
+*/
+std::unique_ptr<PackedRepositoryBase::Decryptor> CreateDecryptor (const Repository::ExecutionContext& context)
+{
+	auto it = context.variables.find (Repository::ExecutionContext::EncryptionKey);
+	if (it != context.variables.end ()) {
+		return std::make_unique<PackedRepositoryBase::Decryptor> (it->second.GetString ());
+	} else {
+		return std::unique_ptr<PackedRepositoryBase::Decryptor> ();
+	}
+}
 }
 
-struct PackedRepositoryBase::Decryptor
+///////////////////////////////////////////////////////////////////////////////
+struct PackedRepositoryBase::Decryptor final
 {
 	Decryptor (const std::string& key)
 	: key_ (key)
@@ -120,14 +136,10 @@ PackedRepositoryBase::~PackedRepositoryBase ()
 {
 }
 
-///////////////////////////////////////////////////////////////////////////////
-void PackedRepositoryBase::SetDecryptionKeyImpl (const std::string& key)
-{
-	decryptor_.reset (new Decryptor{ key });
-	key_ = key;
-}
-
 namespace {
+/**
+Data shared between all request types.
+*/
 struct RequestData
 {
 	PackedRepositoryBase::PackageFile* packageFile = nullptr;
@@ -158,6 +170,9 @@ struct RequestData
 	Repository::GetContentObjectCallback callback;
 };
 
+/**
+Request to read data from a source repository.
+*/
 struct ReadRequest
 {
 	std::unique_ptr<RequestData> requestData;
@@ -176,6 +191,9 @@ struct ReadRequest
 	}
 };
 
+/**
+Request to process raw read data into data which can be written to disk.
+*/
 struct ProcessRequest
 {
 	std::unique_ptr<RequestData> requestData;
@@ -209,6 +227,9 @@ struct ProcessRequest
 	}
 };
 
+/**
+Request to write some data into a file.
+*/
 struct OutputRequest
 {
 	std::unique_ptr<RequestData> requestData;
@@ -349,6 +370,7 @@ private:
 	bool poisoned_ = false;
 };
 
+///////////////////////////////////////////////////////////////////////////////
 struct ErrorState
 {
 	std::atomic_bool errorOccurred_;
@@ -392,6 +414,10 @@ struct ErrorState
 	}
 };
 
+///////////////////////////////////////////////////////////////////////////////
+/**
+Reads data and produces read requests.
+*/
 class ReadThread
 {
 public:
@@ -447,6 +473,12 @@ private:
 	ErrorState* errorState_ = nullptr;
 };
 
+///////////////////////////////////////////////////////////////////////////////
+/**
+Handles all chunk processing: Decompression, decryption, and hashing.
+
+The process thread consumes read requests, and produces output requests.
+*/
 class ProcessThread
 {
 public:
@@ -594,9 +626,12 @@ private:
 
 ///////////////////////////////////////////////////////////////////////////////
 void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& requestedObjects,
-	const Repository::GetContentObjectCallback& getCallback)
+	const Repository::GetContentObjectCallback& getCallback,
+	ExecutionContext& context)
 {
 	auto& db = GetDatabase ();
+
+	std::unique_ptr<Decryptor> decryptor = CreateDecryptor (context);
 
 	// We need to join the requested objects on our existing data, so
 	// store them in a temporary table
@@ -683,13 +718,13 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 
 			// Encryption handling
 			if (contentObjectsInPackageQuery.GetText (10)) {
-				if (!decryptor_) {
+				if (!decryptor) {
 					throw RuntimeException ("PackedRepository",
 						"Repository is encrypted but no key has been set",
 						KYLA_FILE_LINE);
 				}
 
-				requestData->decryptor = decryptor_.get ();
+				requestData->decryptor = decryptor.get ();
 				requestData->encryptionOutputSize = contentObjectsInPackageQuery.GetInt64 (12);
 				requestData->ivSalt = UnpackAES256IvSalt (contentObjectsInPackageQuery.GetBlob (10));
 			}
@@ -753,6 +788,8 @@ void PackedRepositoryBase::RepairImpl (Repository& source,
 
 	auto& db = GetDatabase ();
 
+	std::unique_ptr<Decryptor> decryptor = CreateDecryptor (context);
+
 	// Queries as above
 	auto findSourcePackagesQuery = db.Prepare (
 		"SELECT DISTINCT "
@@ -800,7 +837,7 @@ void PackedRepositoryBase::RepairImpl (Repository& source,
 
 			// Decrypt if needed
 			if (contentObjectsInPackageQuery.GetText (4)) {
-				if (!decryptor_) {
+				if (!decryptor) {
 					throw RuntimeException ("PackedRepository",
 						"Repository is encrypted but no key has been set",
 						KYLA_FILE_LINE);
@@ -809,7 +846,7 @@ void PackedRepositoryBase::RepairImpl (Repository& source,
 				//@TODO(minor) Check algorithm
 				writeBuffer.resize (contentObjectsInPackageQuery.GetInt64 (7));
 
-				decryptor_->Decrypt (readBuffer, writeBuffer,
+				decryptor->Decrypt (readBuffer, writeBuffer,
 					UnpackAES256IvSalt (contentObjectsInPackageQuery.GetBlob (5)));
 
 				std::swap (readBuffer, writeBuffer);

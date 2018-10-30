@@ -48,18 +48,6 @@ bool BaseRepository::IsEncryptedImpl ()
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-void BaseRepository::SetDecryptionKeyImpl (const std::string& key)
-{
-	key_ = key;
-}
-
-///////////////////////////////////////////////////////////////////////////////
-std::string BaseRepository::GetDecryptionKeyImpl () const
-{
-	return key_;
-}
-
-///////////////////////////////////////////////////////////////////////////////
 int64_t BaseRepository::GetFeatureSizeImpl (const Uuid& id)
 {
 	static const char* querySql =
@@ -73,70 +61,37 @@ int64_t BaseRepository::GetFeatureSizeImpl (const Uuid& id)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-FeatureTree BaseRepository::GetFeatureTreeImpl ()
+std::string BaseRepository::GetFeatureTitleImpl (const Uuid& id)
 {
-	FeatureTree result;
+	static const char* querySql =
+		"SELECT Title FROM features WHERE Uuid=?;";
 
-	std::unordered_map < int64, std::pair<size_t, int> > featureTreeNodeToFeatures;
-	auto featuresPerNodeQuery = GetDatabase ().Prepare (
-		"SELECT NodeId, Uuid FROM ui_feature_tree_feature_references "
-		"LEFT JOIN features ON features.Id = ui_feature_tree_feature_references.FeatureId "
-		"ORDER BY NodeId;"
-	);
+	auto query = GetDatabase ().Prepare (querySql);
+	query.BindArguments (id);
+	query.Step ();
 
-	std::vector<Uuid> featureIds;
-
-	///@TODO(minor) Query number of Uuids/nodes first, then allocate once and
-	///bulk insert things.
-	while (featuresPerNodeQuery.Step ()) {
-		auto nodeId = featuresPerNodeQuery.GetInt64 (0);
-
-		if (featureTreeNodeToFeatures.find (nodeId) == featureTreeNodeToFeatures.end ()) {
-			featureTreeNodeToFeatures[nodeId] = std::make_pair (
-				featureIds.size (), 0
-			);
-		}
-
-		Uuid uuid;
-		featuresPerNodeQuery.GetBlob (1, uuid);
-		featureIds.push_back (uuid);
-		featureTreeNodeToFeatures[nodeId].second += 1;
+	if (query.GetText (0)) {
+		return query.GetText (0);
+	} else {
+		return std::string ();
 	}
-	featuresPerNodeQuery.Reset ();
+}
 
-	auto nodePointer = result.SetFeatureIds (featureIds);
+///////////////////////////////////////////////////////////////////////////////
+std::string BaseRepository::GetFeatureDescriptionImpl (const Uuid& id)
+{
+	static const char* querySql =
+		"SELECT Description FROM features WHERE Uuid=?;";
 
-	std::unordered_map<int64, FeatureTreeNode*> idToFeatureTreeNode;
+	auto query = GetDatabase ().Prepare (querySql);
+	query.BindArguments (id);
+	query.Step ();
 
-	// We need two steps, first we populate all nodes, then we link them
-	auto getNodesQuery = GetDatabase ().Prepare ("SELECT Id, Name, Description "
-		"FROM ui_feature_tree_nodes ORDER BY Id;");
-
-	while (getNodesQuery.Step ()) {
-		auto node = std::make_unique<FeatureTreeNode> ();
-		node->name = getNodesQuery.GetText (1);
-		node->description = getNodesQuery.GetText (2);
-
-		const auto id = getNodesQuery.GetInt64 (0);
-		node->featureIds = nodePointer + featureTreeNodeToFeatures[id].first;
-		node->featureIdCount = featureTreeNodeToFeatures[id].second;
-
-		idToFeatureTreeNode[id] = node.get ();
-
-		result.nodes.emplace_back (std::move (node));
+	if (query.GetText (0)) {
+		return query.GetText (0);
+	} else {
+		return std::string ();
 	}
-	getNodesQuery.Reset ();
-
-	auto getNodeParentQuery = GetDatabase ().Prepare ("SELECT Id, ParentId "
-		"FROM ui_feature_tree_nodes WHERE ParentId NOT NULL;");
-
-	while (getNodeParentQuery.Step ()) {
-		idToFeatureTreeNode.find (getNodeParentQuery.GetInt64 (0))->second->parent =
-			idToFeatureTreeNode.find (getNodeParentQuery.GetInt64 (1))->second;
-	}
-	getNodeParentQuery.Reset ();
-
-	return result;
 }
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -157,23 +112,19 @@ void BaseRepository::ConfigureImpl (Repository& /*other*/,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-std::vector<Repository::Dependency> BaseRepository::GetFeatureDependenciesImpl (const Uuid& featureId)
+std::vector<Uuid> BaseRepository::GetSubfeaturesImpl (const Uuid& featureId)
 {
-	auto query = GetDatabase ().Prepare (
-		"SELECT SourceUuid, TargetUuid, Relation FROM "
-		"feature_dependencies_with_uuid WHERE SourceUuid=?1 OR TargetUuid=?1");
+	auto& db = GetDatabase ();
 
-	query.BindArguments (featureId);
+	auto selectSubfeatureQuery = db.Prepare (
+		"SELECT Uuid FROM features WHERE ParentId = (SELECT Id FROM features WHERE Uuid=?);");
+	selectSubfeatureQuery.BindArguments (featureId);
 
-	std::vector<Repository::Dependency> result;
-	while (query.Step ()) {
-		Repository::Dependency dependency;
-		query.GetBlob (0, dependency.source);
-		query.GetBlob (1, dependency.target);
-
-		result.push_back (dependency);
-
-		///@TODO(minor) Assert all relationships are "requires"
+	std::vector<Uuid> result;
+	while (selectSubfeatureQuery.Step ()) {
+		Uuid uuid;
+		selectSubfeatureQuery.GetBlob (0, uuid);
+		result.push_back (uuid);
 	}
 
 	return result;

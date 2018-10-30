@@ -19,7 +19,7 @@ SetupContext::SetupContext ()
 	destroyInstaller_ = reinterpret_cast<kylaDestroyInstallerFunction> (
 		kylaLib_->resolve ("kylaDestroyInstaller"));
 
-	createInstaller_ (KYLA_API_VERSION_2_0, &installer);
+	createInstaller_ (KYLA_API_VERSION_3_0, &installer);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

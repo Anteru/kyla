@@ -70,7 +70,7 @@ public:
 		, packageInsertStatement_ (db.Prepare ("INSERT INTO fs_packages (Filename) VALUES (?);"))
 		, packageDeleteStatement_ (db.Prepare ("DELETE FROM fs_packages WHERE Id=?;"))
 		, contentInsertStatement_ (db.Prepare ("INSERT INTO fs_contents (Hash, Size) VALUES (?, ?);"))
-		, featureInsertStatement_ (db.Prepare ("INSERT INTO features (Uuid) VALUES (?);"))
+		, featureInsertStatement_ (db.Prepare ("INSERT INTO features (Uuid, Title, Description, ParentId) VALUES (?,?,?,?);"))
 		, featureDependencyInsertStatement_ (db.Prepare (
 			"INSERT INTO feature_dependencies (SourceId, TargetId, Relation) VALUES ( "
 			"(SELECT Id FROM features WHERE Uuid=?), "
@@ -92,18 +92,28 @@ public:
 		"INSERT INTO fs_chunk_encryption "
 		"(ChunkId, Algorithm, Data, InputSize, OutputSize) "
 		"VALUES (?, ?, ?, ?, ?)"))
-		, uiFeatureTreeNodeInsertQuery_ (db.Prepare (
-			"INSERT INTO ui_feature_tree_nodes (Name, Description, ParentId) VALUES (?,?,?)"))
-		, uiFeatureTreeFeatureReferencesInsertQuery_ (db.Prepare (
-			"INSERT INTO ui_feature_tree_feature_references (NodeId, FeatureId) VALUES (?, "
-			"(SELECT Id FROM features WHERE Uuid=?))"
-		))
 	{
 	}
 
-	int64 StoreFeature (const Uuid& uuid)
+	int64 StoreFeature (const Uuid& uuid, const std::string& title,
+		const std::string& description, const int64 parentId)
 	{
-		featureInsertStatement_.BindArguments (uuid);
+		featureInsertStatement_.Bind (1, uuid);
+		if (title.empty ()) {
+			featureInsertStatement_.Bind (2, Sql::Null ());
+		} else {
+			featureInsertStatement_.Bind (2, title);
+		}
+		if (description.empty ()) {
+			featureInsertStatement_.Bind (3, Sql::Null ());
+		} else {
+			featureInsertStatement_.Bind (3, description);
+		}
+		if (parentId < 0) {
+			featureInsertStatement_.Bind (4, Sql::Null ());
+		} else {
+			featureInsertStatement_.Bind (4, parentId);
+		}
 		featureInsertStatement_.Step ();
 		featureInsertStatement_.Reset ();
 
@@ -178,7 +188,6 @@ public:
 		chunkCompressionInsertQuery_.Reset ();
 
 		return db_.GetLastRowId ();
-
 	}
 
 	int64 StoreChunkEncryption (int64 chunkId, const char* algorithm, const ArrayRef<>& data, int64 inputSize, int64 outputSize)
@@ -189,35 +198,6 @@ public:
 
 		return db_.GetLastRowId ();
 	}
-
-	int64 StoreUiFeatureTreeNode (const char* name, const char* description,
-		int64 parentId)
-	{
-		uiFeatureTreeNodeInsertQuery_.BindArguments (name, description);
-
-		if (parentId > 0) {
-			uiFeatureTreeNodeInsertQuery_.Bind (3, parentId);
-		} else {
-			uiFeatureTreeNodeInsertQuery_.Bind (3, Sql::Null ());
-		}
-
-		uiFeatureTreeNodeInsertQuery_.Step ();
-		uiFeatureTreeNodeInsertQuery_.Reset ();
-
-		return db_.GetLastRowId ();
-	}
-
-	int64 StoreUiFeatureTreeFeatureReference (int64 nodeId,
-		const Uuid& featureUuid)
-	{
-		uiFeatureTreeFeatureReferencesInsertQuery_.BindArguments (
-			nodeId, featureUuid);
-		uiFeatureTreeFeatureReferencesInsertQuery_.Step ();
-		uiFeatureTreeFeatureReferencesInsertQuery_.Reset ();
-
-		return db_.GetLastRowId ();
-	}
-
 private:
 	Sql::Statement fileInsertStatement_;
 	Sql::Statement packageInsertStatement_;
@@ -229,8 +209,6 @@ private:
 	Sql::Statement chunkHashesInsertQuery_;
 	Sql::Statement chunkCompressionInsertQuery_;
 	Sql::Statement chunkEncryptionInsertQuery_;
-	Sql::Statement uiFeatureTreeNodeInsertQuery_;
-	Sql::Statement uiFeatureTreeFeatureReferencesInsertQuery_;
 
 	Sql::Database& db_;
 };
@@ -242,6 +220,7 @@ struct BuildContext
 	Path targetDirectory;
 
 	BuildDatabase buildDatabase;
+	BuildStatistics statistics;
 };
 
 struct Reference
@@ -376,9 +355,18 @@ public:
 //////////////////////////////////////////////////////////////////////////////
 struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 {
-	Feature (const pugi::xml_node& featureNode)
+	Feature (const pugi::xml_node& featureNode, Feature* parent)
+	: parent_ (parent)
 	{
 		uuid_ = Uuid::Parse (featureNode.attribute ("Id").as_string ());
+
+		if (featureNode.attribute ("Title")) {
+			title_ = featureNode.attribute ("Title").as_string ();
+		}
+
+		if (featureNode.attribute ("Description")) {
+			description_ = featureNode.attribute ("Description").as_string ();
+		}
 
 		for (auto refNode : featureNode.children ("Reference")) {
 			references_.push_back (Reference{
@@ -396,7 +384,11 @@ struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 	void Store (BuildDatabase& db)
 	{
 		assert (persistentId_ == -1);
-		persistentId_ = db.StoreFeature (uuid_);
+		if (parent_) {
+			persistentId_ = db.StoreFeature (uuid_, title_, description_, parent_->GetPersistentId ());
+		} else {
+			persistentId_ = db.StoreFeature (uuid_, title_, description_, -1);
+		}
 	}
 
 	void StoreDependencies (BuildDatabase& db)
@@ -428,6 +420,11 @@ struct Feature : public RepositoryObjectBase<RepositoryObjectType::Feature>
 private:
 	Uuid uuid_;
 	int64 persistentId_ = -1;
+
+	Feature* parent_ = nullptr;
+
+	std::string title_;
+	std::string description_;
 
 	std::vector<Reference> references_;
 	std::vector<Reference> dependencies_;
@@ -679,8 +676,6 @@ private:
 	int64 chunkSize_ = 4 << 20; // 4 MiB chunks is the default
 	std::string encryptionKey_;
 
-	BuildStatistics buildStatistics_;
-
 	using FileContentMap =
 		std::unordered_map<SHA256Digest, std::unique_ptr<Content>,
 		ArrayRefHash, ArrayRefEqual>;
@@ -846,7 +841,8 @@ public:
 	void WritePackage (BuildDatabase& db,
 		const Package& package,
 		const Path& packagePath,
-		const std::string& encryptionKey)
+		const std::string& encryptionKey,
+		BuildStatistics& statistics)
 	{
 		///@TODO(minor) Support splitting packages for media limits
 		auto packageFile = CreateFile (packagePath / (package.name));
@@ -898,10 +894,11 @@ public:
 					compressionResult = TransformCompress (readBuffer,
 						writeBuffer, compressor.get ());
 
-					buildStatistics_.bytesStoredUncompressed +=
+					statistics.bytesStoredUncompressed +=
 						compressionResult.inputBytes;
-					buildStatistics_.bytesStoredCompressed +=
+					statistics.bytesStoredCompressed +=
 						compressionResult.outputBytes;
+					statistics.compressionTime += compressionResult.duration;
 
 					const auto compressedChunkHash = ComputeSHA256 (writeBuffer);
 
@@ -914,7 +911,7 @@ public:
 							writeBuffer, encryptionKey,
 							encryptionData, encryptionContext);
 
-						buildStatistics_.encryptionTime +=
+						statistics.encryptionTime +=
 							encryptionResult.duration;
 					}
 
@@ -990,7 +987,8 @@ public:
 		}
 
 		for (auto& package : packages_) {
-			WritePackage (ctx.buildDatabase, *package, ctx.targetDirectory, encryptionKey_);
+			WritePackage (ctx.buildDatabase, *package, ctx.targetDirectory, 
+				encryptionKey_, ctx.statistics);
 		}
 	}
 
@@ -1106,52 +1104,6 @@ private:
 	}
 };
 
-struct FeatureTreeWalker : public XmlTreeWalker
-{
-public:
-	FeatureTreeWalker (BuildDatabase& db)
-		: db_ (db)
-	{
-	}
-
-	bool OnEnter (const pugi::xml_node& node) override
-	{
-		if (strcmp (node.name (), "Node") == 0) {
-			currentNodeId_.push (
-				db_.StoreUiFeatureTreeNode (
-					node.attribute ("Name").as_string (),
-					node.attribute ("Description").as_string (),
-					currentNodeId_.empty () ? -1 : currentNodeId_.top ()
-				));
-		} else if (strcmp (node.name (), "Reference") == 0) {
-			db_.StoreUiFeatureTreeFeatureReference (
-				currentNodeId_.top (),
-				Uuid::Parse (node.attribute ("Id").as_string ())
-			);
-		}
-
-		return true;
-	}
-
-	bool OnNode (const pugi::xml_node&) override
-	{
-		return true;
-	}
-
-	bool OnLeave (const pugi::xml_node& node) override
-	{
-		if (strcmp (node.name (), "Node") == 0) {
-			currentNodeId_.pop ();
-		}
-
-		return true;
-	}
-
-private:
-	BuildDatabase& db_;
-	std::stack<int64> currentNodeId_;
-};
-
 class Repository
 {
 public:
@@ -1159,17 +1111,57 @@ public:
 	{
 		auto featuresNode = root.select_node ("/Repository/Features");
 
+		struct FeatureTreeWalker : public XmlTreeWalker
+		{
+			FeatureTreeWalker (std::vector<std::unique_ptr<Feature>>& features)
+			: features_ (features)
+			{
+				featureStack_.push (nullptr);
+			}
+
+			bool OnEnter (const pugi::xml_node& node)
+			{
+				return true;
+			}
+
+			bool OnNode (const pugi::xml_node& node)
+			{
+				if (strcmp (node.name (), "Feature") == 0) {
+					features_.emplace_back (std::move (new Feature{ node,
+						featureStack_.top ()}));
+					featureStack_.push (features_.back ().get ());
+				}
+
+				return true;
+			}
+
+			bool OnLeave (const pugi::xml_node& node)
+			{
+				if (strcmp (node.name (), "Feature") == 0) {
+					featureStack_.pop ();
+				}
+
+				return true;
+			}
+
+		private:
+			std::stack<Feature*> featureStack_;
+			std::vector<std::unique_ptr<Feature>>& features_;
+		};
+
 		if (!featuresNode) {
 			///@TODO(minor) Handle error
 		} else {
-			for (auto& feature : featuresNode.node ().children ("Feature")) {
-				features_.emplace_back (std::move (new Feature{ feature }));
-				auto ptr = features_.back ().get ();
+			FeatureTreeWalker ftw{ features_ };
+			Traverse (featuresNode.node (), ftw);
+		}
 
-				ptr->Store (ctx.buildDatabase);
-
-				repositoryObjects_[ptr->GetUuid ()] = ptr;
-			}
+		// Persist all features. As we added them in depth-first order, parents
+		// will always get persistet before children, so no special ordering is
+		// required here
+		for (auto& feature : features_) {
+			feature->Store (ctx.buildDatabase);
+			repositoryObjects_ [feature->GetUuid ()] = feature.get ();
 		}
 
 		// Store the dependencies now that every feature has been stored
@@ -1215,19 +1207,11 @@ public:
 		fileStorage_->Persist (ctx);
 	}
 
-	void CreateAndPersistUi (const pugi::xml_node& root, BuildContext& ctx)
-	{
-		auto uiNode = root.select_node ("/Repository/UI/FeatureTree");
-
-		if (uiNode) {
-			FeatureTreeWalker ftw{ ctx.buildDatabase };
-			Traverse (uiNode.node (), ftw);
-		}
-	}
-
 private:
-	std::unordered_map<Uuid, RepositoryObject*,
-		ArrayRefHash, ArrayRefEqual> repositoryObjects_;
+	using RepositoryObjectMap = std::unordered_map<Uuid, RepositoryObject*,
+		ArrayRefHash, ArrayRefEqual>;
+	
+	RepositoryObjectMap repositoryObjects_;
 
 	std::vector<std::unique_ptr<Feature> > features_;
 	std::unique_ptr<FileStorage> fileStorage_;
@@ -1274,11 +1258,24 @@ void BuildRepository (const KylaBuildSettings* settings)
 	repository.LinkFeatures ();
 	repository.PersistFileStorage (*ctx);
 
-	repository.CreateAndPersistUi (doc, *ctx);
+	if (settings->buildStatistics) {
+		settings->buildStatistics->compressedContentSize = ctx->statistics.bytesStoredCompressed;
+		settings->buildStatistics->uncompressedContentSize = ctx->statistics.bytesStoredUncompressed;
+		settings->buildStatistics->compressionRatio =
+			static_cast<float> (ctx->statistics.bytesStoredUncompressed) /
+			static_cast<float> (ctx->statistics.bytesStoredCompressed);
+		settings->buildStatistics->compressionTimeSeconds =
+			static_cast<double> (ctx->statistics.compressionTime.count ())
+			/ 1000000000.0;
+		settings->buildStatistics->hashTimeSeconds =
+			static_cast<double> (hashTime.count ())
+			/ 1000000000.0;
+		settings->buildStatistics->encryptionTimeSeconds =
+			static_cast<double> (ctx->statistics.encryptionTime.count ())
+			/ 1000000000.0;
+	}
 
 	ctx.reset ();
-
-	BuildStatistics statistics;
 
 	db.Execute ("PRAGMA journal_mode=DELETE;");
 	db.Execute ("PRAGMA synchronous=FULL;");
@@ -1286,23 +1283,6 @@ void BuildRepository (const KylaBuildSettings* settings)
 	db.Execute ("VACUUM;");
 
 	db.Close ();
-
-	if (settings->buildStatistics) {
-		settings->buildStatistics->compressedContentSize = statistics.bytesStoredCompressed;
-		settings->buildStatistics->uncompressedContentSize = statistics.bytesStoredUncompressed;
-		settings->buildStatistics->compressionRatio =
-			static_cast<float> (statistics.bytesStoredUncompressed) /
-			static_cast<float> (statistics.bytesStoredCompressed);
-		settings->buildStatistics->compressionTimeSeconds =
-			static_cast<double> (statistics.compressionTime.count ())
-			/ 1000000000.0;
-		settings->buildStatistics->hashTimeSeconds =
-			static_cast<double> (hashTime.count ())
-			/ 1000000000.0;
-		settings->buildStatistics->encryptionTimeSeconds =
-			static_cast<double> (statistics.encryptionTime.count ())
-			/ 1000000000.0;
-	}
 }
 }
 
