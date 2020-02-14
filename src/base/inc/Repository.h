@@ -19,6 +19,8 @@ details.
 #include "Hash.h"
 #include "Uuid.h"
 
+#include <cassert>
+
 namespace kyla {
 namespace Sql {
 	class Database;

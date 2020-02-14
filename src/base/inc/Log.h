@@ -12,7 +12,6 @@ details.
 
 #include <functional>
 #include <string>
-#include <boost/format.hpp>
 #include <chrono>
 
 #include "Types.h"
@@ -39,30 +38,6 @@ public:
 	void Info (const char* source, const std::string& message);
 	void Warning (const char* source, const std::string& message);
 	void Error (const char* source, const std::string& message);
-
-	template<class charT, class Traits>
-	void Debug (const char* source, const boost::basic_format<charT, Traits>& message)
-	{
-		Debug (source, str (message));
-	}
-
-	template<class charT, class Traits>
-	void Info (const char* source, const boost::basic_format<charT, Traits>& message)
-	{
-		Info (source, str (message));
-	}
-
-	template<class charT, class Traits>
-	void Warning (const char* source, const boost::basic_format<charT, Traits>& message)
-	{
-		Warning (source, str (message));
-	}
-
-	template<class charT, class Traits>
-	void Error (const char* source, const boost::basic_format<charT, Traits>& message)
-	{
-		Error (source, str (message));
-	}
 
 private:
 	LogCallback callback_;

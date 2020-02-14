@@ -17,7 +17,7 @@ details.
 
 #include "Compression.h"
 
-#include <boost/format.hpp>
+#include <fmt/core.h>
 
 #include "install-db-structure.h"
 
@@ -93,7 +93,7 @@ void DeployedRepository::RepairImpl (Repository& source,
 		const auto size = query.GetInt64 (2);
 
 		const auto filePath = path_ / path;
-		if (!boost::filesystem::exists (filePath)) {
+		if (!std::filesystem::exists (filePath)) {
 			if (restore) {
 				requiredContentObjects.push_back (hash);
 			} else {
@@ -268,7 +268,7 @@ private:
 			progress ("Selected feature", 1);
 
 			log.Debug ("Configure", 
-				boost::format ("Selected feature: '%1%'") % ToString (feature));
+				fmt::format ("Selected feature: '{0}'", ToString (feature)));
 		}
 
 		transaction.Commit ();
@@ -482,10 +482,10 @@ private:
 				deleteFileQuery.Step ();
 				deleteFileQuery.Reset ();
 
-				boost::filesystem::remove (path_ / Path{ changedFilesQuery.GetText (0) });
+				std::filesystem::remove (path_ / Path{ changedFilesQuery.GetText (0) });
 
-				const auto actionDescription = str (boost::format ("Deleted file '%1%'") 
-					% changedFilesQuery.GetText (0));
+				const auto actionDescription = fmt::format ("Deleted file '{0}'", 
+					changedFilesQuery.GetText (0));
 
 				progress (actionDescription, 1);
 				log.Debug ("Configure", actionDescription);
@@ -622,7 +622,7 @@ private:
 
 				requiredContentObjects.push_back (contentObjectHash);
 
-				log.Debug ("Configure", boost::format ("Discovered content '%1%'") % ToString (contentObjectHash));
+				log.Debug ("Configure", fmt::format ("Discovered content '{0}'", ToString (contentObjectHash)));
 			}
 
 			auto totalRequiredContentQuery = db_.Prepare ("SELECT SUM(Size) FROM source.fs_contents "
@@ -658,7 +658,7 @@ private:
 			auto uniqueFilePathQuery = db_.Prepare ("SELECT DISTINCT Path "
 				"FROM requested_file_paths ORDER BY Path");
 			while (uniqueFilePathQuery.Step ()) {
-				boost::filesystem::create_directories (path_ /
+				std::filesystem::create_directories (path_ /
 					Path{ uniqueFilePathQuery.GetText (0) });
 			}
 		}
@@ -695,8 +695,8 @@ private:
 			if ((offset != 0) || (contents.GetSize () != totalSize)) {
 				if (offset == 0) {
 					log.Debug ("Configure",
-						boost::format ("Creating staging file %1%")
-						% stagingFilePath);
+						fmt::format ("Creating staging file {0}",
+							stagingFilePath));
 
 					stagingFile = CreateFile (stagingFilePath);
 					stagingFile->SetSize (totalSize);
@@ -706,8 +706,8 @@ private:
 #endif
 				} else {
 					log.Debug ("Configure",
-						boost::format ("Writing into staging file %1%")
-						% stagingFilePath);
+						fmt::format ("Writing into staging file {0}",
+							stagingFilePath));
 
 #ifndef NDEBUG
 					// If we're staging a file, we have only one file handle
@@ -727,7 +727,7 @@ private:
 				}
 			}
 
-			log.Debug ("Configure", boost::format ("Received content object '%1%'") % hashString);
+			log.Debug ("Configure", fmt::format ("Received content object '{0}'", hashString));
 
 			int64 contentId = -1;
 			{
@@ -738,7 +738,7 @@ private:
 				contentId = db_.GetLastRowId ();
 
 				log.Debug ("Configure",
-					boost::format ("Persisted content object '%1%', id %2%") % hashString % contentId);
+					fmt::format ("Persisted content object '{0}', id {1}", hashString, contentId));
 			}
 
 			getTargetFilesQuery.BindArguments (hash);
@@ -767,10 +767,10 @@ private:
 
 					if (isFirstFile) {
 						log.Debug ("Configure",
-							boost::format ("Renaming staging file %1% to %2%")
-							% stagingFilePath % targetPath);
+							fmt::format ("Renaming staging file {0} to {1}",
+								stagingFilePath, targetPath));
 
-						boost::filesystem::rename (stagingFilePath,
+						std::filesystem::rename (stagingFilePath,
 							path_ / targetPath);
 						isFirstFile = false;
 					} else {
@@ -778,11 +778,11 @@ private:
 							totalSize);
 
 						log.Debug ("Configure",
-							boost::format ("Copying file %1% to %2%")
-							% lastFilePath % targetPath);
+							fmt::format ("Copying file {0} to {1}",
+								lastFilePath, targetPath));
 
 						assert (!lastFilePath.empty ());
-						boost::filesystem::copy_file (lastFilePath,
+						std::filesystem::copy_file (lastFilePath,
 							path_ / targetPath);
 					}
 
@@ -797,14 +797,14 @@ private:
 					progress (getTargetFilesQuery.GetText (0), contents.GetSize ());
 
 					log.Debug ("Configure",
-						boost::format ("Creating file %1%") % targetPath);
+						fmt::format ("Creating file {0}", targetPath));
 
 					auto file = CreateFile (path_ / targetPath, FileAccess::Write);
 					file->Write (contents);
 
 					insertFile (targetPath, contentId);
 
-					log.Debug ("Configure", boost::format ("Wrote file %1%") % targetPath);
+					log.Debug ("Configure", fmt::format ("Wrote file {0}", targetPath));
 				}
 			}
 
@@ -815,7 +815,7 @@ private:
 
 			if (currentTransactionDeployedSize > TransactionDataSize) {
 				log.Debug ("Configure", 
-					boost::format ("Committing transaction with %1% operations") % currentTransactionSize);
+					fmt::format ("Committing transaction with {0} operations", currentTransactionSize));
 				transaction.Commit ();
 				transaction = db_.BeginTransaction ();
 				currentTransactionDeployedSize = 0;
@@ -824,7 +824,7 @@ private:
 		}, context);
 
 		log.Debug ("Configure", 
-			boost::format ("Committing transaction with %1% operations") % currentTransactionSize);
+			fmt::format ("Committing transaction with {0} operations", currentTransactionSize));
 		transaction.Commit ();
 	}
 
@@ -979,13 +979,13 @@ private:
 			diffQuery.GetBlob (1, hash);
 
 			const Path path{ diffQuery.GetText (0) };
-			boost::filesystem::create_directories (path_ / path.parent_path ());
+			std::filesystem::create_directories (path_ / path.parent_path ());
 
 			exemplarQuery.BindArguments (hash);
 			exemplarQuery.Step ();
 
 			const Path exemplarPath{ exemplarQuery.GetText (0) };
-			boost::filesystem::copy_file (path_ / exemplarPath, path_ / path);
+			std::filesystem::copy_file (path_ / exemplarPath, path_ / path);
 
 			insertFileQuery.BindArguments (path.string (),
 				exemplarQuery.GetInt64 (1));
@@ -993,7 +993,7 @@ private:
 			exemplarQuery.Reset ();
 
 			log.Debug ("Configure", 
-				boost::format ("Copied file '%1%' to '%2%'") % exemplarPath.string () % path.string ());
+				fmt::format ("Copied file '{0}' to '{1}'", exemplarPath.string (), path.string ()));
 		}
 
 		transaction.Commit ();
@@ -1087,9 +1087,9 @@ private:
 				deleteFileQuery.Step ();
 				deleteFileQuery.Reset ();
 
-				boost::filesystem::remove (path_ / Path{ unusedFilesQuery.GetText (0) });
+				std::filesystem::remove (path_ / Path{ unusedFilesQuery.GetText (0) });
 
-				log.Debug ("Configure", boost::format ("Deleted file '%1%'") % unusedFilesQuery.GetText (0));
+				log.Debug ("Configure", fmt::format ("Deleted file '{0}'", unusedFilesQuery.GetText (0)));
 
 				progress (unusedFilesQuery.GetText (0), 1);
 			}
@@ -1197,7 +1197,7 @@ std::unique_ptr<DeployedRepository> DeployedRepository::CreateFrom (Repository& 
 	const Path& targetDirectory,
 	Repository::ExecutionContext& context)
 {
-	boost::filesystem::create_directories (targetDirectory);
+	std::filesystem::create_directories (targetDirectory);
 
 	auto db = Sql::Database::Create ((targetDirectory / "k.db").string ().c_str ());
 

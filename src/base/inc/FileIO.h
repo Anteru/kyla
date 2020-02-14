@@ -13,12 +13,13 @@ details.
 #include <cstdint>
 #include <memory>
 
-#include <boost/filesystem.hpp>
+#include <filesystem>
 
 #include "ArrayRef.h"
+#include <fmt/format.h>
 
 namespace kyla {
-using Path = boost::filesystem::path;
+using Path = std::filesystem::path;
 
 struct File
 {
@@ -130,4 +131,22 @@ std::unique_ptr<File> CreateFile (const Path& path, FileAccess access);
 Path GetTemporaryFilename ();
 }
 
+template <>
+struct fmt::formatter<kyla::Path>
+{
+
+	// Parses format specifications of the form ['f' | 'e'].
+	constexpr auto parse (format_parse_context& ctx) {
+		return ctx.end ();
+	}
+
+	// Formats the point p using the parsed format specification (presentation)
+	// stored in this formatter.
+	template <typename FormatContext>
+	auto format (const kyla::Path& p, FormatContext& ctx) {
+		// ctx.out() is an output iterator to write to.
+		return format_to (
+			ctx.out (), "{}", p.string());
+	}
+};
 #endif // FILEIO_H

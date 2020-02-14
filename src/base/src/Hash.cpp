@@ -10,6 +10,7 @@ details.
 #include "Hash.h"
 
 #include <openssl/sha.h>
+#include <cassert>
 
 #include "FileIO.h"
 
@@ -26,7 +27,7 @@ SHA256Digest ComputeSHA256 (const ArrayRef<>& data)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-SHA256Digest ComputeSHA256 (const boost::filesystem::path& p)
+SHA256Digest ComputeSHA256 (const std::filesystem::path& p)
 {
 	static const int BufferSize = 1 << 20; /* 1 MiB */
 	std::unique_ptr<unsigned char []> buffer{ new unsigned char [BufferSize] };
@@ -34,7 +35,7 @@ SHA256Digest ComputeSHA256 (const boost::filesystem::path& p)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-SHA256Digest ComputeSHA256(const boost::filesystem::path& p,
+SHA256Digest ComputeSHA256(const std::filesystem::path& p,
 	const MutableArrayRef<>& fileReadBuffer)
 {
 	auto input = kyla::OpenFile (p.string ().c_str (), kyla::FileAccess::Read);

@@ -12,15 +12,34 @@ details.
 
 #include <stdint.h>
 #include <string.h>
-#include <boost/functional/hash.hpp>
 #include <string>
-#include <boost/filesystem.hpp>
+#include <filesystem>
 
 #include "ArrayAdapter.h"
 #include "ArrayRef.h"
 #include "Types.h"
 
 namespace kyla {
+// Copy-pasted from Boost
+template <class T>
+inline void hash_combine (std::size_t& seed, const T& v)
+{
+	std::hash<T> hasher;
+	seed ^= hasher (v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+}
+
+template <typename Iterator>
+inline std::size_t hash_range (Iterator it, Iterator end)
+{
+	std::size_t result = 0;
+	while (it != end) {
+		hash_combine (result, *it);
+		++it;
+	}
+
+	return result;
+}
+
 template <int Size>
 struct HashDigest
 {
@@ -86,7 +105,7 @@ struct ArrayRefHash
 	std::size_t operator () (const ArrayRef<>& a) const
 	{
 		auto asByteRef = a.ToByteRef ();
-		return boost::hash_range (asByteRef.GetData (), asByteRef.GetData () + asByteRef.GetSize ());
+		return hash_range (asByteRef.GetData (), asByteRef.GetData () + asByteRef.GetSize ());
 	}
 };
 
@@ -114,8 +133,8 @@ private:
 };
 
 SHA256Digest ComputeSHA256 (const ArrayRef<>& data);
-SHA256Digest ComputeSHA256 (const boost::filesystem::path& p);
-SHA256Digest ComputeSHA256 (const boost::filesystem::path& p,
+SHA256Digest ComputeSHA256 (const std::filesystem::path& p);
+SHA256Digest ComputeSHA256 (const std::filesystem::path& p,
 	const MutableArrayRef<>& fileReadBuffer);
 
 template <int Size>

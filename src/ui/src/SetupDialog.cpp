@@ -20,7 +20,6 @@ details.
 #include <QCheckBox>
 
 #include <functional>
-#include <boost/functional/hash.hpp>
 
 #include <QTreeView>
 #include <QTreeWidget>
@@ -126,7 +125,7 @@ struct UuidHash
 {
 	size_t operator ()(const KylaUuid& uuid) const
 	{
-		return boost::hash_range (uuid.bytes, uuid.bytes + sizeof (uuid.bytes));
+		return qHashBits (uuid.bytes, sizeof (uuid.bytes));
 	}
 };
 

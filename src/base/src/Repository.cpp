@@ -86,7 +86,7 @@ std::unique_ptr<Repository> OpenRepository (const char* path,
 	/// various repository types
 	if (strncmp (path, "http", 4) == 0) {
 		return std::unique_ptr<Repository> (new WebRepository{ path });
-	} else if (boost::filesystem::exists (Path{ path } / "repository.db")) {
+	} else if (std::filesystem::exists (Path{ path } / "repository.db")) {
 		return std::unique_ptr<Repository> (new PackedRepository{ path });
 	}  else {
 		// Assume deployed repository for now
@@ -102,7 +102,7 @@ std::unique_ptr<Repository> DeployRepository (Repository& source,
 	Repository::ExecutionContext& context)
 {
 	Path targetPath{ destinationPath };
-	boost::filesystem::create_directories (destinationPath);
+	std::filesystem::create_directories (destinationPath);
 
 	return std::unique_ptr<Repository> (DeployedRepository::CreateFrom (source, features, targetPath, 
 		context).release ());

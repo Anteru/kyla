@@ -13,7 +13,7 @@ details.
 #include "Exception.h"
 #include "Log.h"
 
-#include <boost/format.hpp>
+#include <fmt/core.h>
 
 #if KYLA_PLATFORM_WINDOWS
 #pragma comment(lib, "wininet.lib")
@@ -207,8 +207,8 @@ WebRepository::WebRepository (const std::string& path)
 {
 	// path must end with '/'
 	if (path.back () != '/') {
-		throw RuntimeException (str (
-			boost::format ("Web repository url must end with '/' (got: '%1%')") % path),
+		throw RuntimeException (
+			fmt::format ("Web repository url must end with '/' (got: '{0}')", path),
 			KYLA_FILE_LINE);
 	}
 	const auto dbWebFile = impl_->Open (std::string (path) + "repository.db");
@@ -241,7 +241,7 @@ WebRepository::WebRepository (const std::string& path)
 WebRepository::~WebRepository ()
 {
 	db_.Close ();
-	boost::filesystem::remove (dbPath_);
+	std::filesystem::remove (dbPath_);
 }
 
 ///////////////////////////////////////////////////////////////////////////////

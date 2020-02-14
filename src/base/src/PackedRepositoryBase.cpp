@@ -17,7 +17,7 @@ details.
 
 #include "Compression.h"
 
-#include <boost/format.hpp>
+#include <fmt/core.h>
 
 #include "install-db-structure.h"
 
@@ -28,6 +28,7 @@ details.
 #include <thread>
 #include <mutex>
 #include <condition_variable>
+#include <atomic>
 
 #include <openssl/evp.h>
 
@@ -523,7 +524,7 @@ public:
 					if (rd->hasChunkHash) {
 						if (ComputeSHA256 (inputBuffer) != rd->chunkHash) {
 							throw RuntimeException ("PackedRepository",
-								str (boost::format ("Source data for chunk '%1%' is corrupted") %
+								fmt::format ("Source data for chunk '{0}' is corrupted",
 									ToString (rd->chunkHash)),
 								KYLA_FILE_LINE);
 						}

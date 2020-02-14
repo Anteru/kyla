@@ -11,7 +11,7 @@ details.
 
 #include "Hash.h"
 
-#include <boost/filesystem.hpp>
+#include <filesystem>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -33,13 +33,13 @@ details.
 #include "install-db-structure.h"
 
 #include <map>
+#include <stack>
 
 #include "sql/Database.h"
 #include "Exception.h"
 
 #include "Compression.h"
 
-#include <boost/format.hpp>
 #include <chrono>
 
 #include <openssl/evp.h>
@@ -1224,10 +1224,10 @@ void BuildRepository (const KylaBuildSettings* settings)
 {
 	const auto inputFile = settings->descriptorFile;
 
-	boost::filesystem::create_directories (settings->targetDirectory);
+	std::filesystem::create_directories (settings->targetDirectory);
 
 	auto dbFile = Path{ settings->targetDirectory } / "repository.db";
-	boost::filesystem::remove (dbFile);
+	std::filesystem::remove (dbFile);
 
 	auto db = Sql::Database::Create (
 		dbFile.string ().c_str ());

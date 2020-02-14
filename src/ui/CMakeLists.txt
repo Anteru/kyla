@@ -22,8 +22,7 @@ SET(UI_FILES
 	ui/SetupDialog.ui
 	ui/SplashDialog.ui)
 
-FIND_PACKAGE(Qt5Core)
-FIND_PACKAGE(Qt5Widgets)
+FIND_PACKAGE(Qt5 COMPONENTS Core Widgets Gui REQUIRED)
 
 # QT5_ADD_RESOURCES(OUT_RCC_FILES res/main.qrc)
 QT5_WRAP_UI(OUT_UI_FILES ${UI_FILES})
@@ -39,7 +38,7 @@ TARGET_LINK_LIBRARIES(kui
 	kyla Qt5::Core Qt5::Gui Qt5::Widgets)
 
 IF(WIN32)
-	FIND_PACKAGE(Qt5WinExtras)
+	FIND_PACKAGE(Qt5 COMPONENTS WinExtras)
 	TARGET_LINK_LIBRARIES(kui Qt5::WinExtras)
 ENDIF()
 

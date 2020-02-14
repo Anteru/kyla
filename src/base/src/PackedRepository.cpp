@@ -16,8 +16,6 @@ details.
 
 #include "Compression.h"
 
-#include <boost/format.hpp>
-
 namespace kyla {
 ///////////////////////////////////////////////////////////////////////////////
 PackedRepository::PackedRepository (const char* path)

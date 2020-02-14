@@ -11,7 +11,7 @@ details.
 
 #include <sqlite3.h>
 
-#include <boost/format.hpp>
+#include <fmt/core.h>
 #include "Exception.h"
 
 namespace {
@@ -288,8 +288,8 @@ public:
 
 	TemporaryTable CreateTemporaryTable (const char* name, const char* columnDefinition)
 	{
-		SAFE_SQLITE (sqlite3_exec (db_, (boost::format ("CREATE TEMPORARY TABLE %1% (%2%);")
-			% name % columnDefinition).str ().c_str (),
+		SAFE_SQLITE (sqlite3_exec (db_, fmt::format ("CREATE TEMPORARY TABLE {0} ({1});",
+			name, columnDefinition).c_str (),
 			nullptr, nullptr, nullptr));
 
 		return TemporaryTable (this, name);
@@ -600,7 +600,7 @@ TemporaryTable::~TemporaryTable ()
 void TemporaryTable::Drop ()
 {
 	if (impl_) {
-		impl_->Execute ((boost::format ("DROP TABLE %1%;") % name_).str ().c_str ());
+		impl_->Execute (fmt::format ("DROP TABLE {0};", name_).c_str ());
 		impl_ = nullptr;
 	}
 }

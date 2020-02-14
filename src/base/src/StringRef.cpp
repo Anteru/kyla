@@ -9,9 +9,8 @@ details.
 
 #include "StringRef.h"
 
-#include <boost/range.hpp>
-#include <boost/algorithm/string.hpp>
-#include <boost/functional/hash.hpp>
+#include "Hash.h"
+#include <cassert>
 
 namespace kyla {
 /**
@@ -90,7 +89,7 @@ void StringRef::CheckRange (const int64 pos, const int64 length) const
 ///////////////////////////////////////////////////////////////////////////////
 std::size_t StringRef::GetHash () const
 {
-	return boost::hash_range (begin (), end ());
+	return hash_range (begin (), end ());
 }
 
 ///////////////////////////////////////////////////////////////////////////////
