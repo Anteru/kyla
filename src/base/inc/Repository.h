@@ -105,7 +105,7 @@ public:
 		value_.assign (p, p + length);
 	}
 
-	void Get (size_t* size, void* buffer)
+	void Get (size_t* size, void* buffer) const
 	{
 		if (size != nullptr) {
 			*size = value_.size ();

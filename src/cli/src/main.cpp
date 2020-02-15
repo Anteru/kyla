@@ -37,10 +37,9 @@ const char* kylaGetErrorString (const int r)
 #define KYLA_CHECKED_CALL(c) do {auto r = c; if (r != kylaResult_Ok) { throw std::runtime_error (kylaGetErrorString (r)); }} while (0)
 
 ///////////////////////////////////////////////////////////////////////////////
-void StdoutLog (const char* source, const kylaLogSeverity severity,
-	const char* message, const int64_t timestamp, void*)
+void StdoutLog (const KylaLog* log, void*)
 {
-	std::chrono::nanoseconds timeSinceStart{ timestamp };
+	std::chrono::nanoseconds timeSinceStart{ log->timestamp };
 	const auto hours = std::chrono::duration_cast<std::chrono::hours> (timeSinceStart);
 	timeSinceStart -= hours;
 	const auto minutes = std::chrono::duration_cast<std::chrono::minutes> (timeSinceStart);
@@ -55,14 +54,14 @@ void StdoutLog (const char* source, const kylaLogSeverity severity,
 		<< '.' << std::setw (3) << std::setfill ('0') << milliseconds.count ()
 		<< " | ";
 
-	switch (severity) {
+	switch (log->severity) {
 	case kylaLogSeverity_Debug: std::cout	<< "Debug:   "; break;
 	case kylaLogSeverity_Info: std::cout	<< "Info:    "; break;
 	case kylaLogSeverity_Warning: std::cout << "Warning: "; break;
 	case kylaLogSeverity_Error: std::cout	<< "Error:   "; break;
 	}
 
-	std::cout << source << ":" << message << "\n";
+	std::cout << log->source << ":" << log->message << "\n";
 }
 
 ///////////////////////////////////////////////////////////////////////////////

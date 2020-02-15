@@ -543,10 +543,13 @@ int kylaSetVariable_3_0 (KylaInstaller* installer,
 
 	const std::string name (variableName);
 
-	auto& variables = internal->executionContext.variables;
-	auto it = variables.find (name);
+	if (name.empty ()) {
+		return kylaResult_ErrorInvalidArgument;
+	}
 
-	if (it == variables.end ()) {
+	auto& variables = internal->executionContext.variables;
+
+	if (auto it = variables.find (name); it == variables.end ()) {
 		variables [name].Set (variableSize, variableValue);
 	} else {
 		if (it->second.IsReadOnly ()) {
@@ -562,7 +565,7 @@ int kylaSetVariable_3_0 (KylaInstaller* installer,
 
 ///////////////////////////////////////////////////////////////////////////////
 int kylaGetVariable_3_0 (KylaInstaller* installer,
-	const char* propertyName,
+	const char* variableName,
 	size_t* propertySize,
 	void* propertyValue)
 {
@@ -572,18 +575,21 @@ int kylaGetVariable_3_0 (KylaInstaller* installer,
 		return kylaResult_ErrorInvalidArgument;
 	}
 
-	if (propertyName == nullptr) {
+	if (variableName == nullptr) {
 		return kylaResult_ErrorInvalidArgument;
 	}
 
 	auto internal = GetInternalInstaller (installer);
 
-	const std::string propertyNameString (propertyName);
+	const std::string name (variableName);
 
-	auto& variables = internal->executionContext.variables;
-	auto it = variables.find (propertyNameString);
+	if (name.empty ()) {
+		return kylaResult_ErrorInvalidArgument;
+	}
 
-	if (it == variables.end ()) {
+	const auto& variables = internal->executionContext.variables;
+	
+	if (auto it = variables.find (name); it == variables.end ()) {
 		return kylaResult_ErrorInvalidArgument;
 	} else {
 		it->second.Get (propertySize, propertyValue);
@@ -697,7 +703,11 @@ int kylaSetLogCallback_2_0 (KylaInstaller* installer, KylaLogCallback logCallbac
 			severity = kylaLogSeverity_Debug; break;
 		}
 
-		logCallback (source, severity, message, timestamp, callbackContext);
+		const KylaLog log = {
+			severity, timestamp, source, message
+		};
+
+		logCallback (&log, callbackContext);
 	});
 
 	return kylaResult_Ok;

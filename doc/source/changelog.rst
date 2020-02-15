@@ -1,7 +1,7 @@
 Changelog
 =========
 
-kyla 3.0.0
+kyla 3.0
 ----------
 
 .. warning::
@@ -11,6 +11,7 @@ kyla 3.0.0
 
 * The feature tree is now part of the features themselves, and no longer external. This means features can be nested now, and a deployed repository will now properly retain the feature relationships.
 * Run-time variables in the build are now provided through *variables* instead of special write-enabled properties.
+* The log callback function signature has changed.
 
 kyla 2.0.3
 ----------

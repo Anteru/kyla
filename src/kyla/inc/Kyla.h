@@ -55,9 +55,17 @@ enum kylaLogSeverity
 	kylaLogSeverity_Error
 };
 
-typedef void (*KylaLogCallback)(const char* source,
-	const kylaLogSeverity severity, const char* message, 
-	const int64_t timeStamp, void* context);
+struct KylaLog
+{
+	const kylaLogSeverity severity;
+	const int64_t timestamp;
+
+	const char* source;
+	const char* message;
+};
+
+typedef void (*KylaLogCallback)(const struct KylaLog* log,
+	void* context);
 
 enum kylaValidationResult
 {
