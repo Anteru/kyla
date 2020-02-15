@@ -33,6 +33,7 @@ public:
 	Log (const LogCallback& callback);
 
 	void SetCallback (const LogCallback& callback);
+	void RemoveCallback ();
 
 	void Debug (const char* source, const std::string& message);
 	void Info (const char* source, const std::string& message);

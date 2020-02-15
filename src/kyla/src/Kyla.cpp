@@ -672,7 +672,7 @@ int kylaGetFeatureProperty_2_0 (KylaInstaller* installer,
 }
 
 ///////////////////////////////////////////////////////////////////////////////
-int kylaSetLogCallback_2_0 (KylaInstaller* installer, KylaLogCallback logCallback,
+int kylaSetLogCallback_3_0 (KylaInstaller* installer, KylaLogCallback logCallback,
 	void* callbackContext)
 {
 	KYLA_C_API_BEGIN ()
@@ -682,6 +682,11 @@ int kylaSetLogCallback_2_0 (KylaInstaller* installer, KylaLogCallback logCallbac
 	}
 
 	auto internal = GetInternalInstaller (installer);
+
+	if (logCallback == nullptr) {
+		internal->log->RemoveCallback ();
+		return kylaResult_Ok;
+	}
 
 	internal->log->SetCallback (
 		[=](kyla::LogLevel level, const char* source, const char* message, const kyla::int64 timestamp) -> void {
@@ -726,6 +731,12 @@ int kylaSetProgressCallback_2_0 (KylaInstaller* installer,
 	}
 
 	auto internal = GetInternalInstaller (installer);
+
+	if (progressCallback == nullptr) {
+		internal->executionContext.progress = 
+			[](const float, const char*, const char*) {};
+		return kylaResult_Ok;
+	}
 
 	internal->executionContext.progress = [=](
 		const float f, const char* s, const char* a) -> void {
@@ -798,7 +809,7 @@ int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** pInstaller)
 		installer->OpenTargetRepository = kylaOpenTargetRepository_2_0;
 		installer->GetRepositoryProperty = kylaGetRepositoryProperty_2_0;
 		installer->GetFeatureProperty = kylaGetFeatureProperty_2_0;
-		installer->SetLogCallback = kylaSetLogCallback_2_0;
+		installer->SetLogCallback = kylaSetLogCallback_3_0;
 		installer->SetProgressCallback = kylaSetProgressCallback_2_0;
 		installer->SetValidationCallback = kylaSetValidationCallback_2_0;
 		installer->SetVariable = kylaSetVariable_3_0;

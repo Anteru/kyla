@@ -25,6 +25,12 @@ void Log::SetCallback (const LogCallback& callback)
 }
 
 ///////////////////////////////////////////////////////////////////////////////
+void Log::RemoveCallback ()
+{
+	callback_ = LogCallback ();
+}
+
+///////////////////////////////////////////////////////////////////////////////
 void Log::Debug (const char* source, const std::string& message)
 {
 	if (callback_) {

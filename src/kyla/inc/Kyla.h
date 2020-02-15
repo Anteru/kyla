@@ -207,7 +207,7 @@ struct KylaInstaller
 	progress callback function.
 	*/
 	int (*SetProgressCallback)(KylaInstaller* installer,
-		KylaProgressCallback, void* progressContext);
+		KylaProgressCallback progressCallback, void* progressContext);
 
 	/**
 	Set the validation callback. The callbackContext will be passed on into the
