@@ -28,7 +28,7 @@ namespace Sql {
 
 class Log;
 
-class ProgressHelper
+class ProgressHelper final
 {
 public:
 	using ProgressCallback = std::function<void (const float p, const char* s, const char* a)>;
@@ -56,6 +56,9 @@ public:
 		}
 	}
 
+	ProgressHelper (const ProgressHelper&) = delete;
+	ProgressHelper& operator=(const ProgressHelper&) = delete;
+
 private:
 	float GetProgress () const
 	{
@@ -70,7 +73,7 @@ private:
 	ProgressCallback progressCallback_;
 	int64 current_ = 0;
 	int64 target_ = 0;
-	std::string what_;
+	const std::string what_;
 };
 
 enum class RepairResult
@@ -121,6 +124,10 @@ public:
 		return readOnly_;
 	}
 
+	Variable () = default;
+	Variable (const Variable&) = delete;
+	Variable& operator=(const Variable&) = delete;
+
 private:
 	template <typename T>
 	T Get () const
@@ -132,8 +139,9 @@ private:
 	bool readOnly_ = false;
 };
 
-struct Repository
+class Repository
 {
+public:
 	Repository () = default;
 	virtual ~Repository () = default;
 

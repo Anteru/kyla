@@ -199,7 +199,8 @@ int kylaOpenTargetRepository_2_0 (
 			repo->p = kyla::OpenRepository (path,
 				(options & kylaRepositoryOption_ReadOnly) != 1);
 		} catch (const std::exception&) {
-			internal->log->Error ("kylaCloseRepository", "could not open repository");
+			internal->log->Error ("kylaCloseRepository",
+				"could not open repository");
 			delete repo;
 			return kylaResult_Error;
 		}
@@ -225,12 +226,14 @@ int kylaCloseRepository_2_0 (KylaInstaller* installer,
 	auto internal = GetInternalInstaller (installer);
 
 	if (repository == nullptr) {
-		internal->log->Error ("kylaCloseRepository", "repository was null");
+		internal->log->Error ("kylaCloseRepository",
+			"repository was null");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
 	if (!repository->p) {
-		internal->log->Error ("kylaCloseRepository", "repository is already closed");
+		internal->log->Error ("kylaCloseRepository",
+			"repository is already closed");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -271,6 +274,8 @@ int kylaExecute_2_0 (
 	}
 
 	if (sourceRepository == nullptr) {
+		internal->log->Error ("kylaExecute",
+			"source repository was null");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -360,15 +365,17 @@ int kylaExecute_2_0 (
 		targetRepository->p->Repair (
 			*sourceRepository->p, internal->executionContext,
 			[&](const char* path, const kyla::RepairResult result) -> void {
-			kylaValidationItemInfo info;
+				const KylaValidationInfoFile info = { path };
 
-			info.filename = path;
+				const KylaValidation validation = {
+					kylaValidationItemType_File,
+					static_cast<kylaValidationResult>(result),
+					&info
+				};
 
-			if (internal->validationCallback) {
-				internal->validationCallback (
-					static_cast<kylaValidationResult> (result),
-					&info,
-					internal->validationCallbackContext);
+				if (internal->validationCallback) {
+					internal->validationCallback (
+						&validation, internal->validationCallbackContext);
 			}
 		}, false);
 
@@ -486,13 +493,15 @@ int kylaGetRepositoryProperty_2_0 (KylaInstaller* installer,
 	auto internal = GetInternalInstaller (installer);
 
 	if (repository == nullptr) {
-		internal->log->Error ("kylaGetRepositoryProperty", "repository was null");
+		internal->log->Error ("kylaGetRepositoryProperty",
+			"repository was null");
 
 		return kylaResult_ErrorInvalidArgument;
 	}
 
 	if (repository->repositoryType != KylaRepositoryImpl::RepositoryType::Source) {
-		internal->log->Error ("kylaGetRepositoryProperty", "repository must be a source repository");
+		internal->log->Error ("kylaGetRepositoryProperty",
+			"repository must be a source repository");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -535,15 +544,19 @@ int kylaSetVariable_3_0 (KylaInstaller* installer,
 		return kylaResult_ErrorInvalidArgument;
 	}
 
+	auto internal = GetInternalInstaller (installer);
+
 	if (variableName == nullptr) {
+		internal->log->Error ("kylaSetVariable",
+			"variable name was null");
 		return kylaResult_ErrorInvalidArgument;
 	}
-
-	auto internal = GetInternalInstaller (installer);
 
 	const std::string name (variableName);
 
 	if (name.empty ()) {
+		internal->log->Error ("kylaSetVariable",
+			"variable name was empty");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
@@ -553,6 +566,8 @@ int kylaSetVariable_3_0 (KylaInstaller* installer,
 		variables [name].Set (variableSize, variableValue);
 	} else {
 		if (it->second.IsReadOnly ()) {
+			internal->log->Error ("kylaSetVariable",
+				fmt::format ("cannot set read-only variable '{}'", name));
 			return kylaResult_ErrorInvalidArgument;
 		}
 		it->second.Set (variableSize, variableValue);
@@ -575,21 +590,27 @@ int kylaGetVariable_3_0 (KylaInstaller* installer,
 		return kylaResult_ErrorInvalidArgument;
 	}
 
+	auto internal = GetInternalInstaller (installer);
+
 	if (variableName == nullptr) {
+		internal->log->Error ("kylaGetVariable",
+			"variable name was null");
 		return kylaResult_ErrorInvalidArgument;
 	}
-
-	auto internal = GetInternalInstaller (installer);
 
 	const std::string name (variableName);
 
 	if (name.empty ()) {
+		internal->log->Error ("kylaGetVariable",
+			"variable name was empty");
 		return kylaResult_ErrorInvalidArgument;
 	}
 
 	const auto& variables = internal->executionContext.variables;
 	
 	if (auto it = variables.find (name); it == variables.end ()) {
+		internal->log->Error ("kylaGetVariable",
+			fmt::format ("variable '{}' not found", name));
 		return kylaResult_ErrorInvalidArgument;
 	} else {
 		it->second.Get (propertySize, propertyValue);

@@ -131,33 +131,37 @@ int Validate (const bool verbose,
 
 	Context context = { &errors, &ok, verbose };
 
-	auto validationCallback = [](kylaValidationResult validationResult,
-		const kylaValidationItemInfo* info,
+	auto validationCallback = [](const KylaValidation* validation,
 		void* pContext) -> void {
 		auto context = static_cast<Context*> (pContext);
 
-		switch (validationResult) {
-		case kylaValidationResult_Ok:
-			if (context->verbose) {
-				std::cout << "OK        " << info->filename << '\n';
-			}
-			++(*context->ok);
-			break;
+		switch (validation->itemType) {
+		case kylaValidationItemType_File:
+			const auto& info = validation->infoFile;
+			switch (validation->result) {
+			case kylaValidationResult_Ok:
+				if (context->verbose) {
+					std::cout << "OK        " << info->filename << '\n';
+				}
+				++(*context->ok);
+				break;
 
-		case kylaValidationResult_Missing:
-			if (context->verbose) {
-				std::cout << "MISSING   " << info->filename << '\n';
-			}
-			++(*context->errors);
-			break;
+			case kylaValidationResult_Missing:
+				if (context->verbose) {
+					std::cout << "MISSING   " << info->filename << '\n';
+				}
+				++(*context->errors);
+				break;
 
-		case kylaValidationResult_Corrupted:
-			if (context->verbose) {
-				std::cout << "CORRUPTED " << info->filename << '\n';
+			case kylaValidationResult_Corrupted:
+				if (context->verbose) {
+					std::cout << "CORRUPTED " << info->filename << '\n';
+				}
+				++(*context->errors);
+				break;
 			}
-			++(*context->errors);
-			break;
 		}
+		
 	};
 
 	KylaInstaller* installer = nullptr;

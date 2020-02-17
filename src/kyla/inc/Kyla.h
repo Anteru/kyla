@@ -74,13 +74,27 @@ enum kylaValidationResult
 	kylaValidationResult_Missing
 };
 
-struct kylaValidationItemInfo
+enum kylaValidationItemType
+{
+	kylaValidationItemType_File
+};
+
+struct KylaValidationInfoFile
 {
 	const char* filename;
 };
 
-typedef void (*KylaValidationCallback)(kylaValidationResult result,
-	const kylaValidationItemInfo* info, void* context);
+struct KylaValidation
+{
+	kylaValidationItemType itemType;
+	kylaValidationResult result;
+	union {
+		const struct KylaValidationInfoFile* infoFile;
+	};
+};
+
+typedef void (*KylaValidationCallback)(const struct KylaValidation* validation,
+	void* context);
 
 typedef struct KylaRepositoryImpl* KylaSourceRepository;
 typedef struct KylaRepositoryImpl* KylaTargetRepository;
@@ -90,7 +104,7 @@ enum kylaRepositoryOption
 {
 	/**
 	Create the repository. If it's present already, it will be overwritten by
-	subsequent operation.
+	subsequent operations.
 
 	Cannot be set for a source repository.
 	*/
@@ -198,6 +212,8 @@ struct KylaInstaller
 	/**
 	Set the log callback. The callbackContext will be passed on into the
 	log callback function.
+
+	Setting a null callback disables it.
 	*/
 	int (*SetLogCallback)(KylaInstaller* installer,
 		KylaLogCallback logCallback, void* callbackContext);
@@ -205,6 +221,8 @@ struct KylaInstaller
 	/**
 	Set the progress callback. The callbackContext will be passed on into the
 	progress callback function.
+
+	Setting a null callback disables it.
 	*/
 	int (*SetProgressCallback)(KylaInstaller* installer,
 		KylaProgressCallback progressCallback, void* progressContext);
@@ -212,6 +230,8 @@ struct KylaInstaller
 	/**
 	Set the validation callback. The callbackContext will be passed on into the
 	validation callback function.
+
+	Setting a null callback disables it.
 	*/
 	int (*SetValidationCallback)(KylaInstaller* installer,
 		KylaValidationCallback validationCallback, void* validationContext);
@@ -327,7 +347,7 @@ struct KylaInstaller
 /**
 Create a new installer. Installer must be non-null, and kylaApiVersion must be
 a supported version created using either KYLA_MAKE_API_VERSION or by using one
-of the pre-defined constants like KYLA_API_VERSION_1_0.
+of the pre-defined constants like KYLA_API_VERSION_3_0.
 */
 KYLA_EXPORT int kylaCreateInstaller (int kylaApiVersion, KylaInstaller** installer);
 
