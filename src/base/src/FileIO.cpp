@@ -196,7 +196,7 @@ struct WindowsFile final : public File
 		}
 	}
 
-	void CloseImpl ()
+	void CloseImpl () override
 	{
 		::CloseHandle (fd_);
 		fd_ = INVALID_HANDLE_VALUE;
@@ -326,7 +326,7 @@ struct WindowsFile final : public File
 		// http://msdn.microsoft.com/en-us/library/windows/desktop/aa365531(v=vs.85).aspx
 	}
 
-	std::int64_t GetSizeImpl () const
+	std::int64_t GetSizeImpl () const override
 	{
 		::LARGE_INTEGER size = { 0 };
 
@@ -335,7 +335,7 @@ struct WindowsFile final : public File
 		return size.QuadPart;
 	}
 
-	std::int64_t TellImpl () const
+	std::int64_t TellImpl () const override
 	{
 		LARGE_INTEGER position = { 0 };
 		static const LARGE_INTEGER distance = { 0 };

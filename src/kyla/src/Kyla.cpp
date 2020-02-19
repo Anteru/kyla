@@ -467,7 +467,7 @@ int KylaGet (const std::string& value,
 			*pResultSize = resultSize;
 		}
 
-		::memset (pResult, resultSize, 0);
+		::memset (pResult, 0, resultSize);
 		::memcpy (pResult, value.data (), resultSize - 1);
 	} else {
 		log.Error (logSource, "at least one of {result size, result pointer} must be set");

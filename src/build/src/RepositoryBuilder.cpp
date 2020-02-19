@@ -199,6 +199,8 @@ public:
 		return db_.GetLastRowId ();
 	}
 private:
+	Sql::Database& db_;
+
 	Sql::Statement fileInsertStatement_;
 	Sql::Statement packageInsertStatement_;
 	Sql::Statement packageDeleteStatement_;
@@ -209,8 +211,6 @@ private:
 	Sql::Statement chunkHashesInsertQuery_;
 	Sql::Statement chunkCompressionInsertQuery_;
 	Sql::Statement chunkEncryptionInsertQuery_;
-
-	Sql::Database& db_;
 };
 
 ///////////////////////////////////////////////////////////////////////////////

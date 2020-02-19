@@ -380,9 +380,7 @@ SetupDialog::SetupDialog (SetupContext* context)
 		}
 	}
 	
-	for (auto& root : roots) {
-		ui->featureSelection->addTopLevelItems (roots);
-	}
+	ui->featureSelection->addTopLevelItems (roots);
 	
 	this->show ();
 

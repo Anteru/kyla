@@ -400,7 +400,7 @@ struct ErrorState
 	{
 		errorOccurred_ = true;
 		std::lock_guard<std::mutex> lock{ mutex_ };
-		exception = exception;
+		exception_ = exception;
 
 		for (auto& queue : queues_) {
 			queue->Poison ();
@@ -455,7 +455,7 @@ public:
 				}
 			}
 
-			queue_.Insert (std::move (ProcessRequest{}));
+			queue_.Insert (ProcessRequest{});
 		}
 		};
 
@@ -831,7 +831,6 @@ void PackedRepositoryBase::RepairImpl (Repository& source,
 		while (contentObjectsInPackageQuery.Step ()) {
 			const auto packageOffset = contentObjectsInPackageQuery.GetInt64 (0);
 			const auto packageSize = contentObjectsInPackageQuery.GetInt64 (1);
-			const auto sourceSize = contentObjectsInPackageQuery.GetInt64 (3);
 
 			readBuffer.resize (packageSize);
 			packageFile->Read (packageOffset, readBuffer);

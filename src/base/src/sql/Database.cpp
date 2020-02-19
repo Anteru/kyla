@@ -363,7 +363,7 @@ Database Database::Open (const char* name, const OpenMode openMode)
 {
 	Database db;
 	db.impl_->Open (name, openMode);
-	return std::move (db);
+	return db;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -377,7 +377,7 @@ Database Database::Open (const Path& path, const OpenMode openMode)
 {
 	Database db;
 	db.impl_->Open (path.string ().c_str (), openMode);
-	return std::move (db);
+	return db;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -385,7 +385,7 @@ Database Database::Create (const char* name)
 {
 	Database db;
 	db.impl_->Create (name);
-	return std::move (db);
+	return db;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -393,7 +393,7 @@ Database Database::Create ()
 {
 	Database db;
 	db.impl_->Create ();
-	return std::move (db);
+	return db;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
