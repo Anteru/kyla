@@ -141,10 +141,8 @@ namespace {
 /**
 Data shared between all request types.
 */
-struct RequestData
-{
-	PackedRepositoryBase::PackageFile* packageFile = nullptr;
-	
+struct ReadRequest
+{	
 	// Inside the package file
 	int64 packageOffset = -1;
 	int64 packageSize = -1;
@@ -171,24 +169,74 @@ struct RequestData
 	Repository::GetContentObjectCallback callback;
 };
 
-/**
-Request to read data from a source repository.
-*/
-struct ReadRequest
+class PackageFileWrapper
 {
-	std::unique_ptr<RequestData> requestData;
+private:
+	std::unique_ptr<PackedRepositoryBase::PackageFile> packageFile_;
+	using OpenFileCallback = std::function<std::unique_ptr<PackedRepositoryBase::PackageFile> ()>;
+	OpenFileCallback openFileCallback_;
 
-	ReadRequest () = default;
-
-	ReadRequest (ReadRequest&& other)
-		: requestData (std::move (other.requestData))
+public:
+	PackageFileWrapper (OpenFileCallback callback)
+		: openFileCallback_ (callback)
 	{
 	}
 
-	ReadRequest& operator= (ReadRequest&& other)
+	PackedRepositoryBase::PackageFile& GetFile ()
 	{
-		requestData = std::move (other.requestData);
+		if (!packageFile_) {
+			packageFile_ = openFileCallback_ ();
+		}
+
+		assert (packageFile_);
+
+		return *packageFile_;
+	}
+};
+
+/**
+Request to read data from a source repository.
+
+This is a batch of read requests, all from a single package file. After it
+has been processed, both the packageFile and the requests will be empty.
+*/
+struct BatchReadRequest
+{
+	static constexpr int64 MaxSize = 4 << 20;
+	static constexpr int64 MaxSlack = 16 << 10;
+
+	std::vector<std::unique_ptr<ReadRequest>> requests;
+
+	std::shared_ptr<PackageFileWrapper> packageFile;
+	int64 packageOffset;
+	int64 readSize;
+
+	BatchReadRequest () = default;
+
+	BatchReadRequest (BatchReadRequest&& other) noexcept
+		: requests (std::move (other.requests))
+		, packageFile (other.packageFile)
+		, packageOffset (other.packageOffset)
+		, readSize (other.readSize)
+	{
+	}
+
+	BatchReadRequest& operator= (BatchReadRequest&& other) noexcept
+	{
+		requests = std::move (other.requests);
+		packageFile = other.packageFile;
+		packageOffset = other.packageOffset;
+		readSize = other.readSize;
+
 		return *this;
+	}
+
+	// Release all resources owned by this request and make it unusable
+	void Destroy ()
+	{
+		packageOffset = readSize = -1;
+		requests.clear ();
+		packageFile.reset ();
 	}
 };
 
@@ -197,11 +245,11 @@ Request to process raw read data into data which can be written to disk.
 */
 struct ProcessRequest
 {
-	std::unique_ptr<RequestData> requestData;
+	std::unique_ptr<ReadRequest> requestData;
 	std::vector<byte> inputBuffer;
 	int64 size = 0;
 
-	ProcessRequest (std::unique_ptr<RequestData>&& requestData,
+	ProcessRequest (std::unique_ptr<ReadRequest>&& requestData,
 		std::vector<byte>&& inputBuffer)
 		: requestData (std::move (requestData))
 		, inputBuffer (std::move (inputBuffer))
@@ -233,11 +281,11 @@ Request to write some data into a file.
 */
 struct OutputRequest
 {
-	std::unique_ptr<RequestData> requestData;
+	std::unique_ptr<ReadRequest> requestData;
 	std::vector<byte> data;
 	int64 size = 0;
 
-	OutputRequest (std::unique_ptr<RequestData>&& requestData,
+	OutputRequest (std::unique_ptr<ReadRequest>&& requestData,
 		std::vector<byte>&& data)
 		: requestData (std::move (requestData))
 		, data (std::move (data))
@@ -422,11 +470,11 @@ Reads data and produces read requests.
 class ReadThread
 {
 public:
-	ReadThread (std::vector<ReadRequest>&& readRequests,
+	ReadThread (std::vector<BatchReadRequest>&& readRequests,
 		ProducerConsumerQueue<ProcessRequest>& processRequestQueue,
 		ErrorState* errorState)
 		: queue_ (processRequestQueue)
-		, readRequests_ (std::move (readRequests))
+		, batchReadRequests_ (std::move (readRequests))
 		, errorState_ (errorState)
 	{
 	}
@@ -434,25 +482,38 @@ public:
 	void Run ()
 	{
 		std::thread readThread{ [&] () -> void {
-			for (auto& readRequest : readRequests_) {
+			std::vector<byte> inputBuffer;
+
+			for (auto& backReadRequest : batchReadRequests_) {
 				if (errorState_->IsSignaled ()) {
 					break;
 				}
 
 				try {
-					auto& rd = readRequest.requestData;
+					inputBuffer.resize (backReadRequest.readSize);
+					backReadRequest.packageFile->GetFile().Read (
+						backReadRequest.packageOffset,
+						inputBuffer);
 
-					std::vector<byte> inputBuffer;
-					inputBuffer.resize (rd->packageSize);
+					// We slice the input buffer by creating copies
+					for (auto& rd : backReadRequest.requests) {
+						const auto first = inputBuffer.begin ()
+							// Start relative to batch request start
+							+ (rd->packageOffset - backReadRequest.packageOffset);
+						const auto last = first + rd->packageSize;
 
-					rd->packageFile->Read (rd->packageOffset, inputBuffer);
-
-					queue_.Insert ({ std::move (readRequest.requestData), std::move (inputBuffer) });
+						queue_.Insert ({ std::move (rd),
+							std::vector<byte> (first, last) });
+					}
 				} catch (const std::exception&) {
 					errorState_->RegisterException (std::current_exception ());
 
 					break;
 				}
+
+				// We don't want to modify the array while iterating, so we
+				// destroy the items as we go to release their memory
+				backReadRequest.Destroy ();
 			}
 
 			queue_.Insert (ProcessRequest{});
@@ -469,7 +530,7 @@ public:
 
 private:
 	ProducerConsumerQueue<ProcessRequest>& queue_;
-	std::vector<ReadRequest> readRequests_;
+	std::vector<BatchReadRequest> batchReadRequests_;
 	std::thread thread_;
 	ErrorState* errorState_ = nullptr;
 };
@@ -678,44 +739,49 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 		"	StorageHash "				// = 13
 		"FROM fs_content_view "
 		"WHERE ContentHash IN (SELECT Hash FROM requested_fs_contents) "
-		"    AND PackageId = ? ");
+		"    AND PackageId = ? "
+		"ORDER BY PackageOffset ASC");
 
 	static constexpr auto MaxPendingProcessSize = 64 << 20;
 	static constexpr auto MaxPendingOutputSize = 64 << 20;
 
-	while (findSourcePackagesQuery.Step ()) {
-		ProducerConsumerQueue<ProcessRequest> processRequestQueue{
-			[] (const ProcessRequest& processRequest) { 
-				return static_cast<int64> (processRequest.size); 
-		},
-			MaxPendingProcessSize
-		};
-		ProducerConsumerQueue<OutputRequest> outputRequestQueue{
-			[] (const OutputRequest& outputRequest) {
-			return static_cast<int64> (outputRequest.size);
-		},
-			MaxPendingOutputSize
-		};
-		std::vector<ReadRequest> readRequests;
+	ProducerConsumerQueue<ProcessRequest> processRequestQueue{
+		[] (const ProcessRequest& processRequest) {
+			return static_cast<int64> (processRequest.size);
+	},
+		MaxPendingProcessSize
+	};
+	ProducerConsumerQueue<OutputRequest> outputRequestQueue{
+		[] (const OutputRequest& outputRequest) {
+		return static_cast<int64> (outputRequest.size);
+	},
+		MaxPendingOutputSize
+	};
 
-		const auto filename = findSourcePackagesQuery.GetText (0);
+	std::vector<BatchReadRequest> batchReadRequests;
+	
+	while (findSourcePackagesQuery.Step ()) {
+		const std::string filename = findSourcePackagesQuery.GetText (0);
 		const auto id = findSourcePackagesQuery.GetInt64 (1);
 
-		auto packageFile = OpenPackage (filename);
+		auto packageFileWrapper = std::make_shared<PackageFileWrapper> (
+			[this, filename]() { return OpenPackage (filename); });
 
 		contentObjectsInPackageQuery.BindArguments (id);
 
+		std::vector<std::unique_ptr<ReadRequest>> readRequests;
+
 		while (contentObjectsInPackageQuery.Step ()) {
-			std::unique_ptr<RequestData> requestData{ new RequestData };
+			std::unique_ptr<ReadRequest> readRequest{ new ReadRequest };
 
-			requestData->packageOffset = contentObjectsInPackageQuery.GetInt64 (0);
-			requestData->packageSize = contentObjectsInPackageQuery.GetInt64 (1);
-			requestData->sourceOffset = contentObjectsInPackageQuery.GetInt64 (2);
-			contentObjectsInPackageQuery.GetBlob (3, requestData->contentHash);
-			requestData->totalSize = contentObjectsInPackageQuery.GetInt64 (4);
-			requestData->sourceSize = contentObjectsInPackageQuery.GetInt64 (5);
+			readRequest->packageOffset = contentObjectsInPackageQuery.GetInt64 (0);
+			readRequest->packageSize = contentObjectsInPackageQuery.GetInt64 (1);
+			readRequest->sourceOffset = contentObjectsInPackageQuery.GetInt64 (2);
+			contentObjectsInPackageQuery.GetBlob (3, readRequest->contentHash);
+			readRequest->totalSize = contentObjectsInPackageQuery.GetInt64 (4);
+			readRequest->sourceSize = contentObjectsInPackageQuery.GetInt64 (5);
 
-			requestData->callback = getCallback;
+			readRequest->callback = getCallback;
 
 			// Encryption handling
 			if (contentObjectsInPackageQuery.GetText (10)) {
@@ -725,56 +791,108 @@ void PackedRepositoryBase::GetContentObjectsImpl (const ArrayRef<SHA256Digest>& 
 						KYLA_FILE_LINE);
 				}
 
-				requestData->decryptor = decryptor.get ();
-				requestData->encryptionOutputSize = contentObjectsInPackageQuery.GetInt64 (12);
-				requestData->ivSalt = UnpackAES256IvSalt (contentObjectsInPackageQuery.GetBlob (10));
+				readRequest->decryptor = decryptor.get ();
+				readRequest->encryptionOutputSize = contentObjectsInPackageQuery.GetInt64 (12);
+				readRequest->ivSalt = UnpackAES256IvSalt (contentObjectsInPackageQuery.GetBlob (10));
 			}
 
 			// Hash handling
 			if (contentObjectsInPackageQuery.GetColumnType (13) != Sql::Type::Null) {
-				requestData->hasChunkHash = true;
-				contentObjectsInPackageQuery.GetBlob (13, requestData->chunkHash);
+				readRequest->hasChunkHash = true;
+				contentObjectsInPackageQuery.GetBlob (13, readRequest->chunkHash);
 			} else {
-				assert (requestData->sourceSize == 0);
+				assert (readRequest->sourceSize == 0);
 			}
 
 			// Compression handling
 			if (contentObjectsInPackageQuery.GetText (6)) {
-				requestData->compressionAlgorithm = CompressionAlgorithmFromId (contentObjectsInPackageQuery.GetText (6));
-				requestData->compressionOutputSize = contentObjectsInPackageQuery.GetInt64 (7);
-				requestData->compressionInputSize = contentObjectsInPackageQuery.GetInt64 (8);
+				readRequest->compressionAlgorithm = CompressionAlgorithmFromId (contentObjectsInPackageQuery.GetText (6));
+				readRequest->compressionOutputSize = contentObjectsInPackageQuery.GetInt64 (7);
+				readRequest->compressionInputSize = contentObjectsInPackageQuery.GetInt64 (8);
 			}
-
-			requestData->packageFile = packageFile.get ();
-
-			ReadRequest readRequest;
-			readRequest.requestData = std::move (requestData);
 
 			readRequests.emplace_back (std::move (readRequest));
 		}
 
-		ErrorState errorState;
-
-		errorState.RegisterQueue (&processRequestQueue);
-		errorState.RegisterQueue (&outputRequestQueue);
-
-		ReadThread readThread{ std::move (readRequests), processRequestQueue, &errorState };
-		ProcessThread processThread{ processRequestQueue, outputRequestQueue, &errorState };
-		OutputThread outputThread{ outputRequestQueue, &errorState };
-
-		readThread.Run ();
-		processThread.Run ();
-		outputThread.Run ();
-
-		readThread.Join ();
-		processThread.Join ();
-		outputThread.Join ();
-
 		contentObjectsInPackageQuery.Reset ();
 
-		if (errorState.IsSignaled ()) {
-			errorState.RethrowException ();
+		size_t index = 0;
+		size_t lastIndex = readRequests.size ();
+
+		while (index < lastIndex) {
+			BatchReadRequest batchReadRequest;
+			batchReadRequest.packageFile = packageFileWrapper;
+
+			std::vector<std::unique_ptr<ReadRequest>> batch;
+			
+			auto& firstRequest = readRequests[index];
+			batchReadRequest.packageOffset = firstRequest->packageOffset;
+			batchReadRequest.readSize = firstRequest->packageSize;
+
+			batch.emplace_back (std::move (firstRequest));
+
+			int64 remainingSlack = BatchReadRequest::MaxSlack;
+			int64 remainingSize = BatchReadRequest::MaxSize - batchReadRequest.readSize;
+
+			++index;
+
+			// We try to form batches here
+			// The requests are all sorted by index, so what we do is walk
+			// through the list, and try to merge consecutive reads into one
+			// large batch read request. We allow for some slack between
+			// the reads, i.e. we're ok reading some more data if that means
+			// fewer requests
+			while (index < lastIndex) {
+				auto& request = readRequests[index];
+
+				const auto slack = request->packageOffset - (
+					// This is the current end of the read range
+					batchReadRequest.packageOffset + batchReadRequest.readSize);
+
+				if (slack > remainingSlack) {
+					break;
+				}
+
+				const auto size = request->packageSize;
+
+				if (size > remainingSize) {
+					break;
+				}
+
+				remainingSlack -= slack;
+				remainingSize -= size;
+
+				batchReadRequest.readSize += slack + size;
+				batch.emplace_back (std::move (request));
+
+				++index;
+			}
+
+			batchReadRequest.requests = std::move (batch);
+
+			batchReadRequests.emplace_back (std::move (batchReadRequest));
 		}
+	}
+
+	ErrorState errorState;
+
+	errorState.RegisterQueue (&processRequestQueue);
+	errorState.RegisterQueue (&outputRequestQueue);
+
+	ReadThread readThread{ std::move (batchReadRequests), processRequestQueue, &errorState };
+	ProcessThread processThread{ processRequestQueue, outputRequestQueue, &errorState };
+	OutputThread outputThread{ outputRequestQueue, &errorState };
+
+	readThread.Run ();
+	processThread.Run ();
+	outputThread.Run ();
+
+	readThread.Join ();
+	processThread.Join ();
+	outputThread.Join ();
+
+	if (errorState.IsSignaled ()) {
+		errorState.RethrowException ();
 	}
 }
 
