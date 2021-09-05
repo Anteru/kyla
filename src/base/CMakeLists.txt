@@ -55,11 +55,10 @@ FIND_PACKAGE(OpenSSL)
 ADD_LIBRARY(kylabase STATIC
 	${SOURCES} ${HEADERS})
 TARGET_LINK_LIBRARIES(kylabase
-	OpenSSL::Crypto brotli fmt::fmt zlib sqlite pugixml zstd)
+	OpenSSL::Crypto brotli fmt::fmt zlib sqlite zstd)
 TARGET_INCLUDE_DIRECTORIES(kylabase
 	PUBLIC
 		inc
-		${CMAKE_CURRENT_BINARY_DIR}
 		${CMAKE_CURRENT_BINARY_DIR})
 
 IF(WIN32)

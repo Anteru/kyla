@@ -8,11 +8,9 @@ SET(SOURCES
 	src/RepositoryBuilder.cpp
 )
 
-FIND_PACKAGE(OpenSSL REQUIRED)
-
 ADD_LIBRARY(kylabuild SHARED ${SOURCES} ${HEADERS})
 TARGET_LINK_LIBRARIES(kylabuild
-    kylabase kyla)
+    kylabase kyla pugixml)
 TARGET_INCLUDE_DIRECTORIES(kylabuild
 	PUBLIC inc
 	PRIVATE ${CMAKE_CURRENT_BINARY_DIR})

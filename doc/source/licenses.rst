@@ -1,7 +1,7 @@
 Licenses
 ========
 
-Copyright (c) 2015-2017, Matthäus G. Chajdas
+Copyright (c) 2015-2021, Matthäus G. Chajdas
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
