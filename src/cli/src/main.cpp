@@ -7,7 +7,7 @@ details.
 [LICENSE END]
 */
 
-#include <CLI11.hpp>
+#include <CLI/CLI.hpp>
 
 #include "Kyla.h"
 #include "KylaBuild.h"

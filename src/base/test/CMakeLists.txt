@@ -6,7 +6,7 @@ SET(SOURCES
 
 ADD_EXECUTABLE(kylabase_test ${SOURCES})
 TARGET_LINK_LIBRARIES(kylabase_test
-	kylabase catch)
+	kylabase Catch2::Catch2)
 
 SET_PROPERTY(TARGET kylabase_test PROPERTY CXX_STANDARD 17)
 SET_PROPERTY(TARGET kylabase_test PROPERTY CXX_STANDARD_REQUIRED ON)

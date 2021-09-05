@@ -1,6 +1,6 @@
 #include "Hash.h"
 
-#include <catch.hpp>
+#include <Catch2/catch.hpp>
 
 TEST_CASE ("HashEqual", "[hash]")
 {
