@@ -1,4 +1,3 @@
-syntax: glob
 build/**
 *.autosave
 *.user
@@ -17,3 +16,5 @@ samples/glfw/glfw-*
 **/build.log
 package/**
 doc/env/**
+doc/build/**
+*.vscode/*
