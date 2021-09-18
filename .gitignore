@@ -18,3 +18,4 @@ package/**
 doc/env/**
 doc/build/**
 *.vscode/*
+/CMakeUserPresets.json

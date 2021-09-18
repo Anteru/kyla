@@ -5,6 +5,7 @@ ADD_SUBDIRECTORY(zlib)
 ADD_SUBDIRECTORY(zstd)
 
 Include(FetchContent)
+set(CATCH_BUILD_TESTING OFF)
 
 FetchContent_Declare(
   Catch2
