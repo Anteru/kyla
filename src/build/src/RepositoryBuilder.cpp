@@ -524,6 +524,12 @@ struct Package : public RepositoryObjectBase<RepositoryObjectType::FileStorage_P
 				{ Uuid::Parse (ref.attribute ("Id").as_string ()) }
 			);
 		}
+
+		if (node.attribute("Compression")) {
+			const auto compression = node.attribute ("Compression").as_string ();
+
+			compressionAlgorithm_ = CompressionAlgorithmFromId (compression);
+		}
 	}
 
 	Package (const std::string& name, std::vector<Reference>& references)
@@ -604,7 +610,7 @@ struct Package : public RepositoryObjectBase<RepositoryObjectType::FileStorage_P
 
 private:
 	std::vector<Reference> references_;
-	CompressionAlgorithm compressionAlgorithm_ = CompressionAlgorithm::Brotli;
+	CompressionAlgorithm compressionAlgorithm_ = CompressionAlgorithm::Zstd;
 	int64 persistentId_ = -1;
 	std::vector<File*> referencedFiles_;
 };

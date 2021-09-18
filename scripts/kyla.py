@@ -1,5 +1,5 @@
 # [LICENSE BEGIN]
-# kyla Copyright (C) 2016 Matthäus G. Chajdas
+# kyla Copyright (C) 2016-2021 Matthäus G. Chajdas
 #
 # This file is distributed under the BSD 2-clause license. See LICENSE for
 # details.
@@ -28,14 +28,6 @@ def WalkDirectory(directory, filter, recursive):
             elif entry.is_file ():
                 yield entry
 
-def _IdString (s):
-	if isinstance (s, uuid.UUID):
-		return str (s).upper ()
-	else:
-		return s
-
-from enum import Enum
-
 class RepositoryObject:
 	def __init__ (self):
 		self.__id = uuid.uuid4 ()
@@ -59,8 +51,8 @@ class Feature(RepositoryObject):
 		self.__features = []
 
 	def AddDependency (self, otherFeature):
-		assert isinstance (otherFeature, feature)
-		self.__dependencies.append (feature)
+		assert isinstance (otherFeature, Feature)
+		self.__dependencies.append (otherFeature)
 
 	def AddFeature (self, title, description = None):
 		f = Feature (title, description)
@@ -89,13 +81,16 @@ class Feature(RepositoryObject):
 		return n
 
 class FilePackage (RepositoryObject):
-	def __init__ (self, name):
+	def __init__ (self, name, compression=None):
 		super().__init__()
 		self.__name = name
+		self.__compression = None
 
 	def ToXml (self):
 		n = etree.Element ('Package')
 		n.set ('Name', self.__name)
+		if self.__compression:
+			n.set ('Compression', self.__compression)
 
 		for reference in self.GetReferences ():
 			r = etree.SubElement (n, 'Reference')
@@ -114,8 +109,14 @@ class FileGroup(RepositoryObject):
 		for file in WalkDirectory (sourceDirectory, filter, recursive):
 			p = pathlib.Path (file.path)
 			self.__files.append ((
-				file.path, 
+				p.resolve(), 
 				outputDirectory / p.relative_to (sourceDirectory),))
+
+	def AddFile(self, filename, outputPath: pathlib.Path):
+		path = pathlib.Path(filename)
+		self.__files.append((
+			path.resolve(), outputPath
+		))
 
 	def ToXml (self):
 		n = etree.Element ('Group')
